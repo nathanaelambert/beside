@@ -2,6 +2,8 @@
 
 A pnpm/Turborepo workspace for Beside.
 
+See [the project documentation](docs/README.md) for the working concept, original brainstorming notes, interaction storyboard, and mobile UI concept.
+
 ## Apps and packages
 
 - `apps/website` (`beside-showcase`): the original Vite/React showcase website, with its six interactive chapters, pixel-art world, and project notes.

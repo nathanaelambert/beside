@@ -4,6 +4,8 @@ The original Vite/React website, imported without changes to its source or asset
 
 A single pinned-viewport editorial introduction to beside, a project in development. Six chapters move one camera across a shared pixel-art world (`public/assets/shared-world.png`).
 
+See [the project documentation](../../docs/README.md) for product and design context, and [image notes](../../docs/design/image-notes.md) for the world illustration's provenance.
+
 ## Run
 
 ```bash
