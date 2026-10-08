@@ -27,6 +27,11 @@ out/
 build
 dist
 
+# Expo / React Native
+.expo/
+expo-env.d.ts
+*.tsbuildinfo
+
 
 # Debug
 npm-debug.log*
