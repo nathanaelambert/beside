@@ -8,7 +8,7 @@ See [the project documentation](docs/README.md) for the working concept, origina
 
 - `apps/website` (`beside-showcase`): the original Vite/React showcase website, with its six interactive chapters, pixel-art world, and project notes.
 - `apps/docs` (`docs`): the Next.js documentation starter.
-- `apps/mobile` (`mobile`): the Expo/React Native app.
+- `apps/mobile` (`mobile`): the Ignite/React Native app.
 - `packages/ui`: shared React components.
 - `packages/eslint-config`: shared ESLint configuration.
 - `packages/typescript-config`: shared TypeScript configuration.
@@ -23,7 +23,7 @@ pnpm dev --filter=beside-showcase
 pnpm dev --filter=mobile
 ```
 
-The website runs at `http://127.0.0.1:5173`. See [the website README](apps/website/README.md) for its controls and demos. See [the mobile README](apps/mobile/README.md) for Expo Go, simulators, and workspace scripts.
+The website runs at `http://127.0.0.1:5173`. See [the website README](apps/website/README.md) for its controls and demos. See [the mobile README](apps/mobile/README.md) for Ignite, simulators, and workspace scripts.
 
 ## Build
 
