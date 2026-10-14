@@ -128,7 +128,7 @@ export function AiFillInput(props: Props) {
         return;
       }
       setResult(verified);
-      if (verified.match !== "found") {
+      if (verified.match === "not_found") {
         const hint =
           props.kind === "subject"
             ? {
@@ -140,7 +140,7 @@ export function AiFillInput(props: Props) {
               }[props.templateId]
             : "Add the work's title and version";
         setNotice(
-          `${verified.match === "ambiguous" ? "Several matches." : "No reliable match."} ${hint ?? "Add more detail"} and try again.`,
+          `No reliable match. ${hint ?? "Add more detail"} and try again.`,
         );
         return;
       }
@@ -155,7 +155,7 @@ export function AiFillInput(props: Props) {
         now.onApply(filled.values);
         setChanges(filled.changes);
         setNotice(
-          `AI filled ${filled.changes.length} field${filled.changes.length === 1 ? "" : "s"}. Review before creating.`,
+          `AI filled ${filled.changes.length} field${filled.changes.length === 1 ? "" : "s"}${verified.match === "ambiguous" ? " using the most likely match" : ""}. Review before creating.`,
         );
       } else {
         setNotice(

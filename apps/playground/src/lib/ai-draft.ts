@@ -36,19 +36,19 @@ export function buildDraftRequest(
     );
   } else if (templateId === "series" || templateId === "watch-series") {
     context.push(
-      "Do not assume a season. If neither title nor form identifies it, leave season-specific details blank and ask for the season.",
+      "Do not assume a season. If neither title nor form identifies it, leave season-specific details blank.",
     );
   } else if (templateId === "course" || templateId === "course-progress") {
     context.push(
-      "Use the identified provider and version. Ask for clarification if several courses match.",
+      "Respect any identified provider and version; otherwise choose the most likely matching course.",
     );
   } else if (templateId === "recipe" || templateId === "cook-recipe") {
     context.push(
-      "Find the original recipe. Ask for an author or recipe URL if the dish alone is ambiguous.",
+      "Find an identifiable original recipe; choose the most likely matching recipe when no author or URL is supplied.",
     );
   }
   context.push(
-    "Fill descriptive facts only. Ask for clarification if this title is ambiguous. Keep source links in provenance, never in field values.",
+    "Choose the most likely match using the title and supplied details. Fill descriptive facts from that single match; explain the choice in summary. Keep source links in provenance, never in field values.",
   );
   return {
     kind,
@@ -66,7 +66,7 @@ export function fillDraft(
   replaceable: string[] = [],
 ) {
   const eligible =
-    result.match === "found"
+    result.match !== "not_found"
       ? result.fields.filter(
           (field) =>
             !["Title", "Name", "Source"].includes(field.key) &&

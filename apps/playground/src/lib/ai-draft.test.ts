@@ -53,6 +53,16 @@ test("the title and existing identity fields provide lookup context, without a s
     buildDraftRequest("subject", "series", "A show", {}).context,
     /Do not assume a season/,
   );
+  for (const templateId of ["book", "series", "movie", "course", "recipe"]) {
+    const context = buildDraftRequest(
+      "subject",
+      templateId,
+      "Shared title",
+      {},
+    ).context;
+    assert.match(context, /Choose the most likely match/);
+    assert.doesNotMatch(context, /ask for|clarification/i);
+  }
 });
 
 test("one click fills only empty supported details, preserves the typed title and manual values, and leaves uncertain facts blank", () => {
@@ -123,15 +133,57 @@ test("only untouched activity defaults are replaceable; planning details remain 
   assert.deepEqual(undoDraft(filled.values, filled.changes), before);
 });
 
-test("ambiguous matches do not fill anything", () => {
-  const before = { Title: "A book", Author: "" };
-  assert.deepEqual(
+test("the most likely ambiguous match fills sourced facts without replacing manual details or saving", () => {
+  const db = createSeed();
+  const snapshot = structuredClone(db);
+  const before = {
+    Title: "A book",
+    Author: "",
+    Edition: "My copy",
+    Chapters: "",
+  };
+  const filled = fillDraft(
+    before,
+    before,
+    { ...result, match: "ambiguous" },
+    "subject",
+  );
+  assert.deepEqual(filled.values, {
+    ...before,
+    Author: "Fixture Author",
+    Chapters: "12",
+  });
+  assert.deepEqual(undoDraft(filled.values, filled.changes), before);
+  assert.deepEqual(db, snapshot);
+  const activity = { Name: "My reading", Description: "", Target: "1" };
+  assert.equal(
     fillDraft(
+      activity,
+      activity,
+      {
+        ...result,
+        match: "ambiguous",
+        fields: [field("Target", "12")],
+      },
+      "activity",
+      ["Target"],
+    ).values.Target,
+    "12",
+  );
+});
+
+test("no match or no sourced facts leaves the draft unchanged", () => {
+  const before = { Title: "A book", Author: "" };
+  for (const match of ["not_found", "ambiguous"] as const) {
+    assert.deepEqual(
+      fillDraft(before, before, { ...result, match, fields: [] }, "subject")
+        .values,
       before,
-      before,
-      { ...result, match: "ambiguous", fields: [] },
-      "subject",
-    ).values,
+    );
+  }
+  assert.deepEqual(
+    fillDraft(before, before, { ...result, match: "not_found" }, "subject")
+      .values,
     before,
   );
 });

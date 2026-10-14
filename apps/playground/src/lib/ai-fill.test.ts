@@ -16,6 +16,7 @@ import { createFillHandler } from "./ai-handler.ts";
 import { createSeed } from "./seed.ts";
 import { execute } from "./model.ts";
 import { parseDatabase } from "./validation.ts";
+import { buildDraftRequest, fillDraft } from "./ai-draft.ts";
 
 const request: AiRequest = {
   kind: "subject",
@@ -150,7 +151,7 @@ test("citations are deduplicated and unsafe or invented source URLs are rejected
   assert.throws(() => validateSuggestions(suggestion, request, []));
 });
 
-test("AI output rejects unknown fields, duplicates, oversized names and unresolved matches", () => {
+test("AI output rejects unknown fields, duplicates, oversized names and facts without a match", () => {
   for (const fields of [
     [{ ...suggestion.fields[0]!, key: "ownerUserId" }],
     [suggestion.fields[0]!, suggestion.fields[0]!],
@@ -161,7 +162,7 @@ test("AI output rejects unknown fields, duplicates, oversized names and unresolv
     );
   assert.throws(() =>
     validateSuggestions(
-      { ...suggestion, match: "ambiguous" },
+      { ...suggestion, match: "not_found" },
       request,
       sources,
     ),
@@ -180,6 +181,29 @@ test("AI output rejects unknown fields, duplicates, oversized names and unresolv
       request,
       sources,
     ).missing.some((note) => note.includes("Author")),
+  );
+  const likely = validateSuggestions(
+    { ...suggestion, match: "ambiguous" },
+    request,
+    sources,
+  );
+  assert.deepEqual(likely.fields, suggestion.fields);
+  assert.ok(likely.missing.some((note) => note.includes("Chapters")));
+  assert.throws(() =>
+    validateSuggestions(
+      {
+        ...suggestion,
+        match: "ambiguous",
+        fields: [
+          {
+            ...suggestion.fields[0]!,
+            sourceUrls: ["https://invented.example/fake"],
+          },
+        ],
+      },
+      request,
+      sources,
+    ),
   );
 });
 
@@ -341,6 +365,58 @@ test("OpenRouter uses bounded Exa server search then strict JSON extraction; no 
     (calls[1]!.response_format as { type: string }).type,
     "json_schema",
   );
+});
+
+test("multiple research matches yield one sourced candidate that fills the draft instead of blocking", async () => {
+  const alternateUrl = "https://studio.example/remake";
+  const lookup = buildDraftRequest("subject", "movie", "Shared title", {});
+  const selected = {
+    match: "ambiguous",
+    summary:
+      "Selected the better-known 1982 film by Fixture Director over its 2011 remake.",
+    fields: [
+      { ...suggestion.fields[0]!, key: "Director", value: "Fixture Director" },
+      { ...suggestion.fields[0]!, key: "Year", value: "1982" },
+    ],
+    missing: [],
+  };
+  let count = 0;
+  const provider = createOpenRouterProvider({
+    apiKey: "test",
+    model: "test",
+    fetch: async (_url, options) => {
+      count++;
+      const body = JSON.parse(options!.body as string);
+      assert.match(
+        body.messages[0].content,
+        /select the single most likely result/,
+      );
+      return count === 1
+        ? completion(
+            "Two exact-title matches: 1982 by Fixture Director; 2011 by Another Director. The 1982 film is better known.",
+            [
+              citation,
+              {
+                type: "url_citation",
+                url_citation: { url: alternateUrl, title: "Remake (fixture)" },
+              },
+            ],
+          )
+        : completion(JSON.stringify(selected));
+    },
+  });
+  const result = await provider.suggest(lookup, new AbortController().signal);
+  assert.equal(result.match, "ambiguous");
+  assert.ok(
+    result.fields.every((field) => !field.sourceUrls.includes(alternateUrl)),
+  );
+  const before = { Title: "Shared title", Director: "", Year: "" };
+  assert.deepEqual(fillDraft(before, before, result, "subject").values, {
+    ...before,
+    Director: "Fixture Director",
+    Year: "1982",
+  });
+  assert.equal(count, 2);
 });
 
 test("provider rejects source-free, truncated, invalid and unsourced results without silently falling back to model memory", async () => {

@@ -78,6 +78,7 @@ const sourceSchema = z.strictObject({
   title: z.string().min(1).max(300),
 });
 export const suggestionSchema = z.strictObject({
+  // ambiguous still selects one most likely candidate; its facts may fill the draft.
   match: z.enum(["found", "ambiguous", "not_found"]),
   summary: z.string().min(1).max(1000),
   fields: z
@@ -111,8 +112,8 @@ export function validateSuggestions(
   const urls = new Set(sources.map((s) => safeSourceUrl(s.url)));
   if (new Set(result.fields.map((f) => f.key)).size !== result.fields.length)
     throw new Error("Duplicate suggested field.");
-  if (result.match !== "found" && result.fields.length)
-    throw new Error("Resolve the match before filling fields.");
+  if (result.match === "not_found" && result.fields.length)
+    throw new Error("A missing match cannot supply fields.");
   for (const field of result.fields) {
     if (!template.fields.includes(field.key))
       throw new Error("Unsupported suggested field.");
@@ -160,7 +161,7 @@ export function validateSuggestions(
     if (!result.missing.some((item) => /\bedition\b/i.test(item)))
       result.missing.push(note);
   }
-  if (result.match === "found") {
+  if (result.match !== "not_found") {
     for (const field of template.fields.filter(
       (key) => !result.fields.some((f) => f.key === key),
     )) {
