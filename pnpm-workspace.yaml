@@ -4,3 +4,5 @@ packages:
 allowBuilds:
   esbuild: false
   unrs-resolver: false
+minimumReleaseAgeExclude:
+  - lucide-react@1.57.0

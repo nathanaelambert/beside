@@ -1,0 +1,155 @@
+-- Reference SQL shape for Playground v1, not a production migration.
+-- JSONB stores descriptive fields; relationships use foreign keys and joins.
+-- Cross-table ownership, category, unit, and audience rules need command transactions.
+-- The event envelope entity_type/entity_id is application-validated, not a SQL FK.
+
+CREATE TABLE app_user (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  email text NOT NULL UNIQUE,
+  color text NOT NULL
+);
+
+CREATE TABLE connection (
+  id text PRIMARY KEY,
+  name text NOT NULL
+);
+
+CREATE TABLE connection_member (
+  id text PRIMARY KEY,
+  connection_id text NOT NULL REFERENCES connection(id),
+  user_id text NOT NULL REFERENCES app_user(id),
+  UNIQUE (connection_id, user_id)
+);
+
+CREATE TABLE subject_template (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  category text NOT NULL,
+  fields jsonb NOT NULL,
+  unit text NOT NULL
+);
+
+CREATE TABLE activity_template (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  category text NOT NULL,
+  description text NOT NULL,
+  progress_mode text NOT NULL,
+  unit text NOT NULL,
+  target numeric NOT NULL,
+  CHECK (target > 0),
+  CHECK (progress_mode IN ('position', 'sum', 'sessions'))
+);
+
+CREATE TABLE subject (
+  id text PRIMARY KEY,
+  template_id text NOT NULL REFERENCES subject_template(id),
+  owner_user_id text NOT NULL REFERENCES app_user(id),
+  title text NOT NULL,
+  metadata jsonb NOT NULL,
+  created_at timestamptz NOT NULL
+);
+
+CREATE TABLE activity (
+  id text PRIMARY KEY,
+  template_id text NOT NULL REFERENCES activity_template(id),
+  creator_user_id text NOT NULL REFERENCES app_user(id),
+  personal_owner_id text REFERENCES app_user(id),
+  connection_id text REFERENCES connection(id),
+  name text NOT NULL,
+  description text NOT NULL,
+  category text NOT NULL,
+  progress_mode text NOT NULL,
+  unit text NOT NULL,
+  created_at timestamptz NOT NULL,
+  CHECK ((personal_owner_id IS NULL) <> (connection_id IS NULL)),
+  CHECK (progress_mode IN ('position', 'sum', 'sessions'))
+);
+
+CREATE TABLE activity_subject (
+  id text PRIMARY KEY,
+  activity_id text NOT NULL REFERENCES activity(id),
+  subject_id text NOT NULL REFERENCES subject(id),
+  UNIQUE (activity_id, subject_id)
+);
+
+CREATE TABLE participation (
+  id text PRIMARY KEY,
+  activity_id text NOT NULL REFERENCES activity(id),
+  user_id text NOT NULL REFERENCES app_user(id),
+  target numeric NOT NULL,
+  status text NOT NULL,
+  UNIQUE (activity_id, user_id),
+  CHECK (target > 0),
+  CHECK (status IN ('invited', 'active', 'finished', 'left'))
+);
+
+CREATE TABLE activity_log (
+  id text PRIMARY KEY,
+  author_user_id text NOT NULL REFERENCES app_user(id),
+  subject_id text REFERENCES subject(id),
+  category text NOT NULL,
+  title text NOT NULL,
+  quantity numeric NOT NULL,
+  unit text NOT NULL,
+  duration_minutes numeric NOT NULL,
+  occurred_at timestamptz NOT NULL,
+  origin text NOT NULL,
+  external_key text,
+  created_at timestamptz NOT NULL,
+  UNIQUE (author_user_id, origin, external_key),
+  CHECK (quantity > 0),
+  CHECK (duration_minutes >= 0),
+  CHECK (origin IN ('manual', 'voice', 'mcp', 'automation'))
+);
+
+CREATE TABLE log_share (
+  id text PRIMARY KEY,
+  log_id text NOT NULL REFERENCES activity_log(id),
+  connection_id text NOT NULL REFERENCES connection(id),
+  shared_by_user_id text NOT NULL REFERENCES app_user(id),
+  UNIQUE (log_id, connection_id)
+);
+
+CREATE TABLE log_contribution (
+  id text PRIMARY KEY,
+  log_id text NOT NULL REFERENCES activity_log(id),
+  participation_id text NOT NULL REFERENCES participation(id),
+  amount numeric NOT NULL,
+  UNIQUE (log_id, participation_id),
+  CHECK (amount > 0)
+);
+
+CREATE TABLE domain_event (
+  id text PRIMARY KEY,
+  actor_user_id text NOT NULL REFERENCES app_user(id),
+  type text NOT NULL,
+  entity_type text NOT NULL,
+  entity_id text NOT NULL,
+  message text NOT NULL,
+  origin text NOT NULL,
+  created_at timestamptz NOT NULL,
+  CHECK (entity_type IN ('subject', 'activity', 'log'))
+);
+
+CREATE TABLE event_delivery (
+  id text PRIMARY KEY,
+  event_id text NOT NULL REFERENCES domain_event(id),
+  recipient_user_id text NOT NULL REFERENCES app_user(id),
+  connection_id text REFERENCES connection(id),
+  kind text NOT NULL,
+  UNIQUE (event_id, recipient_user_id),
+  CHECK (kind IN ('private', 'update', 'progress', 'activity'))
+);
+
+CREATE INDEX participation_user ON participation(user_id);
+CREATE INDEX activity_scope ON activity(connection_id, personal_owner_id);
+CREATE INDEX subject_owner ON subject(owner_user_id);
+CREATE INDEX log_author_time ON activity_log(author_user_id, occurred_at);
+CREATE INDEX share_audience ON log_share(connection_id);
+CREATE INDEX contribution_progress ON log_contribution(participation_id);
+CREATE INDEX delivery_inbox ON event_delivery(recipient_user_id);
+
+-- Progress: position uses MAX(amount); sessions and sum use SUM(amount).
+-- Recurring periods and historical target versions remain future experiments.
