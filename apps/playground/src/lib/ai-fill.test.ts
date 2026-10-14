@@ -81,6 +81,37 @@ test("AI requests reject unsupported templates, excessive input and unknown keys
   );
 });
 
+test("an explicitly unknown edition cannot be replaced with source-backed publication history", () => {
+  const input = {
+    ...suggestion,
+    fields: [
+      ...suggestion.fields,
+      {
+        ...suggestion.fields[0]!,
+        key: "Edition",
+        value: "First published in 1943",
+      },
+    ],
+  };
+  for (const context of [
+    "Test Author, edition unknown",
+    "Test Author, unknown edition",
+    "Edition is not known",
+    "ISBN unspecified",
+  ]) {
+    const result = validateSuggestions(input, { ...request, context }, sources);
+    assert.ok(!result.fields.some((field) => field.key === "Edition"));
+    assert.ok(result.missing.some((note) => note.includes("Edition")));
+    assert.ok(result.fields.some((field) => field.key === "Author"));
+  }
+  const known = validateSuggestions(
+    input,
+    { ...request, context: "Test Author, first edition 1943" },
+    sources,
+  );
+  assert.ok(known.fields.some((field) => field.key === "Edition"));
+});
+
 test("citations are deduplicated and unsafe or invented source URLs are rejected", () => {
   for (const value of [
     "javascript:alert(1)",

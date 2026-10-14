@@ -160,7 +160,7 @@ function AiFillReview({
   function apply() {
     if (!result || !requestRef.current) return;
     try {
-      validateSuggestions(
+      const validated = validateSuggestions(
         {
           match: result.match,
           summary: result.summary,
@@ -173,7 +173,7 @@ function AiFillReview({
       const merged = applyReviewedFields(
         values,
         baseline.current,
-        result.fields,
+        validated.fields,
         selected,
       );
       onApply(merged.values);

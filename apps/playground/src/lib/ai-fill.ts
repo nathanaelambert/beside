@@ -145,6 +145,21 @@ export function validateSuggestions(
       return url;
     });
   }
+  // Respect explicit unknown-edition context even when the model supplies a
+  // source-backed publication date. That date does not identify the user's copy.
+  if (
+    request.kind === "subject" &&
+    request.templateId === "book" &&
+    /\b(?:(?:edition|printing|isbn)(?:\s+is)?\s+(?:unknown|unspecified|not\s+known|not\s+specified)|(?:unknown|unspecified)\s+(?:edition|printing|isbn))\b/i.test(
+      request.context,
+    )
+  ) {
+    result.fields = result.fields.filter((field) => field.key !== "Edition");
+    const note =
+      "Edition: you specified an unknown edition; identify your copy or enter this manually.";
+    if (!result.missing.some((item) => /\bedition\b/i.test(item)))
+      result.missing.push(note);
+  }
   if (result.match === "found") {
     for (const field of template.fields.filter(
       (key) => !result.fields.some((f) => f.key === key),
