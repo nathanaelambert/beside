@@ -6,7 +6,7 @@ import { categories } from "../lib/templates";
 import type { Database } from "../lib/types";
 import type { ViewProps } from "./playground";
 import { Badge, CategoryIcon, Empty, JsonRecord, Person } from "./ui";
-import { AiFill } from "./ai-fill";
+import { AiFillInput } from "./ai-fill";
 
 export function Subjects({ db, userId, run }: ViewProps) {
   const [search, setSearch] = useState("");
@@ -143,24 +143,6 @@ export function Subjects({ db, userId, run }: ViewProps) {
                 <p>Describe the thing, not the commitment.</p>
               </div>
             </div>
-            <AiFill
-              key={`${template.id}:${draftVersion}`}
-              kind="subject"
-              templateId={template.id}
-              values={{ Title: title, ...metadata }}
-              initialQuery={title}
-              onApply={(values) => {
-                setTitle(values.Title ?? title);
-                setMetadata(
-                  Object.fromEntries(
-                    template.fields.map((field) => [
-                      field,
-                      values[field] ?? "",
-                    ]),
-                  ),
-                );
-              }}
-            />
             <label>
               Subject template
               <select
@@ -177,16 +159,27 @@ export function Subjects({ db, userId, run }: ViewProps) {
                 ))}
               </select>
             </label>
-            <label>
-              Title
-              <input
-                placeholder={`Name your ${template.name.toLowerCase()}`}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={200}
-                required
-              />
-            </label>
+            <AiFillInput
+              key={`${template.id}:${draftVersion}`}
+              kind="subject"
+              templateId={template.id}
+              values={{ Title: title, ...metadata }}
+              label="Title"
+              value={title}
+              onChange={setTitle}
+              placeholder={`Name your ${template.name.toLowerCase()}`}
+              onApply={(values) => {
+                setTitle(values.Title ?? title);
+                setMetadata(
+                  Object.fromEntries(
+                    template.fields.map((field) => [
+                      field,
+                      values[field] ?? "",
+                    ]),
+                  ),
+                );
+              }}
+            />
             {template.fields.map((field) => (
               <label key={field}>
                 {field}

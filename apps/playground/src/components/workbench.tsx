@@ -29,7 +29,7 @@ import {
 } from "./ui";
 import type { ViewProps } from "./playground";
 import { LogComposer } from "./log-composer";
-import { AiFill } from "./ai-fill";
+import { AiFillInput } from "./ai-fill";
 
 export function Workbench({ db, userId, run }: ViewProps) {
   const [selectedId, setSelectedId] = useState("");
@@ -216,6 +216,7 @@ function ActivityForm({
   const [name, setName] = useState(template.name);
   const [description, setDescription] = useState("");
   const [target, setTarget] = useState(String(template.target));
+  const [targetEdited, setTargetEdited] = useState(false);
   const [connectionId, setConnectionId] = useState("personal");
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
   const [inviteOthers, setInviteOthers] = useState(true);
@@ -250,21 +251,6 @@ function ActivityForm({
         <Badge color="ochre">Activity</Badge>
         <h3>Start with an intention</h3>
       </div>
-      <AiFill
-        key={templateId}
-        kind="activity"
-        templateId={templateId}
-        values={{ Name: name, Description: description, Target: target }}
-        initialQuery={subjects
-          .filter((s) => subjectIds.includes(s.id))
-          .map((s) => s.title)
-          .join(", ")}
-        onApply={(values) => {
-          setName(values.Name ?? name);
-          setDescription(values.Description ?? description);
-          setTarget(values.Target ?? target);
-        }}
-      />
       <div className="form-grid three">
         <label>
           Template
@@ -277,6 +263,7 @@ function ActivityForm({
               setTemplateId(t.id);
               setName(t.name);
               setTarget(String(t.target));
+              setTargetEdited(false);
               setSubjectIds([]);
             }}
           >
@@ -287,16 +274,34 @@ function ActivityForm({
             ))}
           </select>
         </label>
-        <label>
-          Activity name
-          <input
-            value={name}
-            maxLength={200}
-            required
-            onChange={(e) => setName(e.target.value)}
-            placeholder="What would you like to do?"
-          />
-        </label>
+        <AiFillInput
+          key={templateId}
+          kind="activity"
+          templateId={templateId}
+          label="Activity name"
+          value={name}
+          onChange={setName}
+          query={
+            subjectIds.length === 1
+              ? (subjects.find((s) => s.id === subjectIds[0])?.title ?? name)
+              : name === template.name
+                ? ""
+                : name
+          }
+          lookupDetails={
+            subjectIds.length === 1
+              ? subjects.find((s) => s.id === subjectIds[0])?.metadata
+              : undefined
+          }
+          values={{ Name: name, Description: description, Target: target }}
+          replaceable={targetEdited ? [] : ["Target"]}
+          onApply={(values) => {
+            setName(values.Name ?? name);
+            setDescription(values.Description ?? description);
+            setTarget(values.Target ?? target);
+          }}
+          placeholder="What would you like to do?"
+        />
         <label>
           Owner
           <select
@@ -321,7 +326,10 @@ function ActivityForm({
             step="any"
             value={target}
             required
-            onChange={(e) => setTarget(e.target.value)}
+            onChange={(e) => {
+              setTarget(e.target.value);
+              setTargetEdited(true);
+            }}
           />
           <small>{template.unit}, sandbox total</small>
         </label>

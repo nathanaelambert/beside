@@ -18,7 +18,7 @@ export const supportedActivities = [
 export const aiRequestSchema = z.strictObject({
   kind: z.enum(["subject", "activity"]),
   templateId: z.string().min(1).max(100),
-  query: z.string().trim().min(2).max(200),
+  query: z.string().trim().min(1).max(200),
   context: z.string().trim().min(3).max(1000),
 });
 export type AiRequest = z.infer<typeof aiRequestSchema>;
