@@ -121,7 +121,9 @@ export function createOpenRouterProvider(config: {
         body: JSON.stringify({
           model: config.model,
           stream: false,
-          max_tokens: 4000,
+          // This budget includes internal reasoning and the visible answer.
+          max_tokens: 12000,
+          reasoning: { effort: "high", exclude: true },
           provider: { require_parameters: true },
           ...body,
         }),

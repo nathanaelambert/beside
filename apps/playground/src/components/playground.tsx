@@ -141,7 +141,7 @@ export function Playground() {
             beside<span className="brand-divider">/</span>
             <strong>playground</strong>
           </span>
-          <span className="version-tag">v0.1</span>
+          <span className="version-tag">v0.2</span>
         </a>
         <div className="topbar-right">
           <span className="local-label">

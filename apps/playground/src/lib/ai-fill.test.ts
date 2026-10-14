@@ -319,6 +319,10 @@ test("OpenRouter uses bounded Exa server search then strict JSON extraction; no 
   const result = await provider.suggest(request, new AbortController().signal);
   assert.equal(result.fields[0]!.value, "A test book");
   assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.deepEqual(call.reasoning, { effort: "high", exclude: true });
+    assert.equal(call.max_tokens, 12000);
+  }
   assert.deepEqual(calls[0]!.tools, [
     {
       type: "openrouter:web_search",

@@ -16,6 +16,6 @@ export const POST = createFillHandler(() => {
   }
   return createOpenRouterProvider({
     apiKey: process.env.OPENROUTER_API_KEY,
-    model: process.env.OPENROUTER_MODEL || "openai/gpt-5.4-mini",
+    model: process.env.OPENROUTER_MODEL || "openai/gpt-5.6-luna",
   });
 });
