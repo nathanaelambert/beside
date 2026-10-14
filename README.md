@@ -9,6 +9,7 @@ See [the project documentation](docs/README.md) for the working concept, origina
 - `apps/website` (`beside-showcase`): the original Vite/React showcase website, with its six interactive chapters, pixel-art world, and project notes.
 - `apps/docs` (`docs`): the Next.js documentation starter.
 - `apps/mobile` (`mobile`): the Ignite/React Native app.
+- `apps/playground` (`playground`): the Next.js model workbench with local persistence and Mermaid ERDs.
 - `packages/ui`: shared React components.
 - `packages/eslint-config`: shared ESLint configuration.
 - `packages/typescript-config`: shared TypeScript configuration.
@@ -21,9 +22,12 @@ Use Node.js 24 or newer and the pnpm version specified in `package.json`.
 pnpm install
 pnpm dev --filter=beside-showcase
 pnpm dev --filter=mobile
+pnpm dev --filter=playground
 ```
 
 The website runs at `http://127.0.0.1:5173`. See [the website README](apps/website/README.md) for its controls and demos. See [the mobile README](apps/mobile/README.md) for Ignite, simulators, and workspace scripts.
+
+Playground runs at `http://localhost:3002`. See [its README](apps/playground/README.md) for experiments, ownership assumptions, trigger simulations, and import/export.
 
 ## Build
 
