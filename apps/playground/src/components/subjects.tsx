@@ -6,6 +6,7 @@ import { categories } from "../lib/templates";
 import type { Database } from "../lib/types";
 import type { ViewProps } from "./playground";
 import { Badge, CategoryIcon, Empty, JsonRecord, Person } from "./ui";
+import { AiFill } from "./ai-fill";
 
 export function Subjects({ db, userId, run }: ViewProps) {
   const [search, setSearch] = useState("");
@@ -13,6 +14,7 @@ export function Subjects({ db, userId, run }: ViewProps) {
   const [templateId, setTemplateId] = useState("book");
   const [title, setTitle] = useState("");
   const [metadata, setMetadata] = useState<Record<string, string>>({});
+  const [draftVersion, setDraftVersion] = useState(0);
   const template =
     db.subjectTemplates.find((t) => t.id === templateId) ??
     db.subjectTemplates[0]!;
@@ -128,6 +130,7 @@ export function Subjects({ db, userId, run }: ViewProps) {
               if (result) {
                 setTitle("");
                 setMetadata({});
+                setDraftVersion((version) => version + 1);
               }
             }}
           >
@@ -140,6 +143,24 @@ export function Subjects({ db, userId, run }: ViewProps) {
                 <p>Describe the thing, not the commitment.</p>
               </div>
             </div>
+            <AiFill
+              key={`${template.id}:${draftVersion}`}
+              kind="subject"
+              templateId={template.id}
+              values={{ Title: title, ...metadata }}
+              initialQuery={title}
+              onApply={(values) => {
+                setTitle(values.Title ?? title);
+                setMetadata(
+                  Object.fromEntries(
+                    template.fields.map((field) => [
+                      field,
+                      values[field] ?? "",
+                    ]),
+                  ),
+                );
+              }}
+            />
             <label>
               Subject template
               <select

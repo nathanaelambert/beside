@@ -29,6 +29,7 @@ import {
 } from "./ui";
 import type { ViewProps } from "./playground";
 import { LogComposer } from "./log-composer";
+import { AiFill } from "./ai-fill";
 
 export function Workbench({ db, userId, run }: ViewProps) {
   const [selectedId, setSelectedId] = useState("");
@@ -249,6 +250,21 @@ function ActivityForm({
         <Badge color="ochre">Activity</Badge>
         <h3>Start with an intention</h3>
       </div>
+      <AiFill
+        key={templateId}
+        kind="activity"
+        templateId={templateId}
+        values={{ Name: name, Description: description, Target: target }}
+        initialQuery={subjects
+          .filter((s) => subjectIds.includes(s.id))
+          .map((s) => s.title)
+          .join(", ")}
+        onApply={(values) => {
+          setName(values.Name ?? name);
+          setDescription(values.Description ?? description);
+          setTarget(values.Target ?? target);
+        }}
+      />
       <div className="form-grid three">
         <label>
           Template

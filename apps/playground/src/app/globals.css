@@ -2199,3 +2199,132 @@ tbody tr:nth-child(even) {
     scroll-behavior: auto !important;
   }
 }
+
+/* AI drafts use the workbench's inline form vocabulary. */
+.ai-fill {
+  margin-bottom: 20px;
+  min-width: 0;
+}
+.ai-fill > .muted {
+  margin-top: 8px;
+  font-size: 0.78rem;
+}
+.ai-fill-toggle {
+  color: var(--moss);
+  background: var(--moss-bg);
+}
+.ai-review {
+  margin: 14px 0 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+.ai-review legend {
+  font-size: 0.85rem;
+  font-weight: 650;
+  padding: 0 6px;
+}
+.ai-review-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.ai-review p,
+.ai-review li {
+  font-size: 0.8rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  max-width: 75ch;
+}
+.ai-review-heading > p {
+  flex: 1;
+  color: var(--muted);
+}
+.ai-review-heading > button {
+  flex-shrink: 0;
+}
+.ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ai-notice:empty {
+  display: none;
+}
+.ai-notice {
+  color: var(--moss);
+}
+.ai-error {
+  color: var(--error);
+}
+.ai-match {
+  display: grid;
+  gap: 5px;
+}
+.ai-match strong,
+.ai-missing strong {
+  font-size: 0.85rem;
+}
+.ai-suggestion {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.creation-panel .ai-suggestion > .check-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 0.85rem;
+}
+.ai-certainty {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 450;
+}
+.ai-current {
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.ai-review textarea {
+  resize: vertical;
+  max-height: 350px;
+}
+.ai-review textarea:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+}
+.ai-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.ai-sources a {
+  color: var(--moss);
+  text-underline-offset: 3px;
+}
+.ai-review details.ai-sources {
+  display: block;
+}
+.ai-review summary {
+  cursor: pointer;
+}
+.ai-review ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+@media (max-width: 600px) {
+  .ai-review {
+    padding: 12px;
+  }
+  .ai-actions > button {
+    width: 100%;
+  }
+}
