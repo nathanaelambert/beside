@@ -23,7 +23,7 @@ pnpm --filter playground test
 
 ## Experiments
 
-1. As Mosaab, save chapter 5 with both reading activities checked. One log advances Dune to position 5 and adds one reading-habit session. Nathaniel and Maya retain independent progress. Switch identities and compare activities, Logbook, and Event trail's **My inbox**.
+1. As Mosaab, save chapter 5 with both reading activities checked. One log advances Dune to position 5 and adds one reading-habit session. Nathaniel and Rishik retain independent progress. Switch identities and compare activities, Logbook, and Event trail's **My inbox**.
 2. Save a standalone log with no credit or audience. It stays private. In Logbook, use **Share later / add progress credit** to add an update-only audience, then credit an activity independently.
 3. Create a book in Subjects. Create a shared activity using it and invite others. Switch identity to accept the invitation and set a different target. Link a second subject to test many-to-many relationships.
 4. Select Voice, MCP, or Event in the composer. These are simulations without external integrations. Submit with a request key, then replay it: the same author/source/key returns the original log without duplicate credit or deliveries. Change the key for a new event.

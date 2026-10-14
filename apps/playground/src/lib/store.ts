@@ -26,7 +26,8 @@ function hydrate() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) db = parseDatabase(JSON.parse(stored));
-    else localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    const serialized = JSON.stringify(db);
+    if (stored !== serialized) localStorage.setItem(STORAGE_KEY, serialized);
   } catch {
     protectStoredData = true;
     storageError =

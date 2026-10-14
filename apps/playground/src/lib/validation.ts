@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Database } from "./types.ts";
+import { migrateDemoIdentity } from "./migrations.ts";
 
 const key = z.string().min(1).max(200);
 const text = z.string().max(2000);
@@ -143,7 +144,7 @@ const databaseSchema = z.object({
   ),
 });
 export function parseDatabase(input: unknown): Database {
-  const db = databaseSchema.parse(input);
+  const db = migrateDemoIdentity(databaseSchema.parse(input));
   const tables = Object.entries(db).filter(([name]) => name !== "version") as [
     string,
     { id: string }[],

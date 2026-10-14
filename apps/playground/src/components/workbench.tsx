@@ -182,8 +182,8 @@ export function Workbench({ db, userId, run }: ViewProps) {
             <span>TRY THIS</span>
             <p>
               Log chapter 5 in <strong>Dune</strong> and credit both reading
-              activities. Switch to Nathaniel, then Maya, to see their different
-              views.
+              activities. Switch to Nathaniel, then Rishik, to see their
+              different views.
             </p>
             <ArrowRight size={18} />
           </div>

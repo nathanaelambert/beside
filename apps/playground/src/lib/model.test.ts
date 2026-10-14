@@ -70,7 +70,7 @@ test("private logs stay private; sharing later adds visibility without automatic
     input,
   });
   assert.ok(
-    !visibleLogs(first.db, "maya").some((l) => l.id === first.entityId),
+    !visibleLogs(first.db, "rishik").some((l) => l.id === first.entityId),
   );
   const second = execute(first.db, {
     type: "distributeLog",
@@ -80,7 +80,7 @@ test("private logs stay private; sharing later adds visibility without automatic
     connectionIds: ["mm"],
   });
   assert.ok(
-    visibleLogs(second.db, "maya").some((l) => l.id === first.entityId),
+    visibleLogs(second.db, "rishik").some((l) => l.id === first.entityId),
   );
   assert.equal(second.db.contributions.length, initial.contributions.length);
   const third = execute(second.db, {
@@ -131,7 +131,7 @@ test("bad audience, author, subject, units or inactive participation reject the 
     }),
   );
   assert.throws(() =>
-    execute(db, { type: "recordLog", actorId: "maya", input }),
+    execute(db, { type: "recordLog", actorId: "rishik", input }),
   );
   assert.throws(() =>
     execute(db, {
@@ -176,9 +176,9 @@ test("invitations, personal ownership and shared subject links preserve perspect
   let db = createSeed();
   const subject = execute(db, {
     type: "createSubject",
-    actorId: "maya",
+    actorId: "rishik",
     templateId: "book",
-    title: "Maya's book",
+    title: "Rishik's book",
     metadata: {},
   });
   db = subject.db;
@@ -187,7 +187,7 @@ test("invitations, personal ownership and shared subject links preserve perspect
   );
   const activity = execute(db, {
     type: "createActivity",
-    actorId: "maya",
+    actorId: "rishik",
     templateId: "read-book",
     name: "Read with me",
     description: "",
@@ -297,4 +297,49 @@ test("request keys are normalized before deduplication and invalid trigger data 
       input: { ...input, occurredAt: "yesterday" },
     }),
   );
+});
+
+test("legacy Maya experiments migrate to Rishik without losing history or references", () => {
+  const current = createSeed();
+  const legacy = JSON.parse(
+    JSON.stringify(current)
+      .replaceAll("rishik", "maya")
+      .replaceAll("Rishik", "Maya"),
+  ) as Database;
+  const result = execute(legacy, {
+    type: "createSubject",
+    actorId: "maya",
+    templateId: "book",
+    title: "Keep this title",
+    metadata: {},
+  });
+  const upgraded = parseDatabase(result.db);
+  assert.deepEqual(
+    upgraded.users.find((user) => user.id === "rishik"),
+    {
+      id: "rishik",
+      name: "Rishik",
+      email: "rishik@example.test",
+      color: "moss",
+    },
+  );
+  assert.equal(
+    upgraded.subjects.find((subject) => subject.id === result.entityId)!
+      .ownerUserId,
+    "rishik",
+  );
+  assert.equal(
+    upgraded.subjects.find((subject) => subject.id === result.entityId)!.title,
+    "Keep this title",
+  );
+  assert.equal(upgraded.logs.length, result.db.logs.length);
+  assert.equal(upgraded.contributions.length, result.db.contributions.length);
+  assert.equal(upgraded.events.length, result.db.events.length);
+  assert.equal(upgraded.deliveries.length, result.db.deliveries.length);
+  assert.ok(!JSON.stringify(upgraded).includes('"maya"'));
+  assert.equal(
+    result.db.users.find((user) => user.id === "maya")!.name,
+    "Maya",
+  );
+  assert.deepEqual(parseDatabase(upgraded), upgraded);
 });
