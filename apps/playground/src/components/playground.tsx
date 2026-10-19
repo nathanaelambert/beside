@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Activity as ActivityIcon,
+  ArrowLeft,
   ArrowRight,
   Beaker,
   BookOpen,
@@ -11,6 +11,8 @@ import {
   Download,
   FlaskConical,
   GitBranch,
+  NotebookPen,
+  BookText,
   Radio,
   RotateCcw,
   Shapes,
@@ -25,27 +27,106 @@ import {
   resetDatabase,
   useDatabase,
 } from "../lib/store";
-import { visibleActivities, visibleLogs, visibleSubjects } from "../lib/model";
+import { visibleActivities } from "../lib/model";
 import { Avatar } from "./ui";
 import { Workbench } from "./workbench";
 import { Subjects, Templates } from "./subjects";
 import { Logbook } from "./logbook";
 import { EventTrail, ModelView } from "./inspection";
+import { Lexicon, UserStories } from "./reference";
+import { LogComposer } from "./log-composer";
 
 export type Run = (
   command: Command,
   message?: string,
 ) => ReturnType<typeof dispatch> | null;
 export type ViewProps = { db: Database; userId: string; run: Run };
-type Tab = "workbench" | "subjects" | "logs" | "events" | "model" | "templates";
-const tabs = [
-  { id: "workbench", label: "Workbench", icon: FlaskConical },
-  { id: "subjects", label: "Subjects", icon: Shapes },
-  { id: "logs", label: "Logbook", icon: BookOpen },
-  { id: "events", label: "Event trail", icon: Radio },
-  { id: "model", label: "Working model", icon: GitBranch },
-  { id: "templates", label: "Templates", icon: Beaker },
+const sections = [
+  {
+    id: "lexicon",
+    label: "Lexicon",
+    icon: BookText,
+    group: "learn",
+    description:
+      "What each model means, why it exists, and how it fits together.",
+    detail: "14 models, in plain English",
+  },
+  {
+    id: "model",
+    label: "ERDs",
+    icon: GitBranch,
+    group: "learn",
+    description:
+      "Explore the relationships between models and inspect the data.",
+    detail: "4 relationship diagrams",
+  },
+  {
+    id: "stories",
+    label: "User stories",
+    icon: BookOpen,
+    group: "learn",
+    description:
+      "Walk through returning to a shared space, in words and a diagram.",
+    detail: "1 story · proposed experience",
+  },
+  {
+    id: "subjects",
+    label: "Subjects",
+    icon: Shapes,
+    group: "try",
+    description:
+      "Add and browse the books, recipes, trails, and other things you do activities with.",
+    detail: "Add a subject",
+  },
+  {
+    id: "activities",
+    label: "Activities",
+    icon: FlaskConical,
+    group: "try",
+    description:
+      "Create a personal or shared activity, invite people, and set individual targets.",
+    detail: "Create an activity",
+  },
+  {
+    id: "record",
+    label: "Record a log",
+    icon: NotebookPen,
+    group: "try",
+    description:
+      "Record what happened. Choose what it counts toward and who can see it.",
+    detail: "Log a moment",
+  },
+  {
+    id: "logs",
+    label: "Logbook",
+    icon: BookOpen,
+    group: "inspect",
+    description: "Review saved logs, share them, or add progress credit later.",
+    detail: "Browse logs",
+  },
+  {
+    id: "events",
+    label: "Event trail",
+    icon: Radio,
+    group: "inspect",
+    description: "See what changed and who received each update.",
+    detail: "Inspect deliveries",
+  },
+  {
+    id: "templates",
+    label: "Templates",
+    icon: Beaker,
+    group: "inspect",
+    description:
+      "Browse the starting fields and rules for subjects and activities.",
+    detail: "Browse templates",
+  },
 ] as const;
+type Tab = "home" | (typeof sections)[number]["id"];
+function tabFromHash(): Tab {
+  const id = window.location.hash.slice(1);
+  return sections.some((section) => section.id === id) ? (id as Tab) : "home";
+}
 declare global {
   interface Window {
     besidePlayground?: {
@@ -60,12 +141,30 @@ declare global {
 export function Playground() {
   const { db, ready, storageError } = useDatabase();
   const [userId, setUserId] = useState("mosaab");
-  const [tab, setTab] = useState<Tab>("workbench");
+  const [tab, setTab] = useState<Tab>("home");
   const [notice, setNotice] = useState<{
     message: string;
     error: boolean;
   } | null>(null);
+  const [recordActivityId, setRecordActivityId] = useState<string>();
   const [confirmReset, setConfirmReset] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      if (window.location.hash === "#main") return;
+      const nextTab = tabFromHash();
+      setTab(nextTab);
+      if (nextTab !== "record") setRecordActivityId(undefined);
+      setNotice(null);
+    };
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    document.getElementById("main")?.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }, [tab, ready]);
   const fileRef = useRef<HTMLInputElement>(null);
   const activeUserId = db?.users.some((u) => u.id === userId)
     ? userId
@@ -117,23 +216,14 @@ export function Playground() {
     );
   const user = db.users.find((u) => u.id === activeUserId)!;
   const view = { db, userId: activeUserId, run };
-  const counts = {
-    subjects: visibleSubjects(db, activeUserId).length,
-    activities: visibleActivities(db, activeUserId).length,
-    logs: visibleLogs(db, activeUserId).length,
-    events: new Set(
-      db.deliveries
-        .filter((d) => d.recipientUserId === activeUserId)
-        .map((d) => d.eventId),
-    ).size,
-  };
+  const section = sections.find((item) => item.id === tab);
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
-        Skip to experiment
+        Skip to content
       </a>
       <header className="topbar">
-        <a href="/" className="brand" aria-label="Beside Playground home">
+        <a href="#home" className="brand" aria-label="Beside Playground home">
           <span className="brand-mark">
             <FlaskConical size={21} />
           </span>
@@ -160,6 +250,7 @@ export function Playground() {
               value={activeUserId}
               onChange={(e) => {
                 setUserId(e.target.value);
+                setRecordActivityId(undefined);
                 setNotice(null);
               }}
               aria-label="View as"
@@ -174,76 +265,15 @@ export function Playground() {
           </div>
         </div>
       </header>
-      <div className="intro">
-        <div>
-          <p className="eyebrow">
-            <span className="tiny-spark">✳</span> A SHARED WORKBENCH
-          </p>
-          <h1>Small actions. Visible connections.</h1>
-          <p>
-            Create something, log a moment, and follow what changes for each
-            person.
-          </p>
-        </div>
-        <div className="sandbox-note">
-          <span className="note-symbol">↗</span>
-          <div>
-            <strong>Try things. Change your mind.</strong>
-            <span>Three demo people. Local data. A model in progress.</span>
-          </div>
-        </div>
-      </div>
-      <nav className="flow-strip" aria-label="Explore model entities">
-        <button onClick={() => setTab("subjects")} className="flow-step moss">
-          <Shapes size={19} />
-          <span>
-            Subjects<small>what it’s about</small>
-          </span>
-          <b>{counts.subjects}</b>
-        </button>
-        <ArrowRight size={17} aria-hidden="true" />
-        <button onClick={() => setTab("workbench")} className="flow-step ochre">
-          <ActivityIcon size={19} />
-          <span>
-            Activities<small>what we intend</small>
-          </span>
-          <b>{counts.activities}</b>
-        </button>
-        <ArrowRight size={17} aria-hidden="true" />
-        <button onClick={() => setTab("logs")} className="flow-step blue">
-          <BookOpen size={19} />
-          <span>
-            Logs<small>what happened</small>
-          </span>
-          <b>{counts.logs}</b>
-        </button>
-        <ArrowRight size={17} aria-hidden="true" />
-        <button onClick={() => setTab("events")} className="flow-step rose">
-          <Radio size={19} />
-          <span>
-            Events<small>who hears about it</small>
-          </span>
-          <b>{counts.events}</b>
-        </button>
-      </nav>
-      <div className="nav-row">
-        <nav className="tabs" aria-label="Playground sections">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              className={tab === t.id ? "active" : ""}
-              aria-current={tab === t.id ? "page" : undefined}
-              onClick={() => setTab(t.id)}
-            >
-              <t.icon size={17} />
-              {t.label}
-            </button>
-          ))}
+      {tab !== "home" && (
+        <nav className="section-nav" aria-label="Breadcrumb">
+          <a href="#home">
+            <ArrowLeft size={16} /> Playground
+          </a>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">{section?.label}</span>
         </nav>
-        <span className="perspective-caption">
-          Perspective: <strong>{user.name}</strong>
-        </span>
-      </div>
+      )}
       {storageError && (
         <div className="notice error" role="alert">
           {storageError}
@@ -268,8 +298,99 @@ export function Playground() {
           </button>
         </div>
       )}
-      <main id="main" key={activeUserId}>
-        {tab === "workbench" && <Workbench {...view} />}
+      <main id="main" tabIndex={-1} key={activeUserId}>
+        {tab === "home" && (
+          <div className="playground-home">
+            <div className="home-intro">
+              <p className="eyebrow">BESIDE PLAYGROUND</p>
+              <h1>What would you like to explore?</h1>
+              <p>Understand the model, then try one thing at a time.</p>
+            </div>
+            {[
+              {
+                id: "learn",
+                title: "Understand the model",
+                description: "Start here to get familiar with Beside.",
+              },
+              {
+                id: "try",
+                title: "Try it out",
+                description:
+                  "Work with a local experiment as the person selected above.",
+              },
+              {
+                id: "inspect",
+                title: "Look closer",
+                description:
+                  "Review the records and rules behind your experiment.",
+              },
+            ].map((group) => (
+              <section
+                className="home-group"
+                key={group.id}
+                aria-labelledby={`group-${group.id}`}
+              >
+                <div className="home-group-heading">
+                  <h2 id={`group-${group.id}`}>{group.title}</h2>
+                  <p>{group.description}</p>
+                </div>
+                <div className="destination-grid">
+                  {sections
+                    .filter((item) => item.group === group.id)
+                    .map((item) => (
+                      <a
+                        className="destination"
+                        href={`#${item.id}`}
+                        key={item.id}
+                      >
+                        <item.icon
+                          size={22}
+                          strokeWidth={1.6}
+                          aria-hidden="true"
+                        />
+                        <h3>{item.label}</h3>
+                        <p>{item.description}</p>
+                        <span>
+                          {item.detail}
+                          <ArrowRight size={16} aria-hidden="true" />
+                        </span>
+                      </a>
+                    ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+        {tab === "lexicon" && <Lexicon />}
+        {tab === "stories" && <UserStories />}
+        {tab === "activities" && (
+          <Workbench
+            {...view}
+            onRecord={(activityId) => {
+              setRecordActivityId(activityId);
+              window.location.hash = "record";
+            }}
+          />
+        )}
+        {tab === "record" && (
+          <div className="record-page">
+            <div className="section-heading">
+              <div>
+                <h2>Record a log</h2>
+                <p>
+                  Capture a moment, then choose its progress credit and
+                  audience.
+                </p>
+              </div>
+            </div>
+            <LogComposer
+              {...view}
+              initialActivity={visibleActivities(db, activeUserId).find(
+                (activity) => activity.id === recordActivityId,
+              )}
+            />
+          </div>
+        )}
         {tab === "subjects" && <Subjects {...view} />}
         {tab === "logs" && <Logbook {...view} />}
         {tab === "events" && <EventTrail {...view} />}

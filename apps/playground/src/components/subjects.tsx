@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Plus, Search, Shapes } from "lucide-react";
+import { Plus, Search, Shapes, X } from "lucide-react";
 import { visibleActivities, visibleSubjects } from "../lib/model";
 import { categories } from "../lib/templates";
 import type { Database } from "../lib/types";
@@ -9,6 +9,7 @@ import { Badge, CategoryIcon, Empty, JsonRecord, Person } from "./ui";
 import { AiFillInput } from "./ai-fill";
 
 export function Subjects({ db, userId, run }: ViewProps) {
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [templateId, setTemplateId] = useState("book");
@@ -29,15 +30,23 @@ export function Subjects({ db, userId, run }: ViewProps) {
     <>
       <div className="section-heading">
         <div>
-          <h2>Things worth doing something with</h2>
+          <h2>Subjects</h2>
           <p>
             A book is a subject. Reading it together is an activity. Keep the
             two separate.
           </p>
         </div>
-        <Badge color="moss">Subject library</Badge>
+        <button
+          className="button primary"
+          onClick={() => setCreating(!creating)}
+        >
+          {creating ? <X size={16} /> : <Plus size={16} />}
+          {creating ? "Close form" : "Add a subject"}
+        </button>
       </div>
-      <div className="library-grid">
+      <div
+        className={`library-grid subject-library ${creating ? "is-creating" : ""}`}
+      >
         <section>
           <div className="filter-row">
             <label className="search-field">
@@ -112,100 +121,103 @@ export function Subjects({ db, userId, run }: ViewProps) {
             </Empty>
           )}
         </section>
-        <aside>
-          <form
-            className="creation-panel subject-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const result = run(
-                {
-                  type: "createSubject",
-                  actorId: userId,
-                  templateId: template.id,
-                  title,
-                  metadata,
-                },
-                "Subject created and owned by you. Link it to an activity to share its description.",
-              );
-              if (result) {
-                setTitle("");
-                setMetadata({});
-                setDraftVersion((version) => version + 1);
-              }
-            }}
-          >
-            <div className="form-title">
-              <span className="form-icon moss">
-                <Shapes size={21} />
-              </span>
-              <div>
-                <h3>Add a subject</h3>
-                <p>Describe the thing, not the commitment.</p>
-              </div>
-            </div>
-            <label>
-              Subject template
-              <select
-                value={template.id}
-                onChange={(e) => {
-                  setTemplateId(e.target.value);
-                  setMetadata({});
-                }}
-              >
-                {db.subjectTemplates.map((t) => (
-                  <option value={t.id} key={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <AiFillInput
-              key={`${template.id}:${draftVersion}`}
-              kind="subject"
-              templateId={template.id}
-              values={{ Title: title, ...metadata }}
-              label="Title"
-              value={title}
-              onChange={setTitle}
-              placeholder={`Name your ${template.name.toLowerCase()}`}
-              onApply={(values) => {
-                setTitle(values.Title ?? title);
-                setMetadata(
-                  Object.fromEntries(
-                    template.fields.map((field) => [
-                      field,
-                      values[field] ?? "",
-                    ]),
-                  ),
+        {creating && (
+          <aside>
+            <form
+              className="creation-panel subject-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const result = run(
+                  {
+                    type: "createSubject",
+                    actorId: userId,
+                    templateId: template.id,
+                    title,
+                    metadata,
+                  },
+                  "Subject created and owned by you. Link it to an activity to share its description.",
                 );
+                if (result) {
+                  setCreating(false);
+                  setTitle("");
+                  setMetadata({});
+                  setDraftVersion((version) => version + 1);
+                }
               }}
-            />
-            {template.fields.map((field) => (
-              <label key={field}>
-                {field}
-                <input
-                  value={metadata[field] ?? ""}
-                  onChange={(e) =>
-                    setMetadata({ ...metadata, [field]: e.target.value })
-                  }
-                  maxLength={2000}
-                  placeholder="Optional descriptive detail"
-                />
+            >
+              <div className="form-title">
+                <span className="form-icon moss">
+                  <Shapes size={21} />
+                </span>
+                <div>
+                  <h3>Add a subject</h3>
+                  <p>Describe the thing, not the commitment.</p>
+                </div>
+              </div>
+              <label>
+                Subject template
+                <select
+                  value={template.id}
+                  onChange={(e) => {
+                    setTemplateId(e.target.value);
+                    setMetadata({});
+                  }}
+                >
+                  {db.subjectTemplates.map((t) => (
+                    <option value={t.id} key={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
               </label>
-            ))}
-            <div className="rule-note">
-              <p>
-                You own this subject. Linking it shares the description with
-                participants, while each activity keeps its own progress and
-                history.
-              </p>
-            </div>
-            <button className="button primary full">
-              <Plus size={16} />
-              Create subject
-            </button>
-          </form>
-        </aside>
+              <AiFillInput
+                key={`${template.id}:${draftVersion}`}
+                kind="subject"
+                templateId={template.id}
+                values={{ Title: title, ...metadata }}
+                label="Title"
+                value={title}
+                onChange={setTitle}
+                placeholder={`Name your ${template.name.toLowerCase()}`}
+                onApply={(values) => {
+                  setTitle(values.Title ?? title);
+                  setMetadata(
+                    Object.fromEntries(
+                      template.fields.map((field) => [
+                        field,
+                        values[field] ?? "",
+                      ]),
+                    ),
+                  );
+                }}
+              />
+              {template.fields.map((field) => (
+                <label key={field}>
+                  {field}
+                  <input
+                    value={metadata[field] ?? ""}
+                    onChange={(e) =>
+                      setMetadata({ ...metadata, [field]: e.target.value })
+                    }
+                    maxLength={2000}
+                    placeholder="Optional descriptive detail"
+                  />
+                </label>
+              ))}
+              <div className="rule-note">
+                <p>
+                  You own this subject. Linking it shares the description with
+                  participants, while each activity keeps its own progress and
+                  history.
+                </p>
+              </div>
+              <button className="button primary full">
+                <Plus size={16} />
+                Create subject
+              </button>
+            </form>
+          </aside>
+        )}
       </div>
     </>
   );
@@ -216,7 +228,7 @@ export function Templates({ db }: { db: Database }) {
     <>
       <div className="section-heading">
         <div>
-          <h2>A starting point, not a fixed vocabulary</h2>
+          <h2>Templates</h2>
           <p>
             Descriptive templates for subjects. Participation templates for
             activities.

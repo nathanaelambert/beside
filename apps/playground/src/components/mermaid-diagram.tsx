@@ -1,14 +1,20 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 
-export function MermaidDiagram({ source }: { source: string }) {
+export function MermaidDiagram({
+  source,
+  label = "Rendered entity relationship diagram",
+}: {
+  source: string;
+  label?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const uniqueId = useId().replace(/[^a-zA-Z0-9]/g, "");
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     const container = ref.current;
-    if (container) container.textContent = "Rendering the working model…";
+    if (container) container.textContent = "Rendering the diagram…";
     async function render() {
       try {
         const { default: mermaid } = await import("mermaid");
@@ -49,12 +55,7 @@ export function MermaidDiagram({ source }: { source: string }) {
   }, [source, uniqueId]);
   return (
     <>
-      <div
-        className="mermaid-canvas"
-        ref={ref}
-        aria-label="Rendered entity relationship diagram"
-        role="img"
-      />
+      <div className="mermaid-canvas" ref={ref} aria-label={label} role="img" />
       {error && (
         <p className="error">
           Diagram error: {error}. The Mermaid source below remains available.

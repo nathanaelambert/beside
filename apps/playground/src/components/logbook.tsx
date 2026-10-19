@@ -32,7 +32,7 @@ export function Logbook(props: ViewProps) {
     <>
       <div className="section-heading">
         <div>
-          <h2>One moment, many meanings</h2>
+          <h2>Logbook</h2>
           <p>
             Private originals and shared moments, with each contribution
             visible.

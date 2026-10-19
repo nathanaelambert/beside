@@ -23,13 +23,23 @@ pnpm --filter playground lint
 pnpm --filter playground test
 ```
 
+## Navigation
+
+The playground opens on a directory with three groups:
+
+- **Understand the model:** Lexicon (all 14 models in plain English), ERDs (four diagrams with expandable database records), and User stories (the existing shared-space storyboard in text and diagram).
+- **Try it out:** Subjects, Activities, and Record a log. Subject and activity creation forms open on request. Logging has a separate screen; opening it from an activity carries that activity into the composer.
+- **Look closer:** Logbook, Event trail, and Templates.
+
+Use the Playground breadcrumb to return home. Sections have shareable hash links and support browser Back/Forward. The story explicitly distinguishes proposed product features from the current sandbox.
+
 ## Experiments
 
 1. As Mosaab, save chapter 5 with both reading activities checked. One log advances Dune to position 5 and adds one reading-habit session. Nathaniel and Rishik retain independent progress. Switch identities and compare activities, Logbook, and Event trail's **My inbox**.
 2. Save a standalone log with no credit or audience. It stays private. In Logbook, use **Share later / add progress credit** to add an update-only audience, then credit an activity independently.
 3. Create a book in Subjects. Create a shared activity using it and invite others. Switch identity to accept the invitation and set a different target. Link a second subject to test many-to-many relationships.
 4. Select Voice, MCP, or Event in the composer. These are simulations without external integrations. Submit with a request key, then replay it: the same author/source/key returns the original log without duplicate credit or deliveries. Change the key for a new event.
-5. Open Working model for four rendered Mermaid ERDs, zoom, source copy, and all 14 relational tables. Observer mode in Event trail reveals every event and recipient.
+5. Open ERDs for four rendered Mermaid ERDs, zoom, source copy, and all 14 relational tables. Observer mode in Event trail reveals every event and recipient.
 
 ## Storage
 

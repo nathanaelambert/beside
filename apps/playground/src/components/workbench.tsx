@@ -28,10 +28,14 @@ import {
   shortId,
 } from "./ui";
 import type { ViewProps } from "./playground";
-import { LogComposer } from "./log-composer";
 import { AiFillInput } from "./ai-fill";
 
-export function Workbench({ db, userId, run }: ViewProps) {
+export function Workbench({
+  db,
+  userId,
+  run,
+  onRecord,
+}: ViewProps & { onRecord: (activityId?: string) => void }) {
   const [selectedId, setSelectedId] = useState("");
   const [scope, setScope] = useState("all");
   const [category, setCategory] = useState("all");
@@ -52,7 +56,7 @@ export function Workbench({ db, userId, run }: ViewProps) {
     <>
       <div className="section-heading">
         <div>
-          <h2>Your experiments</h2>
+          <h2>Activities</h2>
           <p>One shared purpose, a separate commitment for each person.</p>
         </div>
         <button
@@ -76,7 +80,7 @@ export function Workbench({ db, userId, run }: ViewProps) {
           }}
         />
       )}
-      <div className="workbench-grid">
+      <div className="activities-page">
         <section className="activity-area">
           <div className="filter-row">
             <label>
@@ -179,27 +183,10 @@ export function Workbench({ db, userId, run }: ViewProps) {
               run={run}
             />
           )}
-          <div className="experiment-tip">
-            <span>TRY THIS</span>
-            <p>
-              Log chapter 5 in <strong>Dune</strong> and credit both reading
-              activities. Switch to Nathaniel, then Rishik, to see their
-              different views.
-            </p>
-            <ArrowRight size={18} />
-          </div>
+          <button className="button" onClick={() => onRecord(selected?.id)}>
+            Record a log <ArrowRight size={16} />
+          </button>
         </section>
-        <aside className="composer-area">
-          {selected ? (
-            <LogComposer
-              key={selected.id}
-              {...{ db, userId, run }}
-              initialActivity={selected}
-            />
-          ) : (
-            <LogComposer {...{ db, userId, run }} />
-          )}
-        </aside>
       </div>
     </>
   );

@@ -36,7 +36,7 @@ export function EventTrail({ db, userId }: ViewProps) {
     <>
       <div className="section-heading">
         <div>
-          <h2>Follow the ripple</h2>
+          <h2>Event trail</h2>
           <p>
             Every mutation has an actor, a result, and an explicit list of
             recipients.
@@ -186,7 +186,7 @@ export function ModelView({ db }: ViewProps) {
     <>
       <div className="section-heading">
         <div>
-          <h2>A model you can look inside</h2>
+          <h2>ERDs</h2>
           <p>
             Working SQL relationships, rendered as Mermaid. The rows below are
             the live experiment.
@@ -298,89 +298,95 @@ export function ModelView({ db }: ViewProps) {
           </p>
         </div>
       </div>
-      <div className="section-heading records-heading">
-        <div>
-          <h2>The records behind the experiment</h2>
-          <p>
-            Observer view: all rows, including records outside the selected
-            person’s perspective.
-          </p>
+      <details className="records-disclosure">
+        <summary>Inspect database records · 14 tables</summary>
+        <div className="section-heading records-heading">
+          <div>
+            <h2>The records behind the experiment</h2>
+            <p>
+              Observer view: all rows, including records outside the selected
+              person’s perspective.
+            </p>
+          </div>
+          <Badge>
+            <Eye size={14} />
+            Full local database
+          </Badge>
         </div>
-        <Badge>
-          <Eye size={14} />
-          Full local database
-        </Badge>
-      </div>
-      <div className="data-inspector">
-        <aside className="table-list" aria-label="Database tables">
-          {tables.map((t) => (
-            <button
-              className={tableKey === t.key ? "active" : ""}
-              onClick={() => setTableKey(t.key)}
-              key={t.key}
-            >
-              <span className={`table-dot ${t.color}`} />
-              <span>{t.sql}</span>
-              <b>{db[t.key].length}</b>
-            </button>
-          ))}
-        </aside>
-        <section className="table-panel">
-          <div className="table-heading">
-            <div>
-              <h3>{table.sql}</h3>
-              <p>{table.description}</p>
+        <div className="data-inspector">
+          <aside className="table-list" aria-label="Database tables">
+            {tables.map((t) => (
+              <button
+                className={tableKey === t.key ? "active" : ""}
+                onClick={() => setTableKey(t.key)}
+                key={t.key}
+              >
+                <span className={`table-dot ${t.color}`} />
+                <span>{t.sql}</span>
+                <b>{db[t.key].length}</b>
+              </button>
+            ))}
+          </aside>
+          <section className="table-panel">
+            <div className="table-heading">
+              <div>
+                <h3>{table.sql}</h3>
+                <p>{table.description}</p>
+              </div>
+              <Badge color={table.color}>{records.length} rows</Badge>
             </div>
-            <Badge color={table.color}>{records.length} rows</Badge>
-          </div>
-          <div className="data-table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  {columns.map((column) => (
-                    <th key={column}>{column}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((record, i) => (
-                  <tr key={String(record.id ?? i)}>
-                    {columns.map((column) => {
-                      const value = record[column];
-                      return (
-                        <td key={column}>
-                          <span
-                            title={
-                              typeof value === "object"
-                                ? JSON.stringify(value)
-                                : String(value ?? "NULL")
-                            }
-                          >
-                            {value === null ? (
-                              <em>NULL</em>
-                            ) : typeof value === "object" ? (
-                              JSON.stringify(value)
-                            ) : typeof value === "string" &&
-                              (column === "id" || column.endsWith("Id")) ? (
-                              shortId(value)
-                            ) : (
-                              String(value)
-                            )}
-                          </span>
-                        </td>
-                      );
-                    })}
+            <div className="data-table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    {columns.map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!records.length && (
-            <Empty>No rows yet. Use the workbench to create some.</Empty>
-          )}
-          <JsonRecord label="Inspect complete table as JSON" value={records} />
-        </section>
-      </div>
+                </thead>
+                <tbody>
+                  {records.map((record, i) => (
+                    <tr key={String(record.id ?? i)}>
+                      {columns.map((column) => {
+                        const value = record[column];
+                        return (
+                          <td key={column}>
+                            <span
+                              title={
+                                typeof value === "object"
+                                  ? JSON.stringify(value)
+                                  : String(value ?? "NULL")
+                              }
+                            >
+                              {value === null ? (
+                                <em>NULL</em>
+                              ) : typeof value === "object" ? (
+                                JSON.stringify(value)
+                              ) : typeof value === "string" &&
+                                (column === "id" || column.endsWith("Id")) ? (
+                                shortId(value)
+                              ) : (
+                                String(value)
+                              )}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!records.length && (
+              <Empty>No rows yet. Use the workbench to create some.</Empty>
+            )}
+            <JsonRecord
+              label="Inspect complete table as JSON"
+              value={records}
+            />
+          </section>
+        </div>
+      </details>
     </>
   );
 }

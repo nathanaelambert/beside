@@ -2354,3 +2354,269 @@ tbody tr:nth-child(even) {
   color: var(--muted);
   font-size: 0.68rem;
 }
+
+/* One destination, one task. */
+.section-nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 26px 0 10px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.section-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+}
+.section-nav a:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.section-nav [aria-current] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.playground-home {
+  max-width: 1120px;
+  margin: auto;
+  padding: 48px 0 20px;
+}
+.home-intro {
+  margin-bottom: 44px;
+}
+.home-intro h1 {
+  font-size: 2rem;
+  letter-spacing: -0.045em;
+  margin: 12px 0;
+}
+.home-intro > p:last-child {
+  color: var(--muted);
+  font-size: 1rem;
+}
+.home-group {
+  margin-bottom: 34px;
+}
+.home-group-heading {
+  margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.home-group-heading h2 {
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+.home-group-heading p {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.destination-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.destination {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 24px;
+  text-decoration: none;
+  transition:
+    border-color 160ms,
+    background 160ms;
+}
+.destination:hover {
+  border-color: var(--moss);
+  background: var(--moss-bg);
+}
+.destination > svg {
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.destination h3 {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+.destination p {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 24px;
+}
+.destination > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-top: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+.home-group:last-child .destination {
+  padding: 18px 24px;
+}
+.home-group:last-child .destination > svg {
+  display: none;
+}
+.home-group:last-child .destination p {
+  margin-bottom: 16px;
+}
+.reference-page {
+  max-width: 1000px;
+  margin: auto;
+  padding-bottom: 36px;
+}
+.reference-summary {
+  font-size: 1rem;
+  line-height: 1.8;
+  margin: 12px 0 30px;
+}
+.lexicon-list {
+  border-top: 1px solid var(--line);
+  margin-bottom: 28px;
+}
+.lexicon-entry {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--line);
+}
+.lexicon-entry code {
+  color: var(--muted);
+  display: block;
+  margin-top: 6px;
+}
+.lexicon-example {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--moss);
+}
+.story-title {
+  font-size: 1.6rem;
+  margin: 10px 0 16px;
+}
+.story-intent {
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.story-scope {
+  background: var(--soft);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin: 24px 0;
+  font-size: 0.85rem;
+}
+.story-scope p {
+  margin-top: 6px;
+  color: var(--muted);
+}
+.story-switch {
+  margin-bottom: 24px;
+  width: fit-content;
+}
+.story-steps {
+  padding-left: 24px;
+}
+.story-steps li {
+  padding: 0 0 24px 12px;
+}
+.story-steps li::marker {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.story-steps h4 {
+  margin-bottom: 5px;
+}
+.story-steps p {
+  color: var(--muted);
+}
+.story-diagram {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+.story-diagram .mermaid-canvas {
+  min-width: 580px;
+  padding: 20px;
+}
+.story-source {
+  font-size: 0.75rem;
+  margin: 20px 0;
+}
+.activities-page {
+  max-width: 1080px;
+  margin: auto;
+}
+.activities-page .activity-area > .button {
+  margin-top: 24px;
+}
+.record-page {
+  max-width: 760px;
+  margin: auto;
+  padding-bottom: 30px;
+}
+@media (max-width: 760px) {
+  .playground-home {
+    padding-top: 30px;
+  }
+  .home-intro {
+    margin-bottom: 30px;
+  }
+  .home-intro h1 {
+    font-size: 1.65rem;
+  }
+  .destination-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .destination {
+    padding: 20px;
+  }
+  .destination > svg {
+    margin-bottom: 12px;
+  }
+  .destination p {
+    margin-bottom: 16px;
+  }
+  .home-group-heading {
+    gap: 4px;
+    flex-direction: column;
+  }
+  .lexicon-entry {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .story-scope {
+    padding: 16px;
+  }
+}
+main:focus {
+  outline: none;
+}
+.records-disclosure {
+  margin-top: 28px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.records-disclosure > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.subject-library:not(.is-creating) {
+  grid-template-columns: 1fr;
+}
+@media (max-width: 1100px) {
+  .subject-library.is-creating > aside {
+    grid-row: 1;
+  }
+}
