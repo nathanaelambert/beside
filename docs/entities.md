@@ -21,41 +21,47 @@
 
 ## milestone
 - id*              UUID [PK]
-- deadline         TIME
 - activity*        UUID [FK: activity.id]
 - parent*          UUID [FK: milestone.id]
-
-## reward
-- id*              UUID [PK]
-- homebase*        UUID [FK: homebase.id]
-- type*            JSON
-- attempted_in*    UUID [FK: milestone.id]
-- obtained*        BOOL
-- used_for         UUID [FK: milestone.id]
+- reward           UUID [FK: reward.id]
+- start            TIME
+- end              TIME
 
 ## log
 - user*            UUID [FK: user.id]
 - milestone*       UUID [FK: milestone.id]
-- timestamp        TIME
+- datetime         TIME
 - is_success       BOOL
 - note             TEXT
 
+## reward
+- id*              UUID [PK]
+- homebase*        UUID [FK: homebase.id]
+- type*            UUID [FK: reward_type.id]
+- obtained*        BOOL
+- sacrificed_for   UUID [FK: milestone.id]
+
+## reward_type
+- id*              UUID [PK]
+- name*            TEXT
+- category         TEXT
+- artifact*        TEXT
 
 # FAQ
-## Q1. What is the typical flow of data?
-Imagine a homebase with 3 users. The homebase has one obtained reward: a water bucket.
-One of the user creates a new activity: reading a book.
-On activity creation, a milestone is created for each chapter to read.
-The book has 5 chapters. Each milestones gets a reward for instance: 
-"fertile soil", "water bucket", "water bucket", "tree seed", "sapling".
-Fertile soil and water buckets are rewards that require nothing. 
-The sapling reward requires 1 fertile soil, 2 water buckets, and one tree seed.
-When the activity is created users need to define which water bucket, soil, and seed will be used for the sapling.
-
-// I'm unkappy with that mechanism
-Watering shouldn't be a currency
-nothing should be left as ingredient in a chest.
-
-## Q2. How do we know which user is commited to which activity?
+## Q1. How do we know which user is commited to which activity?
 Activities use a milestone zero (is his own parent). 
 Users join or decline an activity by loging a success/failure on milestone zero.
+## Q2. Are reward types only cosmetic ?
+No ! Different reward types correspond to different logging policy. 
+For instance:
+| Type        | Logging Policy                      | Example usage |
+|-------------|-------------------------------------|---------------|
+| Plant       | Paced, can-skip, multi-milestones, collective-flexible   | going to the gym every day of the week |
+| Decoration  | No deadline, single-milestone, individual                | beating your PersonalBest |
+| Building    | Deadline, unpaced, multi-milestones, collective-flexible | Workout for 10h this week (each milestone=1h, can log them all on saturday in one crazy session) |
+## Q3. What is a logging policy ?
+It's a function that accepts or refuses a log given a milestone and the time when it is reported.
+Examples: 
+- a paced reward has a logging policy that refuses logs for a milestone that hasn't started yet.
+- a deadline has a logging policy that refuses logs 
+## Q4. What happens when a strict policy will refuse every log for future milestones ?
