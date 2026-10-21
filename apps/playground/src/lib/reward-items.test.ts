@@ -38,7 +38,12 @@ test("legacy experiments acquire the catalog without losing records, then round-
   migrated.rewardItems[0]!.name = "A renamed oak";
   migrated.rewardItems[0]!.category = "Keepsakes";
   assert.deepEqual(parseDatabase(migrated), migrated);
-  const empty = { ...migrated, rewardItems: [] };
+  const empty = {
+    ...migrated,
+    rewardItems: [],
+    rewards: [],
+    milestones: migrated.milestones.map((m) => ({ ...m, rewardId: null })),
+  };
   assert.deepEqual(parseDatabase(empty), empty);
   assert.notEqual(createSeed().rewardItems[0]!.name, "A renamed oak");
 });

@@ -286,15 +286,17 @@ export function ModelView({ db }: ViewProps) {
         <div>
           <Badge color="blue">Progress</Badge>
           <p>
-            Derived from contributions, not stored on the log. Unique join rows
-            prevent the same log being counted twice per participant.
+            Successful achievement logs credit exactly their own activity. Each
+            person can complete a milestone once; failures and milestone-zero
+            decisions give no progress.
           </p>
         </div>
         <div>
           <Badge color="rose">Still exploratory</Badge>
           <p>
-            Targets are sandbox totals. Periods, reward accounting, edits,
-            revocation, and membership changes need their own experiments.
+            Targets are sandbox totals. Milestones enforce schedules and shared
+            reward requirements. Recurrence, edits, revocation, and membership
+            changes need their own experiments.
           </p>
         </div>
       </div>

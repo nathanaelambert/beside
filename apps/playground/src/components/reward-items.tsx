@@ -6,7 +6,7 @@ import type { Database, RewardItem } from "../lib/types";
 import { pixelPaths } from "@beside/rewards/pixel-art";
 import { Badge, Empty, JsonRecord } from "./ui";
 
-function PixelSprite({ item }: { item: RewardItem }) {
+export function PixelSprite({ item }: { item: RewardItem }) {
   const { pixels } = item.artifact;
   return (
     <svg
@@ -37,7 +37,7 @@ function downloadArtifact(item: RewardItem) {
   URL.revokeObjectURL(url);
 }
 
-export function RewardItems({ db }: { db: Database }) {
+export function RewardItems({ db, userId }: { db: Database; userId: string }) {
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
@@ -68,9 +68,79 @@ export function RewardItems({ db }: { db: Database }) {
         </Badge>
       </div>
       <p className="reward-scope">
-        These are reusable items for future milestone and activity rewards.
-        Earning rewards and saved worlds are still to come.
+        Items define the artwork. Milestones can earn one reward for their home
+        base. Placements below are a temporary preview.
       </p>
+      <section className="homebase-rewards" aria-label="Home base rewards">
+        <div className="subheading">
+          <h3>Your home-base rewards</h3>
+          <a href="#milestones" className="text-button">
+            Plan a milestone
+          </a>
+        </div>
+        {db.connections
+          .filter((base) =>
+            db.memberships.some(
+              (member) =>
+                member.connectionId === base.id && member.userId === userId,
+            ),
+          )
+          .map((base) => {
+            const rewards = db.rewards.filter(
+              (reward) => reward.homebaseId === base.id,
+            );
+            if (!rewards.length) return null;
+            return (
+              <div className="homebase-reward-group" key={base.id}>
+                <h4>{base.name}</h4>
+                <div className="homebase-reward-list">
+                  {rewards.map((reward) => {
+                    const item = db.rewardItems.find(
+                      (i) => i.id === reward.itemId,
+                    )!;
+                    const milestone = db.milestones.find(
+                      (m) => m.rewardId === reward.id,
+                    )!;
+                    const done = reward.requiredUserIds.filter((id) =>
+                      db.logs.some(
+                        (l) =>
+                          l.milestoneId === milestone.id &&
+                          l.authorUserId === id &&
+                          l.isSuccess,
+                      ),
+                    ).length;
+                    return (
+                      <div className="milestone-reward" key={reward.id}>
+                        <PixelSprite item={item} />
+                        <div>
+                          <strong>{item.name}</strong>
+                          <p>{milestone.name}</p>
+                          <Badge color={reward.obtainedAt ? "moss" : "ochre"}>
+                            {reward.obtainedAt
+                              ? "Earned · one shared item"
+                              : `Pending · ${done} / ${reward.requiredUserIds.length} people`}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        {!db.rewards.some((reward) =>
+          db.memberships.some(
+            (member) =>
+              member.connectionId === reward.homebaseId &&
+              member.userId === userId,
+          ),
+        ) && (
+          <p className="muted">
+            No rewards planned in your home bases yet. Attach a catalog item
+            when creating a milestone.
+          </p>
+        )}
+      </section>
       <div className="reward-layout">
         <section className="reward-catalog" aria-label="Reward catalog">
           <label className="reward-search">

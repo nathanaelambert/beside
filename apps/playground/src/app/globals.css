@@ -2792,3 +2792,140 @@ main:focus {
     padding: 16px;
   }
 }
+
+/* Milestones use an ordered ledger within the existing warm playground. */
+.milestone-section {
+  margin-top: 28px;
+  min-width: 0;
+}
+.milestone-activity-picker {
+  display: block;
+  max-width: 480px;
+  margin-bottom: 24px;
+}
+.milestone-list {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+}
+.milestone-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px 0;
+  border-top: 1px solid var(--line);
+}
+.milestone-marker {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: var(--soft);
+  border-radius: 50%;
+  color: var(--muted);
+}
+.milestone-row.achieved .milestone-marker {
+  background: var(--moss-bg);
+  color: var(--moss);
+}
+.milestone-content {
+  flex: 1;
+  min-width: 0;
+}
+.milestone-content h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+.milestone-content p {
+  margin: 9px 0;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+.milestone-content .json-details {
+  margin-top: 12px;
+}
+.milestone-zero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  background: var(--blue-bg);
+  border-radius: var(--radius);
+}
+.milestone-zero p {
+  margin: 10px 0;
+  font-size: 0.85rem;
+  max-width: 65ch;
+}
+.milestone-zero small {
+  color: var(--muted);
+}
+.milestone-form {
+  display: block;
+  margin: 20px 0;
+}
+.milestone-form h4 {
+  margin-top: 0;
+}
+.milestone-log-context {
+  background: var(--soft);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 12px 0;
+}
+.milestone-log-context p {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+}
+.milestone-reward {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  min-width: 0;
+}
+.milestone-reward .reward-sprite {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+}
+.milestone-reward p {
+  margin: 4px 0;
+  font-size: 0.8rem;
+}
+.milestone-reward small {
+  color: var(--muted);
+}
+.homebase-rewards {
+  margin-bottom: 32px;
+}
+.homebase-reward-group {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.homebase-reward-group h4 {
+  margin: 0;
+}
+.homebase-reward-list {
+  display: flex;
+  gap: 20px 40px;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .milestone-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .milestone-row > .button {
+    margin-left: 44px;
+  }
+  .milestone-content {
+    flex-basis: calc(100% - 44px);
+  }
+  .milestone-zero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

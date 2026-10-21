@@ -10,6 +10,7 @@ import {
   Database as DatabaseIcon,
   Download,
   FlaskConical,
+  Flag,
   Gift,
   GitBranch,
   NotebookPen,
@@ -36,6 +37,7 @@ import { Logbook } from "./logbook";
 import { EventTrail, ModelView } from "./inspection";
 import { Lexicon, UserStories } from "./reference";
 import { LogComposer } from "./log-composer";
+import { Milestones } from "./milestones";
 import { RewardItems } from "./reward-items";
 
 export type Run = (
@@ -51,7 +53,7 @@ const sections = [
     group: "learn",
     description:
       "What each model means, why it exists, and how it fits together.",
-    detail: "15 models, in plain English",
+    detail: "17 models, in plain English",
   },
   {
     id: "model",
@@ -86,8 +88,17 @@ const sections = [
     icon: FlaskConical,
     group: "try",
     description:
-      "Create a personal or shared activity, invite people, and set individual targets.",
+      "Create a personal or shared activity, initialize its participants, and set individual targets.",
     detail: "Create an activity",
+  },
+  {
+    id: "milestones",
+    label: "Milestones",
+    icon: Flag,
+    group: "try",
+    description:
+      "Plan chapters, episodes, or workout days. Set logging windows and shared rewards.",
+    detail: "Plan an achievement",
   },
   {
     id: "rewards",
@@ -104,7 +115,7 @@ const sections = [
     icon: NotebookPen,
     group: "try",
     description:
-      "Record what happened. Choose what it counts toward and who can see it.",
+      "Record success or failure on one milestone. Follow participation, progress, and shared rewards.",
     detail: "Log a moment",
   },
   {
@@ -112,7 +123,8 @@ const sections = [
     label: "Logbook",
     icon: BookOpen,
     group: "inspect",
-    description: "Review saved logs, share them, or add progress credit later.",
+    description:
+      "Review milestone outcomes and share updates with other home bases.",
     detail: "Browse logs",
   },
   {
@@ -158,13 +170,17 @@ export function Playground() {
     error: boolean;
   } | null>(null);
   const [recordActivityId, setRecordActivityId] = useState<string>();
+  const [recordMilestoneId, setRecordMilestoneId] = useState<string>();
   const [confirmReset, setConfirmReset] = useState(false);
   useEffect(() => {
     const sync = () => {
       if (window.location.hash === "#main") return;
       const nextTab = tabFromHash();
       setTab(nextTab);
-      if (nextTab !== "record") setRecordActivityId(undefined);
+      if (nextTab !== "record") {
+        setRecordActivityId(undefined);
+        setRecordMilestoneId(undefined);
+      }
       setNotice(null);
     };
     sync();
@@ -227,6 +243,11 @@ export function Playground() {
     );
   const user = db.users.find((u) => u.id === activeUserId)!;
   const view = { db, userId: activeUserId, run };
+  const onRecord = (activityId?: string, milestoneId?: string) => {
+    setRecordActivityId(activityId);
+    setRecordMilestoneId(milestoneId);
+    window.location.hash = "record";
+  };
   const section = sections.find((item) => item.id === tab);
   return (
     <div className="app-shell">
@@ -262,6 +283,7 @@ export function Playground() {
               onChange={(e) => {
                 setUserId(e.target.value);
                 setRecordActivityId(undefined);
+                setRecordMilestoneId(undefined);
                 setNotice(null);
               }}
               aria-label="View as"
@@ -374,37 +396,36 @@ export function Playground() {
         )}
         {tab === "lexicon" && <Lexicon />}
         {tab === "stories" && <UserStories />}
-        {tab === "activities" && (
-          <Workbench
-            {...view}
-            onRecord={(activityId) => {
-              setRecordActivityId(activityId);
-              window.location.hash = "record";
-            }}
-          />
-        )}
+        {tab === "activities" && <Workbench {...view} onRecord={onRecord} />}
         {tab === "record" && (
           <div className="record-page">
             <div className="section-heading">
               <div>
                 <h2>Record a log</h2>
                 <p>
-                  Capture a moment, then choose its progress credit and
-                  audience.
+                  Choose one milestone and record its outcome. Each user can
+                  succeed once per milestone.
                 </p>
               </div>
             </div>
             <LogComposer
               {...view}
+              key={`${activeUserId}:${recordActivityId}:${recordMilestoneId}`}
+              initialMilestoneId={recordMilestoneId}
               initialActivity={visibleActivities(db, activeUserId).find(
                 (activity) => activity.id === recordActivityId,
               )}
             />
           </div>
         )}
+        {tab === "milestones" && <Milestones {...view} onRecord={onRecord} />}
         {tab === "subjects" && <Subjects {...view} />}
         {tab === "rewards" && (
-          <RewardItems key={JSON.stringify(db.rewardItems)} db={db} />
+          <RewardItems
+            key={JSON.stringify(db.rewardItems)}
+            db={db}
+            userId={activeUserId}
+          />
         )}
         {tab === "logs" && <Logbook {...view} />}
         {tab === "events" && <EventTrail {...view} />}

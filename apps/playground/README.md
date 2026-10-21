@@ -23,89 +23,77 @@ pnpm --filter playground lint
 pnpm --filter playground test
 ```
 
-## Navigation
+## Milestones and home-base rewards
 
-The playground opens on a directory with three groups:
+This pass implements the 2026-10-20 entity discussion on `docs/entities` (`51fe15b`). See [the implemented model and decisions](../../docs/architecture/entities.md) and [`schema.sql`](schema.sql).
 
-- **Understand the model:** Lexicon (all 15 models in plain English), ERDs (five diagrams with expandable database records), and User stories (the existing shared-space storyboard in text and diagram).
-- **Try it out:** Subjects, Activities, Reward items, and Record a log. Subject and activity creation forms open on request. Logging has a separate screen; opening it from an activity carries that activity into the composer.
-- **Look closer:** Logbook, Event trail, and Templates.
+- **Activities:** create a personal/shared activity, set personal targets, and inspect its milestones. Creation automatically records milestone zero for every participant; everyone starts active.
+- **Milestones** (`#milestones`): plan named achievements, optional same-activity parents, a progress quantity/position, schedule, and optional item reward. Milestone zero is self-parented, logged automatically as the first milestone for every participant, and can later record leaving.
+- **Record a log:** every new log references exactly one milestone and records success or failure. Each person can succeed once per milestone. Ordinary successes credit only their own activity; failures and root decisions give no progress.
+- **Reward items:** the eight shared pixel-art items remain reusable catalog artwork. A milestone can award one item to its whole home base. All participants joined at planning time must succeed. That roster is fixed and shown before saving. Earned and pending rewards appear above the temporary placement preview.
+- **Logbook / Event trail:** inspect outcomes, contributions, participation decisions and reward delivery. Sharing an update later never adds progress to another activity.
+- **Lexicon / ERDs:** 17 models, five diagrams, and expandable records now include milestones and shared rewards.
 
-Use the Playground breadcrumb to return home. Sections have shareable hash links and support browser Back/Forward. The story explicitly distinguishes proposed product features from the current sandbox.
+### Try it
 
-## Experiments
+1. Open Milestones, select **Dune, together**, and record a success on **Chapter 1** as Mosaab. It advances that activity only, leaves other chapters unchanged, and shows one of two required people complete.
+2. Switch to Nathaniel and complete the same chapter. The Mosaab + Nathaniel home base earns one Meadow oak. A second success from either person is refused.
+3. Create a shared activity. Every participant already has one automatic successful log on **0 · Automatic activity start / leave**, with no achievement credit. Switch identities to inspect it, or use **Leave activity** to record a later failure on milestone zero.
+4. Add a **Paced** milestone with a future start/end. Early and late submissions are refused. **Deadline** allows any submission before its end; **Open** has no schedule. All boundaries are inclusive. Backdating the occurrence cannot reopen a window.
+5. Record a failed ordinary attempt, then a success while eligible. Select Voice, MCP or Event to simulate another source, provide a request key, save, and replay it. The original log is reused without duplicate progress or rewards.
 
-1. As Mosaab, save chapter 5 with both reading activities checked. One log advances Dune to position 5 and adds one reading-habit session. Nathaniel and Rishik retain independent progress. Switch identities and compare activities, Logbook, and Event trail's **My inbox**.
-2. Save a standalone log with no credit or audience. It stays private. In Logbook, use **Share later / add progress credit** to add an update-only audience, then credit an activity independently.
-3. Create a book in Subjects. Create a shared activity using it and invite others. Switch identity to accept the invitation and set a different target. Link a second subject to test many-to-many relationships.
-4. Select Voice, MCP, or Event in the composer. These are simulations without external integrations. Submit with a request key, then replay it: the same author/source/key returns the original log without duplicate credit or deliveries. Change the key for a new event.
-5. Open ERDs for five rendered Mermaid model diagrams, zoom, source copy, and all 15 relational tables. Observer mode in Event trail reveals every event and recipient.
+### Storage and compatibility
 
-## Reward items
+Payload version is now **2**. The existing localStorage key `beside.playground.v1` is retained. Explicit v1 snapshots migrate without losing historical logs, progress, shares, events or ownership. Historical logs retain `milestoneId: null`; new commands require one. Migration adds personal home bases and root join/leave history, without guessing chapter completion or granting retroactive rewards. Add milestones to continue an existing experiment, or reset the seed for fully populated examples.
 
-Open **Reward items** (`#rewards`) to browse a shared catalog by category or search by name. This pass contains eight original, transparent 32 × 32 pixel-art artifacts: Meadow oak and Alpine pine; Sunflower and Blush tulip; Watchful owl and Wishing star; Rose pennant and Blue swallowtail. Select an item to inspect its record or download its SVG. Choose plots in the placement preview to place or replace items; use Remove items or Clear preview to start over.
+Existing `connections` and `memberships` JSON keys represent home bases and their members. A personal home base has exactly its owner's membership. Cross-tab updates, export/import, recovery export, reset confirmation and memory fallback remain available. Imports validate milestone hierarchy, schedule, completion, reward scope, root decisions, foreign keys and contributions before replacing the current experiment.
 
-`RewardItem` has an ID, name, category, and artifact. Categories are independent of activity tags and can grow without changing the entity. The artifact contains a hex-color palette and rectangular pixel rows (`.` means transparent), so the actual art is portable in JSON exports. The catalog is seeded and read-only in the UI for this pass. Reward grants, milestone/activity assignments, inventories, and saved world placements are separate future work. Preview placements are temporary component state, reset on navigation/reload/identity switch, and never emit events or alter the database.
+The sandbox checks submission time using its browser clock. A hosted adapter must use server time and atomically enforce the unique successful user/milestone pair and final reward grant. This pass does not deploy a backend, create saved world placements, or implement reward sacrifice, recurring generation, or failure cascades. The milestone schedule is explicit rather than hardcoded from an item's art category.
 
-Existing v1 experiments acquire the eight-item catalog when loaded or imported, preserving all other rows. An existing catalog, including an intentionally empty one, is retained. Imports reject duplicate IDs, invalid names/categories, nonrectangular/oversized/blank grids, missing palette entries, and non-hex colors. `reward_item` is included in the Lexicon, model diagrams, reference SQL, and record inspector.
-
-## Storage
-
-Normalized relational rows are stored as one versioned JSON document in `localStorage`, key `beside.playground.v1`, seeded on first visit and preserved on reload. Each browser/origin has its own independent experiment. People visiting the same deployed URL do not share a live database; export/import JSON to exchange scenarios.
-
-Imports validate shape, foreign keys, unique joins, ownership, attribution, and contribution amounts before replacing data. Reset requires inline confirmation. Unreadable saved data is preserved while a temporary seed opens, with recovery export available. If storage is unavailable/full, changes continue in memory with a warning.
-
-Same-origin tabs receive storage updates. Writes are last-writer-wins snapshots; avoid simultaneous edits across tabs. A hosted SQL adapter should execute each command and its events in a single transaction.
-
-## Working assumptions
-
-- Subjects stay creator-owned. Descriptions become visible through an accessible activity link or shared log; private participation and logs do not follow them automatically.
-- An activity belongs to one user or one connection, never both. Creator attribution is separate from ownership.
-- Participation holds individual targets and invitation/completion status. Accept invitations before logging progress. Finishing/leaving preserves contributions. Connection membership is fixed; leaving an activity does not leave its connection.
-- Logs belong to their author and only credit that author's participation. Sharing grants visibility independently of credit. Shared credit adds the required audience automatically.
-- Categories are matching tags. An activity with subject links accepts those subjects; an unscoped activity accepts any matching subject or none. Non-session rules require exact units; no pages-to-chapters conversion is inferred.
-- Position rules take the maximum position; sum rules add quantities; session rules count distinct credited logs. Reaching a target does not automatically mark a participant finished.
-- Targets are **sandbox totals**, not weekly goals. Changing them recalculates the experiment. Periods, target versions, reward accounting, streaks, edits, revocation, and membership changes remain future experiments.
-- Distribution is additive: shares/credit can be added later, not retracted. Deduplication handles retries and repeated attachment, not deliberate splitting of one session into multiple logs.
-- Observer panels and the window API see the whole local database. UI perspective rules teach relationships, not security. Production needs server authentication and authorization.
-
-## Code and SQL
-
-- `src/lib/types.ts`: relational rows and commands.
-- `model.ts`: pure command transactions, visibility, progress projections, event routing.
-- `validation.ts`: runtime log payload and database validation.
-- `templates.ts` / `seed.ts`: 13 subject templates, 14 activity templates, 17 subjects, 9 activities, three users, four connections.
-- `store.ts`: local persistence and export/import.
-- `packages/rewards` (`@beside/rewards`): eight catalog seeds, entity types, and SVG path generation, shared with the mobile app.
-- `schema.ts`: table descriptions and generated Mermaid modules with PK/FK columns.
-- `schema.sql`: reference SQL tables, checks, unique constraints, and indexes. PostgreSQL-friendly `jsonb` and `timestamptz`; not a production migration.
-
-The domain-event envelope's `entityType`/`entityId` is application-validated, not a polymorphic SQL FK. Ordinary relationships use FK IDs and joins. A SQL adapter maps camelCase rows to snake_case columns. Derive progress from contributions rather than maintaining a second source of truth.
-
-All logging origins enter the same `recordLog` command. Future voice parsers, MCP tools, and event handlers should authenticate an actor, produce validated input, and call that boundary with an idempotency key. The browser-only adapter acts as the identity selected in the header:
+### Window API
 
 ```js
 const db = window.besidePlayground.getDatabase();
+const activity = db.activities.find((a) => a.name === "Dune, together");
+const milestone = db.milestones.find(
+  (m) => m.activityId === activity.id && m.name === "Chapter 1",
+);
 window.besidePlayground.recordLog({
-  subjectId: null,
-  category: "habits",
-  title: "Took a mindful pause",
-  quantity: 1,
-  unit: "sessions",
-  durationMinutes: 5,
+  milestoneId: milestone.id,
+  isSuccess: true,
+  title: "Finished the first chapter",
+  durationMinutes: 25,
   occurredAt: new Date().toISOString(),
   origin: "mcp",
-  externalKey: "pause-request-1",
-  activityIds: [],
-  connectionIds: [],
+  externalKey: "chapter-1-request",
 });
 ```
 
-Mermaid is bundled and loaded when the model view opens, using its [rendering API](https://mermaid.js.org/config/usage.html) and [ER syntax](https://mermaid.js.org/syntax/entityRelationshipDiagram.html). Google Fonts has local fallbacks; data and model logic need no hosted service.
+The author is the selected demo identity. Payloads cannot choose progress amounts or additional activities. Retry keys are normalized before deduplication. Subjects, AI draft filling and catalog downloads use their existing boundaries.
+
+## Code and checks
+
+- `src/lib/types.ts`: milestone, home-base reward, log and command contracts.
+- `model.ts`: atomic commands, schedule enforcement, once-only completion, root participation, shared rewards and deliveries.
+- `validation.ts` / `migrations.ts`: validated imports and v1 compatibility.
+- `seed.ts`: chapter, episode, workout-day and other example milestones.
+- `schema.ts` / `schema.sql`: model reference and PostgreSQL-friendly shape.
+- `packages/rewards`: portable catalog definitions and pixel-art rendering, shared with the mobile app.
+
+```sh
+pnpm --filter playground test
+pnpm --filter playground check-types
+pnpm --filter playground lint
+pnpm --filter playground build
+```
+
+### Milestone verification (2026-10-21)
+
+All 44 tests, type-check, lint, and production build pass. Domain tests cover once-only success, shared reward issuance and delivery, milestone-zero decisions, invalid inputs and permissions, inclusive paced/deadline boundaries, backdating rejection, request retries, immutable reward requirements, hierarchy and import integrity, and v1 migration. Browser checks covered two demo identities earning one shared item, repeated-success rejection, creating a future-paced milestone, creating a shared activity, inspecting automatic starts for all members, and leaving through its root, all five rendered Mermaid diagrams, and JSON export/reset/import. Milestones, logging, rewards, logbook, activities, and lexicon fit a 390px viewport with no horizontal page overflow or page errors. Checks used a separate browser context; no user experiment was reset.
 
 ## Vercel
 
-Use a separate project with **Root Directory `apps/playground`**, **Next.js**, **Node 24.x**, and workspace-root dependency installation. Choose `monorepo` as the production branch or leave it as a preview branch. Root Directory is a project setting, not a `vercel.json` key. Keep the existing Beside showcase project separate.
+Use a separate project with **Root Directory `apps/playground`**, **Next.js**, **Node 24.x**, and workspace-root dependency installation. Keep the existing Beside showcase project separate. No deployment is performed by this change.
 
 ## Fill using AI
 

@@ -1,12 +1,14 @@
-import type { Database, LogInput } from "./types.ts";
+import type { Database } from "./types.ts";
 import { activityTemplates, examples, subjectTemplates } from "./templates.ts";
 import { execute } from "./model.ts";
 import { rewardItems } from "@beside/rewards";
 
 export function createSeed(): Database {
   let db: Database = {
-    version: 1,
+    version: 2,
     rewardItems: structuredClone(rewardItems),
+    milestones: [],
+    rewards: [],
     users: [
       {
         id: "mosaab",
@@ -28,10 +30,10 @@ export function createSeed(): Database {
       },
     ],
     connections: [
-      { id: "mn", name: "Mosaab + Nathaniel" },
-      { id: "mm", name: "Reading rhythm" },
-      { id: "circle", name: "The Sunday circle" },
-      { id: "nm", name: "Nathaniel + Rishik" },
+      { id: "mn", personalOwnerId: null, name: "Mosaab + Nathaniel" },
+      { id: "mm", personalOwnerId: null, name: "Reading rhythm" },
+      { id: "circle", personalOwnerId: null, name: "The Sunday circle" },
+      { id: "nm", personalOwnerId: null, name: "Nathaniel + Rishik" },
     ],
     memberships: [
       ["mn", "mosaab"],
@@ -60,6 +62,19 @@ export function createSeed(): Database {
     events: [],
     deliveries: [],
   };
+  for (const user of db.users) {
+    db.connections.push({
+      id: `personal_${user.id}`,
+      name: `${user.name}'s home base`,
+      personalOwnerId: user.id,
+    });
+    db.memberships.push({
+      id: `personal_member_${user.id}`,
+      connectionId: `personal_${user.id}`,
+      userId: user.id,
+    });
+  }
+  const seedTime = "2026-10-12T18:00:00.000Z";
   const subjectIds: string[] = [];
   for (const example of examples) {
     const result = execute(db, {
@@ -88,89 +103,121 @@ export function createSeed(): Database {
     subjectIndexes,
     target,
   ] of specs) {
-    const result = execute(db, {
-      type: "createActivity",
-      actorId: "mosaab",
-      templateId,
-      name,
-      description: activityTemplates.find((t) => t.id === templateId)!
-        .description,
-      connectionId,
-      subjectIds: subjectIndexes.map((i) => subjectIds[i]!),
-      target,
-      inviteOthers: false,
-    });
+    const result = execute(
+      db,
+      {
+        type: "createActivity",
+        actorId: "mosaab",
+        templateId,
+        name,
+        description: activityTemplates.find((t) => t.id === templateId)!
+          .description,
+        connectionId,
+        subjectIds: subjectIndexes.map((i) => subjectIds[i]!),
+        target,
+      },
+      seedTime,
+    );
     db = result.db;
     activityIds.push(result.entityId);
   }
   // A connection the initial user cannot access makes perspective boundaries testable.
-  const privateActivity = execute(db, {
-    type: "createActivity",
-    actorId: "nathaniel",
-    templateId: "mindful-habit",
-    name: "A quiet five minutes",
-    description: "A separate connection, visible to Nathaniel and Rishik.",
-    connectionId: "nm",
-    subjectIds: [],
-    target: 3,
-    inviteOthers: false,
-  });
+  const privateActivity = execute(
+    db,
+    {
+      type: "createActivity",
+      actorId: "nathaniel",
+      templateId: "mindful-habit",
+      name: "A quiet five minutes",
+      description: "A separate connection, visible to Nathaniel and Rishik.",
+      connectionId: "nm",
+      subjectIds: [],
+      target: 3,
+    },
+    seedTime,
+  );
   db = privateActivity.db;
-  const base: Omit<
-    LogInput,
-    "authorUserId" | "title" | "quantity" | "activityIds" | "connectionIds"
-  > = {
-    subjectId: subjectIds[0]!,
-    category: "reading",
-    unit: "chapters",
-    durationMinutes: 30,
-    occurredAt: "2026-10-12T18:00:00.000Z",
-    origin: "manual",
-  };
-  db = execute(db, {
-    type: "recordLog",
-    actorId: "mosaab",
-    input: {
-      ...base,
-      authorUserId: "mosaab",
-      title: "Reached chapter 2",
-      quantity: 2,
-      activityIds: [activityIds[0]!, activityIds[1]!],
-      connectionIds: [],
-    },
-  }).db;
-  db = execute(db, {
-    type: "recordLog",
-    actorId: "nathaniel",
-    input: {
-      ...base,
-      authorUserId: "nathaniel",
-      title: "Reached chapter 4",
-      quantity: 4,
-      activityIds: [activityIds[0]!],
-      connectionIds: [],
-    },
-  }).db;
-  db = execute(db, {
-    type: "recordLog",
-    actorId: "rishik",
-    input: {
-      ...base,
-      subjectId: null,
-      authorUserId: "rishik",
-      title: "An evening with a book",
-      quantity: 20,
-      unit: "minutes",
-      activityIds: [activityIds[1]!],
-      connectionIds: [],
-    },
-  }).db;
-  const p = db.participations.find(
+  for (const activity of db.activities) {
+    const count =
+      activity.progressMode === "position"
+        ? Math.min(
+            30,
+            Math.ceil(
+              db.participations.find((p) => p.activityId === activity.id)!
+                .target,
+            ),
+          )
+        : 3;
+    for (let index = 1; index <= count; index++) {
+      const name =
+        activity.category === "reading" && activity.progressMode === "position"
+          ? `Chapter ${index}`
+          : activity.category === "watching"
+            ? `Episode ${index}`
+            : activity.category === "movement"
+              ? `Workout day ${index}`
+              : `Step ${index}`;
+      db = execute(
+        db,
+        {
+          type: "createMilestone",
+          actorId: activity.creatorUserId,
+          activityId: activity.id,
+          parentId: null,
+          name,
+          quantity:
+            activity.progressMode === "position"
+              ? index
+              : activity.progressMode === "sum"
+                ? 20
+                : 1,
+          policy: "open",
+          startAt: null,
+          endAt: null,
+          itemId: index === 1 ? "oak-tree" : null,
+        },
+        seedTime,
+      ).db;
+    }
+  }
+  const achievements = [
+    ["mosaab", activityIds[0]!, "Chapter 2"],
+    ["nathaniel", activityIds[0]!, "Chapter 4"],
+    ["rishik", activityIds[1]!, "Step 1"],
+  ];
+  for (const [userId, activityId, name] of achievements) {
+    const milestone = db.milestones.find(
+      (m) => m.activityId === activityId && m.name === name,
+    )!;
+    db = execute(
+      db,
+      {
+        type: "recordLog",
+        actorId: userId!,
+        input: {
+          authorUserId: userId!,
+          milestoneId: milestone.id,
+          isSuccess: true,
+          title: `Completed ${name}`,
+          durationMinutes: 30,
+          occurredAt: seedTime,
+          origin: "manual",
+        },
+      },
+      seedTime,
+    ).db;
+  }
+  const person = db.participations.find(
     (p) => p.activityId === activityIds[3] && p.userId === "nathaniel",
   );
-  if (p) p.target = 4;
-  // Static seed timestamps make import, reset, and snapshots repeatable.
-  for (const table of [db.subjects, db.activities, db.logs, db.events])
-    for (const record of table) record.createdAt = "2026-10-12T18:00:00.000Z";
+  if (person) person.target = 4;
+  for (const table of [
+    db.subjects,
+    db.activities,
+    db.milestones,
+    db.logs,
+    db.events,
+  ])
+    for (const record of table) record.createdAt = seedTime;
   return db;
 }

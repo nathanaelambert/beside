@@ -28,6 +28,7 @@ import {
   shortId,
 } from "./ui";
 import type { ViewProps } from "./playground";
+import { ActivityMilestones, type RecordMilestone } from "./milestones";
 import { AiFillInput } from "./ai-fill";
 
 export function Workbench({
@@ -35,7 +36,7 @@ export function Workbench({
   userId,
   run,
   onRecord,
-}: ViewProps & { onRecord: (activityId?: string) => void }) {
+}: ViewProps & { onRecord: RecordMilestone }) {
   const [selectedId, setSelectedId] = useState("");
   const [scope, setScope] = useState("all");
   const [category, setCategory] = useState("all");
@@ -49,8 +50,8 @@ export function Workbench({
       (category === "all" || a.category === category),
   );
   const selected = activities.find((a) => a.id === selectedId) ?? activities[0];
-  const connections = db.connections.filter((c) =>
-    members(db, c.id).includes(userId),
+  const connections = db.connections.filter(
+    (c) => !c.personalOwnerId && members(db, c.id).includes(userId),
   );
   return (
     <>
@@ -181,6 +182,7 @@ export function Workbench({
               db={db}
               userId={userId}
               run={run}
+              onRecord={onRecord}
             />
           )}
           <button className="button" onClick={() => onRecord(selected?.id)}>
@@ -206,7 +208,6 @@ function ActivityForm({
   const [targetEdited, setTargetEdited] = useState(false);
   const [connectionId, setConnectionId] = useState("personal");
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
-  const [inviteOthers, setInviteOthers] = useState(true);
   const subjects = visibleSubjects(db, userId).filter(
     (s) =>
       db.subjectTemplates.find((t) => t.id === s.templateId)?.category ===
@@ -227,7 +228,6 @@ function ActivityForm({
             connectionId: connectionId === "personal" ? null : connectionId,
             subjectIds,
             target: Number(target),
-            inviteOthers,
           },
           "Activity created. Its ownership and participation records are ready to inspect.",
         );
@@ -297,7 +297,9 @@ function ActivityForm({
           >
             <option value="personal">Personal · just me</option>
             {db.connections
-              .filter((c) => members(db, c.id).includes(userId))
+              .filter(
+                (c) => !c.personalOwnerId && members(db, c.id).includes(userId),
+              )
               .map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -363,16 +365,10 @@ function ActivityForm({
               ? "Each distinct log counts as one session."
               : "Progress adds up matching quantities."}
         </p>
-        {connectionId !== "personal" && (
-          <label className="check-line">
-            <input
-              type="checkbox"
-              checked={inviteOthers}
-              onChange={(e) => setInviteOthers(e.target.checked)}
-            />
-            Invite others instead of joining them immediately
-          </label>
-        )}
+        <p className="field-help">
+          Creating the activity automatically records milestone zero for every
+          participant. Everyone starts active, with no achievement progress.
+        </p>
         <button className="button primary" type="submit">
           <Plus size={16} />
           Create activity
@@ -386,7 +382,8 @@ function ActivityDetail({
   db,
   userId,
   run,
-}: ViewProps & { activity: Activity }) {
+  onRecord,
+}: ViewProps & { activity: Activity; onRecord: RecordMilestone }) {
   const mine = participation(db, a.id, userId);
   const [target, setTarget] = useState(String(mine?.target ?? 1));
   const [linkId, setLinkId] = useState("");
@@ -514,106 +511,41 @@ function ActivityDetail({
         })}
       </div>
       {mine && (
-        <div className="participation-controls">
-          {mine.status !== "active" ? (
-            <button
-              className="button primary small"
-              onClick={() =>
-                run(
-                  {
-                    type: "participate",
-                    actorId: userId,
-                    activityId: a.id,
-                    status: "active",
-                  },
-                  "You joined the activity. New logs can now contribute.",
-                )
-              }
-            >
-              {mine.status === "invited"
-                ? "Accept invitation"
-                : "Resume participation"}
-            </button>
-          ) : (
-            <>
-              <form
-                className="inline-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  run(
-                    {
-                      type: "participate",
-                      actorId: userId,
-                      activityId: a.id,
-                      status: "active",
-                      target: Number(target),
-                    },
-                    "Your sandbox target changed. Other participants' targets stayed the same.",
-                  );
-                }}
-              >
-                <label htmlFor={`target-${a.id}`}>My target</label>
-                <input
-                  id={`target-${a.id}`}
-                  type="number"
-                  min="0.01"
-                  step="any"
-                  required
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                />
-                <button className="button small">Update</button>
-              </form>
-              <div className="row-actions">
-                <button
-                  className="text-button"
-                  onClick={() =>
-                    run(
-                      {
-                        type: "participate",
-                        actorId: userId,
-                        activityId: a.id,
-                        status: "finished",
-                      },
-                      "You marked yourself finished. Your history remains, and friends can continue.",
-                    )
-                  }
-                >
-                  Mark myself finished
-                </button>
-                <button
-                  className="text-button muted"
-                  onClick={() =>
-                    run(
-                      {
-                        type: "participate",
-                        actorId: userId,
-                        activityId: a.id,
-                        status: "left",
-                      },
-                      "You left this activity. Existing contributions remain in its history.",
-                    )
-                  }
-                >
-                  Leave activity
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <form
+          className="inline-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            run(
+              {
+                type: "participate",
+                actorId: userId,
+                activityId: a.id,
+                target: Number(target),
+              },
+              "Personal target updated.",
+            );
+          }}
+        >
+          <label htmlFor={`target-${a.id}`}>My target</label>
+          <input
+            id={`target-${a.id}`}
+            type="number"
+            min="0.01"
+            step="any"
+            required
+            value={target}
+            onChange={(event) => setTarget(event.target.value)}
+          />
+          <button className="button small">Update target</button>
+        </form>
       )}
-      <div className="rule-note">
-        <span className="rule-label">RULE</span>
-        <p>
-          {a.progressMode === "position"
-            ? "Use the highest position from your credited logs. Chapter 5 after chapter 3 means 5, not 8."
-            : a.progressMode === "sessions"
-              ? "Count each credited log once. One reading log can advance a book and add one habit session."
-              : `Add the quantity from each credited log, in ${a.unit}. Units must match.`}{" "}
-          Targets here are experiment totals, with no weekly reset or reward
-          economy.
-        </p>
-      </div>
+      <ActivityMilestones
+        db={db}
+        userId={userId}
+        run={run}
+        activity={a}
+        onRecord={onRecord}
+      />
       <JsonRecord
         label="Inspect activity + participation rows"
         value={{

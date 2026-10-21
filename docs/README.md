@@ -10,8 +10,8 @@ Start with the [working concept brief](product/concept-brief.md) for the product
 
 ## Architecture
 
-- [Entities](architecture/entities.md): an empty placeholder for the future data model.
-- [Playground model](../apps/playground/README.md): a runnable conceptual experiment with working ownership/participation assumptions, four rendered ERDs, and a [reference SQL shape](../apps/playground/schema.sql). These prototype choices are not final product decisions.
+- [Entities](architecture/entities.md): milestones, home-base rewards, milestone-zero participation, schedule policies, and compatibility decisions, referencing the 2026-10-20 entity draft.
+- [Playground model](../apps/playground/README.md): a runnable conceptual experiment with working ownership/participation assumptions, five rendered ERDs, and a [reference SQL shape](../apps/playground/schema.sql). These prototype choices are not final product decisions.
 
 ## Design
 

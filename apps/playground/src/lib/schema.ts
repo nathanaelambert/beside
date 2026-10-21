@@ -14,8 +14,42 @@ export const tables: Table[] = [
     sql: "reward_item",
     color: "moss",
     description:
-      "A shared catalog of named, categorized pixel-art artifacts. Future reward rules and world placements can reference its ID; earning and ownership are separate concerns.",
+      "A shared catalog of named, categorized pixel-art artifacts. Milestone rewards reference its ID; artwork is independent of earning and ownership.",
     columns: ["text id PK", "text name", "text category", "jsonb artifact"],
+  },
+  {
+    key: "milestones",
+    sql: "milestone",
+    color: "ochre",
+    description:
+      "The smallest loggable achievement. Exactly one self-parented milestone zero per activity is logged automatically for every participant and records leaving; other milestones have an acyclic parent in the same activity. Open, paced and deadline policies validate submission time.",
+    columns: [
+      "text id PK",
+      "text activity_id FK",
+      "text parent_id FK",
+      "text kind",
+      "text name",
+      "numeric quantity",
+      "text policy",
+      "timestamptz start_at",
+      "timestamptz end_at",
+      "text reward_id FK",
+      "timestamptz created_at",
+    ],
+  },
+  {
+    key: "rewards",
+    sql: "reward",
+    color: "moss",
+    description:
+      "One item for the entire home base, linked to one milestone. Required participants are snapshotted at planning; all must succeed once. obtained_at is set once and never creates duplicate items.",
+    columns: [
+      "text id PK",
+      "text homebase_id FK",
+      "text item_id FK",
+      "timestamptz obtained_at",
+      "jsonb required_user_ids",
+    ],
   },
   {
     key: "users",
@@ -27,15 +61,15 @@ export const tables: Table[] = [
   },
   {
     key: "connections",
-    sql: "connection",
+    sql: "homebase",
     color: "neutral",
     description:
-      "A distinct shared context. Membership grants access to this connection's activities and shared logs.",
-    columns: ["text id PK", "text name"],
+      "A personal or shared home base. Membership grants access to its activities, logs, and collectively earned rewards. Existing JSON uses the connections key.",
+    columns: ["text id PK", "text name", "text personal_owner_id FK"],
   },
   {
     key: "memberships",
-    sql: "connection_member",
+    sql: "homebase_member",
     color: "neutral",
     description:
       "Unique (connection_id, user_id). Users can belong to many separate connections.",
@@ -119,7 +153,7 @@ export const tables: Table[] = [
     sql: "participation",
     color: "ochre",
     description:
-      "Unique (activity_id, user_id). Target and invitation/completion status belong to the individual. Progress is derived from contributions.",
+      "Unique (activity_id, user_id). Target and participation status belong to the individual; creation automatically logs milestone zero for each. Progress is derived from contributions.",
     columns: [
       "text id PK",
       "text activity_id FK",
@@ -133,10 +167,12 @@ export const tables: Table[] = [
     sql: "activity_log",
     color: "blue",
     description:
-      "One original event owned by its author. Subject is optional. Unique (author_user_id, origin, external_key) handles trigger retries.",
+      "One success/failure on exactly one milestone. A successful milestone/user pair is unique. Only preserved historical logs have no milestone. Trigger keys deduplicate retries before schedule/once-only checks.",
     columns: [
       "text id PK",
       "text author_user_id FK",
+      "text milestone_id FK",
+      "boolean is_success",
       "text subject_id FK",
       "text category",
       "text title",
@@ -208,6 +244,12 @@ export const tables: Table[] = [
   },
 ];
 const relations: [TableKey, string, TableKey, string][] = [
+  ["activities", "||--|{", "milestones", "contains"],
+  ["milestones", "||--o{", "milestones", "parent"],
+  ["milestones", "o|--o{", "logs", "records_outcome"],
+  ["rewards", "o|--||", "milestones", "awarded_by"],
+  ["rewardItems", "||--o{", "rewards", "defines"],
+  ["connections", "||--o{", "rewards", "owns"],
   ["users", "||--o{", "memberships", "belongs"],
   ["connections", "||--o{", "memberships", "includes"],
   ["users", "o|--o{", "activities", "personal_owner"],
@@ -240,10 +282,17 @@ export const modules: {
 }[] = [
   {
     id: "rewards",
-    name: "Reward catalog",
+    name: "Milestones & shared rewards",
     description:
-      "A reusable item definition, independent of activity categories. The artifact holds a palette and transparent pixel grid. Reward grants, milestone links, inventories, and saved world placements are future models, so there are no relationships yet.",
-    keys: ["rewardItems"],
+      "Activities contain milestones. Each milestone can reference one home-base reward, which references reusable item artwork. All required participants cooperate to obtain that one shared reward.",
+    keys: [
+      "rewardItems",
+      "rewards",
+      "milestones",
+      "activities",
+      "connections",
+      "logs",
+    ],
   },
   {
     id: "ownership",
@@ -286,6 +335,7 @@ export const modules: {
       "contributions",
       "participations",
       "activities",
+      "milestones",
     ],
   },
   {

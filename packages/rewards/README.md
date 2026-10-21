@@ -12,5 +12,5 @@ Category names are independent of activity categories.
 The package exports TypeScript source directly to Metro, Next.js, and Node's
 type-stripping test runner. It has no runtime dependencies or build step.
 Consumers should clone seed data before mutating it. The playground validates
-imports at its database boundary. Inventory, reward grants, and saved world
-placements are separate future models.
+imports at its database boundary. The playground now implements milestone reward grants and home-base ownership
+separately from these reusable item definitions. Saved world placements remain future work.

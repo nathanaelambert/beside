@@ -8,11 +8,27 @@ const definitions: Record<
   TableKey,
   { name: string; meaning: string; purpose: string; example: string }
 > = {
+  milestones: {
+    name: "Milestone",
+    meaning: "The smallest unit of an activity that can be logged.",
+    purpose:
+      "Record one user's success or failure on a chapter, episode, or workout day. Milestone zero is logged automatically for every participant at activity creation; a later failure records leaving. Schedules decide when logs are accepted.",
+    example:
+      "Chapter 1 of Dune can be completed once by Mosaab and once by Nathaniel; logging Chapter 4 does not complete earlier chapters.",
+  },
+  rewards: {
+    name: "Reward",
+    meaning: "One catalog item earned for an entire home base.",
+    purpose:
+      "Link a milestone to a specific item and record when the required people have all succeeded. The required roster is fixed when planned.",
+    example:
+      "Mosaab and Nathaniel both complete Chapter 1 and their home base earns one Meadow oak, shared by both.",
+  },
   rewardItems: {
     name: "Reward item",
     meaning: "A reusable item with a name, category, and pixel-art artifact.",
     purpose:
-      "Define what a future milestone or activity can award, independently of who earns it or where it is placed.",
+      "Define what a milestone can award, independently of who earns it or where it is placed.",
     example:
       "Meadow oak belongs to Trees. It is one catalog item; placing it twice would create two placements, not two item definitions.",
   },
@@ -23,8 +39,8 @@ const definitions: Record<
     example: "Mosaab or Nathaniel.",
   },
   connections: {
-    name: "Connection",
-    meaning: "A shared context for a group of people.",
+    name: "Home base",
+    meaning: "A personal or shared home for activities and earned items.",
     purpose: "Give shared activities and updates a specific home and audience.",
     example: "Mosaab and Nathaniel’s shared space.",
   },
@@ -71,16 +87,17 @@ const definitions: Record<
   },
   participations: {
     name: "Participation",
-    meaning: "One person’s commitment to an activity.",
+    meaning:
+      "A projection of one person’s automatic milestone-zero start and personal target.",
     purpose:
-      "Keep their target and invitation or completion status independent of everyone else’s.",
+      "Keep personal targets and participation status independent of everyone else’s.",
     example: "Mosaab aims for chapter 20; Nathaniel aims for chapter 30.",
   },
   logs: {
     name: "Log",
     meaning: "An author’s record of something that happened.",
     purpose:
-      "Capture a moment once, whether it stays private, gets shared, or counts toward progress.",
+      "Record success or failure on exactly one milestone. Failure gives no progress; success is allowed once per user.",
     example: "Mosaab read through chapter 5 of Dune for 30 minutes.",
   },
   logShares: {
@@ -96,7 +113,7 @@ const definitions: Record<
     purpose:
       "Count one moment toward relevant activities without duplicating the original log.",
     example:
-      "One reading log advances Dune to chapter 5 and adds one reading-habit session.",
+      "One successful Chapter 5 log advances only its own reading activity.",
   },
   events: {
     name: "Event",
@@ -125,7 +142,8 @@ export function Lexicon() {
       <p className="reference-summary">
         A <strong>subject</strong> is what it’s about. An{" "}
         <strong>activity</strong> is what you intend to do. A{" "}
-        <strong>log</strong> records what happened. A{" "}
+        <strong>milestone</strong> is its smallest achievement. A{" "}
+        <strong>log</strong> records a milestone outcome. A{" "}
         <strong>contribution</strong> makes that moment count toward progress.
       </p>
       <div className="lexicon-list">
@@ -176,7 +194,7 @@ const steps = [
   ],
   [
     "Add something to your world",
-    "The shared pool has enough accumulated credit. Choose a tree, review its cost, purchase it, and place it in your shared space.",
+    "All required participants complete the reward milestone. Your home base earns its planned tree once, with no generic currency. Saved placement is a future feature.",
   ],
   [
     "Revisit a keepsake",
@@ -192,7 +210,7 @@ const storyDiagram = `flowchart TD
   E --> G[Read and optionally reply]
   F --> G
   G --> H[Return to the shared space]
-  H --> I[Purchase and place a tree with accumulated credit]
+  H --> I[Earn the planned tree together; placement is proposed]
   I --> J[Revisit a past activity through a keepsake]
   J -. Later, both explicitly finish the novel .-> K[Make a keepsake for this novel]`;
 
@@ -217,9 +235,9 @@ export function UserStories() {
           <strong>What you can try today</strong>
           <p>
             The playground supports subjects, activities, individual targets,
-            logs, sharing, and event delivery. Shared worlds, chapter-specific
-            notes and reveals, decorations, rewards, and keepsakes are proposals
-            in this story.
+            milestone-zero decisions, scheduled milestone logs, shared item
+            rewards, sharing, and event delivery. Saved worlds, chapter-specific
+            notes and reveals, and keepsakes are proposals in this story.
           </p>
         </div>
         <div className="segmented story-switch" aria-label="Story format">

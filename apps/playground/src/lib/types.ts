@@ -17,9 +17,35 @@ export interface User {
   email: string;
   color: string;
 }
-export interface Connection {
+// The existing connection rows are the playground's home bases. Personal bases
+// have one owner/member; shared bases use ordinary membership rows.
+export interface Homebase {
   id: string;
   name: string;
+  personalOwnerId: string | null;
+}
+export type Connection = Homebase;
+export type LoggingPolicy = "open" | "paced" | "deadline";
+export interface Milestone {
+  id: string;
+  activityId: string;
+  parentId: string;
+  kind: "join" | "achievement";
+  name: string;
+  quantity: number;
+  policy: LoggingPolicy;
+  startAt: string | null;
+  endAt: string | null;
+  rewardId: string | null;
+  createdAt: string;
+}
+export interface Reward {
+  id: string;
+  homebaseId: string;
+  itemId: string;
+  obtainedAt: string | null;
+  // Snapshot the people whose cooperation this reward requires.
+  requiredUserIds: string[];
 }
 export interface Membership {
   id: string;
@@ -77,6 +103,9 @@ export interface Participation {
 }
 export interface Log {
   id: string;
+  // Null only for preserved logs from the original playground.
+  milestoneId: string | null;
+  isSuccess: boolean;
   authorUserId: string;
   subjectId: string | null;
   category: Category;
@@ -119,7 +148,7 @@ export interface Delivery {
   kind: "private" | "update" | "progress" | "activity";
 }
 export interface Database {
-  version: 1;
+  version: 2;
   users: User[];
   connections: Connection[];
   memberships: Membership[];
@@ -135,20 +164,18 @@ export interface Database {
   events: DomainEvent[];
   deliveries: Delivery[];
   rewardItems: RewardItem[];
+  milestones: Milestone[];
+  rewards: Reward[];
 }
 export interface LogInput {
   authorUserId: string;
-  subjectId: string | null;
-  category: Category;
+  milestoneId: string;
+  isSuccess: boolean;
   title: string;
-  quantity: number;
-  unit: string;
   durationMinutes: number;
   occurredAt: string;
   origin: Origin;
   externalKey?: string | null;
-  activityIds: string[];
-  connectionIds: string[];
 }
 export type Command =
   | {
@@ -167,7 +194,6 @@ export type Command =
       connectionId: string | null;
       subjectIds: string[];
       target: number;
-      inviteOthers: boolean;
     }
   | {
       type: "linkSubject";
@@ -179,14 +205,24 @@ export type Command =
       type: "participate";
       actorId: string;
       activityId: string;
-      status: "active" | "finished" | "left";
-      target?: number;
+      target: number;
+    }
+  | {
+      type: "createMilestone";
+      actorId: string;
+      activityId: string;
+      parentId: string | null;
+      name: string;
+      quantity: number;
+      policy: LoggingPolicy;
+      startAt: string | null;
+      endAt: string | null;
+      itemId: string | null;
     }
   | { type: "recordLog"; actorId: string; input: LogInput }
   | {
       type: "distributeLog";
       actorId: string;
       logId: string;
-      activityIds: string[];
       connectionIds: string[];
     };
