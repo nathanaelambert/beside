@@ -47,4 +47,11 @@ export const colors = {
   separator: palette.neutral300,
   error: palette.angry500,
   errorBackground: palette.angry100,
+  rewards: {
+    accent: "#BCD3A4",
+    selected: "#2E3D2B",
+    ground: "#34442D",
+    groundAlt: "#3C4D33",
+    groundBorder: "#6E855B",
+  },
 } as const

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Download, Eraser } from "lucide-react";
 import type { Database, RewardItem } from "../lib/types";
-import { pixelPaths } from "../lib/pixel-art";
+import { pixelPaths } from "@beside/rewards/pixel-art";
 import { Badge, Empty, JsonRecord } from "./ui";
 
 function PixelSprite({ item }: { item: RewardItem }) {

@@ -11,6 +11,7 @@ import Config from "@/config"
 import { useAuth } from "@/context/AuthContext"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { LoginScreen } from "@/screens/LoginScreen"
+import { RewardItemsScreen } from "@/screens/RewardItemsScreen"
 import { WelcomeScreen } from "@/screens/WelcomeScreen"
 import { useAppTheme } from "@/theme/context"
 
@@ -58,6 +59,7 @@ const AppStack = () => {
       )}
 
       {/** 🔥 Your screens go here */}
+      <Stack.Screen name="RewardItems" component={RewardItemsScreen} />
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
     </Stack.Navigator>
   )

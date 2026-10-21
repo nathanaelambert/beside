@@ -76,7 +76,7 @@ Same-origin tabs receive storage updates. Writes are last-writer-wins snapshots;
 - `validation.ts`: runtime log payload and database validation.
 - `templates.ts` / `seed.ts`: 13 subject templates, 14 activity templates, 17 subjects, 9 activities, three users, four connections.
 - `store.ts`: local persistence and export/import.
-- `reward-items.ts` / `pixel-art.ts`: eight catalog seeds and shared SVG path generation.
+- `packages/rewards` (`@beside/rewards`): eight catalog seeds, entity types, and SVG path generation, shared with the mobile app.
 - `schema.ts`: table descriptions and generated Mermaid modules with PK/FK columns.
 - `schema.sql`: reference SQL tables, checks, unique constraints, and indexes. PostgreSQL-friendly `jsonb` and `timestamptz`; not a production migration.
 

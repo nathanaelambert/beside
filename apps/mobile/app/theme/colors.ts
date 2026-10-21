@@ -82,4 +82,11 @@ export const colors = {
    * Error Background.
    */
   errorBackground: palette.angry100,
+  rewards: {
+    accent: "#45643B",
+    selected: "#E5EDDC",
+    ground: "#D5E3BE",
+    groundAlt: "#DFE9CE",
+    groundBorder: "#A2B58C",
+  },
 } as const

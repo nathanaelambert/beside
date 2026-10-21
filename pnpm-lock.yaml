@@ -57,6 +57,9 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@beside/rewards':
+        specifier: workspace:*
+        version: link:../../packages/rewards
       '@expo-google-fonts/space-grotesk':
         specifier: ^0.4.0
         version: 0.4.1
@@ -241,6 +244,9 @@ importers:
 
   apps/playground:
     dependencies:
+      '@beside/rewards':
+        specifier: workspace:*
+        version: link:../../packages/rewards
       lucide-react:
         specifier: 1.57.0
         version: 1.57.0(@types/react@19.2.18)(react@19.2.8)
@@ -336,6 +342,15 @@ importers:
       globals:
         specifier: 17.12.0
         version: 17.12.0
+
+  packages/rewards:
+    devDependencies:
+      '@beside/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
 
   packages/typescript-config: {}
 

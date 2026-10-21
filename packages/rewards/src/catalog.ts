@@ -1,4 +1,5 @@
 import type { RewardItem } from "./types.ts";
+export type { PixelArt, RewardItem } from "./types.ts";
 
 // Eight original 32 × 32 sprites. The transparent pixel data travels with exports.
 export const rewardItems: RewardItem[] = [

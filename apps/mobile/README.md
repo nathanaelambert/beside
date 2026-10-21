@@ -9,6 +9,50 @@ pnpm install
 pnpm dev --filter=mobile
 ```
 
+## Reward items
+
+Open **Preview reward items** on Login, or **Explore reward items** on Welcome.
+The dedicated screen also supports the `beside://rewards` deep link. It works
+without signing in to the demo.
+
+Browse the same eight items as the playground, filter by category, and select an
+item. **Try placing** opens a nine-plot world preview. Tap plots to place or
+replace items, use **Remove items** to erase individual placements, or **Clear
+patch** to start over. **Change item** returns to the collection while preserving
+the patch. Leaving the screen resets the preview. Earning rewards and saved worlds
+are not implemented.
+
+The catalog, entity types, and original 32 × 32 pixel data live in
+`packages/rewards` (`@beside/rewards`), shared with the playground. `RewardSprite`
+renders contiguous pixel runs as native views at integer scales, with no remote
+artwork or additional native library. The screen uses the app's light/dark theme,
+safe areas, scrollable categories, accessible selection states, and a persistent
+selection bar.
+
+For a local mobile-sized browser preview:
+
+```sh
+pnpm --filter mobile exec expo start --web --port 8081
+```
+
+Open **http://localhost:8081/rewards** and use a phone-sized viewport. This uses the
+React Native screen through React Native Web; it is not a simulator.
+
+Validation commands from the repository root:
+
+```sh
+pnpm --filter mobile check-types
+pnpm --filter mobile lint:check
+pnpm --filter mobile test --runInBand
+pnpm --filter @beside/rewards check-types
+pnpm --filter mobile exec expo export --platform all --output-dir /tmp/beside-mobile-rewards-export
+```
+
+The reward screen was checked in Expo web at 320px and 390px, including category
+filtering, selection, repeated placement, removal, clearing, navigation, and dark
+mode. iOS, Android, and web exports passed. Native runtime testing still needs a
+device or simulator.
+
 This is the boilerplate that [Infinite Red](https://infinite.red) uses as a way to test bleeding-edge changes to our React Native stack.
 
 - [Quick start documentation](https://github.com/infinitered/ignite/blob/master/docs/boilerplate/Boilerplate.md)

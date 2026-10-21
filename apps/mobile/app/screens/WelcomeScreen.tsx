@@ -61,6 +61,12 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = function WelcomeScreen(_pro
         <Text tx="welcomeScreen:postscript" size="md" />
 
         <Button
+          testID="reward-items-button"
+          text="Explore reward items"
+          onPress={() => navigation.navigate("RewardItems")}
+        />
+
+        <Button
           testID="next-screen-button"
           preset="reversed"
           tx="welcomeScreen:letsGo"

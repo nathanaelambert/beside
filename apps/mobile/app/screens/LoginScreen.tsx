@@ -14,7 +14,7 @@ import type { ThemedStyle } from "@/theme/types"
 
 interface LoginScreenProps extends AppStackScreenProps<"Login"> {}
 
-export const LoginScreen: FC<LoginScreenProps> = () => {
+export const LoginScreen: FC<LoginScreenProps> = ({ navigation }) => {
   const authPasswordInput = useRef<TextInput>(null)
 
   const [authPassword, setAuthPassword] = useState("")
@@ -117,6 +117,12 @@ export const LoginScreen: FC<LoginScreenProps> = () => {
         style={themed($tapButton)}
         preset="reversed"
         onPress={login}
+      />
+      <Button
+        testID="reward-items-preview-button"
+        text="Preview reward items"
+        style={themed($tapButton)}
+        onPress={() => navigation.navigate("RewardItems")}
       />
     </Screen>
   )

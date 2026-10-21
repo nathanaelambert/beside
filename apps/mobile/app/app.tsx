@@ -43,6 +43,7 @@ const config = {
       path: "",
     },
     Welcome: "welcome",
+    RewardItems: "rewards",
     Demo: {
       screens: {
         DemoShowroom: {

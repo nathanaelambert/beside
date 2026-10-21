@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Database } from "./types.ts";
 import { migrateDemoIdentity } from "./migrations.ts";
-import { rewardItems } from "./reward-items.ts";
+import { rewardItems } from "@beside/rewards";
 
 const key = z.string().min(1).max(200);
 const text = z.string().max(2000);

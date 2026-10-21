@@ -1,7 +1,7 @@
 import type { Database, LogInput } from "./types.ts";
 import { activityTemplates, examples, subjectTemplates } from "./templates.ts";
 import { execute } from "./model.ts";
-import { rewardItems } from "./reward-items.ts";
+import { rewardItems } from "@beside/rewards";
 
 export function createSeed(): Database {
   let db: Database = {
