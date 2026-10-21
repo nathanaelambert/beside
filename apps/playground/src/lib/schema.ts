@@ -10,6 +10,14 @@ type Table = {
 };
 export const tables: Table[] = [
   {
+    key: "rewardItems",
+    sql: "reward_item",
+    color: "moss",
+    description:
+      "A shared catalog of named, categorized pixel-art artifacts. Future reward rules and world placements can reference its ID; earning and ownership are separate concerns.",
+    columns: ["text id PK", "text name", "text category", "jsonb artifact"],
+  },
+  {
     key: "users",
     sql: "app_user",
     color: "neutral",
@@ -230,6 +238,13 @@ export const modules: {
   description: string;
   keys: TableKey[];
 }[] = [
+  {
+    id: "rewards",
+    name: "Reward catalog",
+    description:
+      "A reusable item definition, independent of activity categories. The artifact holds a palette and transparent pixel grid. Reward grants, milestone links, inventories, and saved world placements are future models, so there are no relationships yet.",
+    keys: ["rewardItems"],
+  },
   {
     id: "ownership",
     name: "People & ownership",

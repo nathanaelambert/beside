@@ -27,8 +27,8 @@ pnpm --filter playground test
 
 The playground opens on a directory with three groups:
 
-- **Understand the model:** Lexicon (all 14 models in plain English), ERDs (four diagrams with expandable database records), and User stories (the existing shared-space storyboard in text and diagram).
-- **Try it out:** Subjects, Activities, and Record a log. Subject and activity creation forms open on request. Logging has a separate screen; opening it from an activity carries that activity into the composer.
+- **Understand the model:** Lexicon (all 15 models in plain English), ERDs (five diagrams with expandable database records), and User stories (the existing shared-space storyboard in text and diagram).
+- **Try it out:** Subjects, Activities, Reward items, and Record a log. Subject and activity creation forms open on request. Logging has a separate screen; opening it from an activity carries that activity into the composer.
 - **Look closer:** Logbook, Event trail, and Templates.
 
 Use the Playground breadcrumb to return home. Sections have shareable hash links and support browser Back/Forward. The story explicitly distinguishes proposed product features from the current sandbox.
@@ -39,7 +39,15 @@ Use the Playground breadcrumb to return home. Sections have shareable hash links
 2. Save a standalone log with no credit or audience. It stays private. In Logbook, use **Share later / add progress credit** to add an update-only audience, then credit an activity independently.
 3. Create a book in Subjects. Create a shared activity using it and invite others. Switch identity to accept the invitation and set a different target. Link a second subject to test many-to-many relationships.
 4. Select Voice, MCP, or Event in the composer. These are simulations without external integrations. Submit with a request key, then replay it: the same author/source/key returns the original log without duplicate credit or deliveries. Change the key for a new event.
-5. Open ERDs for four rendered Mermaid ERDs, zoom, source copy, and all 14 relational tables. Observer mode in Event trail reveals every event and recipient.
+5. Open ERDs for five rendered Mermaid model diagrams, zoom, source copy, and all 15 relational tables. Observer mode in Event trail reveals every event and recipient.
+
+## Reward items
+
+Open **Reward items** (`#rewards`) to browse a shared catalog by category or search by name. This pass contains eight original, transparent 32 × 32 pixel-art artifacts: Meadow oak and Alpine pine; Sunflower and Blush tulip; Watchful owl and Wishing star; Rose pennant and Blue swallowtail. Select an item to inspect its record or download its SVG. Choose plots in the placement preview to place or replace items; use Remove items or Clear preview to start over.
+
+`RewardItem` has an ID, name, category, and artifact. Categories are independent of activity tags and can grow without changing the entity. The artifact contains a hex-color palette and rectangular pixel rows (`.` means transparent), so the actual art is portable in JSON exports. The catalog is seeded and read-only in the UI for this pass. Reward grants, milestone/activity assignments, inventories, and saved world placements are separate future work. Preview placements are temporary component state, reset on navigation/reload/identity switch, and never emit events or alter the database.
+
+Existing v1 experiments acquire the eight-item catalog when loaded or imported, preserving all other rows. An existing catalog, including an intentionally empty one, is retained. Imports reject duplicate IDs, invalid names/categories, nonrectangular/oversized/blank grids, missing palette entries, and non-hex colors. `reward_item` is included in the Lexicon, model diagrams, reference SQL, and record inspector.
 
 ## Storage
 
@@ -57,7 +65,7 @@ Same-origin tabs receive storage updates. Writes are last-writer-wins snapshots;
 - Logs belong to their author and only credit that author's participation. Sharing grants visibility independently of credit. Shared credit adds the required audience automatically.
 - Categories are matching tags. An activity with subject links accepts those subjects; an unscoped activity accepts any matching subject or none. Non-session rules require exact units; no pages-to-chapters conversion is inferred.
 - Position rules take the maximum position; sum rules add quantities; session rules count distinct credited logs. Reaching a target does not automatically mark a participant finished.
-- Targets are **sandbox totals**, not weekly goals. Changing them recalculates the experiment. Periods, target versions, rewards, streaks, edits, revocation, and membership changes remain future experiments.
+- Targets are **sandbox totals**, not weekly goals. Changing them recalculates the experiment. Periods, target versions, reward accounting, streaks, edits, revocation, and membership changes remain future experiments.
 - Distribution is additive: shares/credit can be added later, not retracted. Deduplication handles retries and repeated attachment, not deliberate splitting of one session into multiple logs.
 - Observer panels and the window API see the whole local database. UI perspective rules teach relationships, not security. Production needs server authentication and authorization.
 
@@ -68,6 +76,7 @@ Same-origin tabs receive storage updates. Writes are last-writer-wins snapshots;
 - `validation.ts`: runtime log payload and database validation.
 - `templates.ts` / `seed.ts`: 13 subject templates, 14 activity templates, 17 subjects, 9 activities, three users, four connections.
 - `store.ts`: local persistence and export/import.
+- `reward-items.ts` / `pixel-art.ts`: eight catalog seeds and shared SVG path generation.
 - `schema.ts`: table descriptions and generated Mermaid modules with PK/FK columns.
 - `schema.sql`: reference SQL tables, checks, unique constraints, and indexes. PostgreSQL-friendly `jsonb` and `timestamptz`; not a production migration.
 
@@ -128,7 +137,7 @@ For eligible clients, [models and inference](https://developers.openai.com/siwc/
 
 ### Verification
 
-`pnpm --filter playground test` runs 31 tests: the original ten domain/migration tests plus AI boundary and draft-fill tests for unsupported/invalid output, citation handling, selecting and filling the most likely match, draft-only filling versus explicit saving, concurrent edits, bounded provider requests, configuration failures, aborts, and API request limits. Type-check, lint and production build also pass.
+`pnpm --filter playground test` runs 34 tests: ten domain/migration tests, three reward catalog/import tests, and AI boundary and draft-fill tests for unsupported/invalid output, citation handling, selecting and filling the most likely match, draft-only filling versus explicit saving, concurrent edits, bounded provider requests, configuration failures, aborts, and API request limits. Type-check, lint and production build also pass.
 
 Initial, pre-redesign T3 preview verification on this worktree's port 3003 covered the actual missing-configuration API response and preservation of manual fields. Browser export/import round-tripped the experiment, all four Mermaid modules rendered, and the event trail and Rishik perspective were checked. Browser-only response fixtures then exercised source review, editable suggestions, unchecked existing/uncertain fields, selected filling, explicit subject/activity saving, preservation of edits made during research, cancellation, ambiguity, malformed output, template reset and unsupported templates. Mobile review was inspected at 390px with no page overflow. Fixtures were injected only in the test browser, with no application bypass or fake-provider runtime mode. **Initial live verification with GPT-5.4 Mini after a dedicated key was configured (2026-10-14):** real OpenRouter/Exa research and structured extraction returned The Little Prince with author, source links and a 27-chapter total, followed by a reading-activity suggestion with a sourced target of 27. The chapter total was checked against the [official book site](https://www.lepetitprince.com/en/new-products-from-our-licensees/the-little-prince-polyglot-edition-27-chapters-27-languages/). Live browser review and filling left the database byte-for-byte unchanged; only explicit Create actions saved the subject, personal activity, participation and manually selected subject link. The live check exposed publication history being suggested for an unknown Edition, prompting a runtime guard and regression test; the subsequent live book result left Edition blank and marked it missing. Other template types have boundary/fixture coverage, not live provider verification. Hosted production has not been deployed or configured by this verification.
 
@@ -137,3 +146,5 @@ Initial, pre-redesign T3 preview verification on this worktree's port 3003 cover
 **Input-suffix redesign verification (2026-10-14):** a live Luna/high lookup filled the original subject fields directly, left the database unchanged, and showed no source links until the info popup was opened. Browser fixtures covered initially disabled/enabled suffix state, preserving manual fields and edits made during loading, Undo, cancellation, title/context changes, ambiguity, provider errors, activity target protection, explicit saving without persisted references, and resetting the suffix after save. The form and native info popup fit a 390px viewport without overflow. All 29 tests, type-check, lint and production build passed. Fixtures and verification records were removed afterward.
 
 **Multiple-match verification (2026-10-14):** a live Luna/high lookup for the movie title “The Thing” selected John Carpenter's 1982 film and filled Director and Year, with official film sources available only in the info popup. The database remained byte-for-byte unchanged. A separate browser-only `ambiguous` response fixture verified that the chosen candidate fills the main form, preserves an already entered Year, keeps references hidden, and supports Undo without saving. The fixture was removed afterward. Provider-mocked tests cover multiple research candidates followed by extraction and draft filling; they do not measure the model's ranking accuracy. All 31 tests, type-check, lint and production build passed. Most-likely selection remains a reviewable AI judgment, not a guarantee that it chose the user's intended work.
+
+**Reward catalog verification (2026-10-21):** all 34 tests, type-check, lint, and production build passed. Local browser checks covered category filtering, name search, repeated placement, removal of the final item, and a downloaded valid 32 × 32 transparent SVG. Preview placement left the event count unchanged. The catalog fit a 390px viewport without horizontal overflow, and the reward model diagram and eight inspector rows rendered. No deployment was performed.

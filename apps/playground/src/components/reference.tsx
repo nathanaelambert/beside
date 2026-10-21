@@ -8,6 +8,14 @@ const definitions: Record<
   TableKey,
   { name: string; meaning: string; purpose: string; example: string }
 > = {
+  rewardItems: {
+    name: "Reward item",
+    meaning: "A reusable item with a name, category, and pixel-art artifact.",
+    purpose:
+      "Define what a future milestone or activity can award, independently of who earns it or where it is placed.",
+    example:
+      "Meadow oak belongs to Trees. It is one catalog item; placing it twice would create two placements, not two item definitions.",
+  },
   users: {
     name: "User",
     meaning: "A person using Beside.",

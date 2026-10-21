@@ -3,6 +3,19 @@
 -- Cross-table ownership, category, unit, and audience rules need command transactions.
 -- The event envelope entity_type/entity_id is application-validated, not a SQL FK.
 
+-- Catalog definitions only. Grants, milestones, inventories, and world placements
+-- will reference these IDs when those models are introduced.
+-- artifact: {format: "pixel-art", palette: {a: "#35533a"}, pixels: [".aa."]}
+-- Application validation bounds the grid to 64x64, requires rectangular rows,
+-- validates hex colors, and checks that every visible pixel has a palette entry.
+CREATE TABLE reward_item (
+  id text PRIMARY KEY,
+  name text NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),
+  category text NOT NULL CHECK (length(trim(category)) BETWEEN 1 AND 80),
+  artifact jsonb NOT NULL CHECK (artifact->>'format' = 'pixel-art')
+);
+CREATE INDEX reward_item_category_idx ON reward_item(category);
+
 CREATE TABLE app_user (
   id text PRIMARY KEY,
   name text NOT NULL,

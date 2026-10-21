@@ -1,10 +1,12 @@
 import type { Database, LogInput } from "./types.ts";
 import { activityTemplates, examples, subjectTemplates } from "./templates.ts";
 import { execute } from "./model.ts";
+import { rewardItems } from "./reward-items.ts";
 
 export function createSeed(): Database {
   let db: Database = {
     version: 1,
+    rewardItems: structuredClone(rewardItems),
     users: [
       {
         id: "mosaab",

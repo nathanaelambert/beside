@@ -299,7 +299,7 @@ export function ModelView({ db }: ViewProps) {
         </div>
       </div>
       <details className="records-disclosure">
-        <summary>Inspect database records · 14 tables</summary>
+        <summary>Inspect database records · {tables.length} tables</summary>
         <div className="section-heading records-heading">
           <div>
             <h2>The records behind the experiment</h2>

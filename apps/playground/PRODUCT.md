@@ -18,7 +18,7 @@ Curious, approachable, clear. Use Beside's shared-activity context and warm, rea
 
 ## Anti-references
 
-No game world, avatars moving around a map, or ornamental reward system. The user requested conventional cards, tables, and forms. Avoid opaque automation and progress numbers without an explanation.
+Keep the workbench grounded in conventional cards, tables, and forms. Reward items have a small placement preview for exploring their pixel art; a full game world and reward accounting remain outside this pass. Avoid opaque automation and progress numbers without an explanation.
 
 ## Design Principles
 

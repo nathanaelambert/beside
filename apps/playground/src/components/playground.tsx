@@ -10,6 +10,7 @@ import {
   Database as DatabaseIcon,
   Download,
   FlaskConical,
+  Gift,
   GitBranch,
   NotebookPen,
   BookText,
@@ -35,6 +36,7 @@ import { Logbook } from "./logbook";
 import { EventTrail, ModelView } from "./inspection";
 import { Lexicon, UserStories } from "./reference";
 import { LogComposer } from "./log-composer";
+import { RewardItems } from "./reward-items";
 
 export type Run = (
   command: Command,
@@ -49,7 +51,7 @@ const sections = [
     group: "learn",
     description:
       "What each model means, why it exists, and how it fits together.",
-    detail: "14 models, in plain English",
+    detail: "15 models, in plain English",
   },
   {
     id: "model",
@@ -58,7 +60,7 @@ const sections = [
     group: "learn",
     description:
       "Explore the relationships between models and inspect the data.",
-    detail: "4 relationship diagrams",
+    detail: "5 model diagrams",
   },
   {
     id: "stories",
@@ -86,6 +88,15 @@ const sections = [
     description:
       "Create a personal or shared activity, invite people, and set individual targets.",
     detail: "Create an activity",
+  },
+  {
+    id: "rewards",
+    label: "Reward items",
+    icon: Gift,
+    group: "try",
+    description:
+      "Browse pixel-art trees, flowers, statues, and flagpoles. Try placing them in a world preview.",
+    detail: "Explore the catalog",
   },
   {
     id: "record",
@@ -392,6 +403,9 @@ export function Playground() {
           </div>
         )}
         {tab === "subjects" && <Subjects {...view} />}
+        {tab === "rewards" && (
+          <RewardItems key={JSON.stringify(db.rewardItems)} db={db} />
+        )}
         {tab === "logs" && <Logbook {...view} />}
         {tab === "events" && <EventTrail {...view} />}
         {tab === "model" && <ModelView {...view} />}

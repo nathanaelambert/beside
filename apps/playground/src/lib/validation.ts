@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Database } from "./types.ts";
 import { migrateDemoIdentity } from "./migrations.ts";
+import { rewardItems } from "./reward-items.ts";
 
 const key = z.string().min(1).max(200);
 const text = z.string().max(2000);
@@ -17,6 +18,43 @@ const category = z.enum([
 const origin = z.enum(["manual", "voice", "mcp", "automation"]);
 const mode = z.enum(["position", "sum", "sessions"]);
 const rows = <T extends z.ZodType>(schema: T) => z.array(schema).max(20000);
+const pixelArt = z
+  .object({
+    format: z.literal("pixel-art"),
+    palette: z.record(
+      z.string().regex(/^[A-Za-z0-9]$/),
+      z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    ),
+    pixels: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(64)
+          .regex(/^[.A-Za-z0-9]+$/),
+      )
+      .min(1)
+      .max(64),
+  })
+  .superRefine((art, ctx) => {
+    if (art.pixels.some((row) => row.length !== art.pixels[0]!.length))
+      ctx.addIssue({
+        code: "custom",
+        message: "Pixel-art rows must have equal widths.",
+      });
+    const pixels = art.pixels.join("");
+    if (
+      !/[A-Za-z0-9]/.test(pixels) ||
+      [...pixels].some(
+        (color) => color !== "." && !Object.hasOwn(art.palette, color),
+      )
+    )
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Pixel art needs visible pixels and a color for every palette key.",
+      });
+  });
 export const logInputSchema = z.object({
   authorUserId: key,
   subjectId: key.nullable(),
@@ -33,6 +71,15 @@ export const logInputSchema = z.object({
 });
 const databaseSchema = z.object({
   version: z.literal(1),
+  // Only missing legacy catalogs are seeded. An intentionally empty one stays empty.
+  rewardItems: rows(
+    z.object({
+      id: key,
+      name: z.string().trim().min(1).max(200),
+      category: z.string().trim().min(1).max(80),
+      artifact: pixelArt,
+    }),
+  ).default(() => structuredClone(rewardItems)),
   users: rows(
     z.object({
       id: key,
