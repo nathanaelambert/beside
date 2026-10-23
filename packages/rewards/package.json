@@ -1,0 +1,17 @@
+{
+  "name": "@beside/rewards",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/catalog.ts",
+    "./pixel-art": "./src/pixel-art.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@beside/typescript-config": "workspace:*",
+    "typescript": "7.0.2"
+  }
+}
