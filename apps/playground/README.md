@@ -25,7 +25,7 @@ pnpm --filter playground test
 
 ## Milestones and home-base rewards
 
-This pass implements the 2026-10-20 entity discussion on `docs/entities` (`51fe15b`). See [the implemented model and decisions](../../docs/architecture/entities.md) and [`schema.sql`](schema.sql).
+This pass implements the 2026-10-20 entity discussion on `docs/entities` (`51fe15b`). See [the implemented model and decisions](../../docs/architecture/playground-model.md), [the original entity draft](../../docs/architecture/entities.md), and [`schema.sql`](schema.sql).
 
 - **Activities:** create a personal/shared activity, set personal targets, and inspect its milestones. Creation automatically records milestone zero for every participant; everyone starts active.
 - **Milestones** (`#milestones`): plan named achievements, optional same-activity parents, a progress quantity/position, schedule, and optional item reward. Milestone zero is self-parented, logged automatically as the first milestone for every participant, and can later record leaving.

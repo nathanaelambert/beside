@@ -6,11 +6,13 @@ Start with the [working concept brief](product/concept-brief.md) for the product
 
 - [Original app description](product/app-description.md): the initial brainstorming notes, preserved as written. Some ideas were revised during discussion; use the concept brief for the current direction.
 - [Working concept brief](product/concept-brief.md): the consolidated product intent and working decisions.
-- [Features](product/features.md) and [principles](product/principles.md): empty placeholders from the initial repository, awaiting dedicated documentation.
+- [Design principles](product/principles.md): useful, shared, playful, and impactful, preserved from the `docs/entities` branch.
+- [Features](product/features.md): an empty placeholder from the initial repository, awaiting dedicated documentation.
 
 ## Architecture
 
-- [Entities](architecture/entities.md): milestones, home-base rewards, milestone-zero participation, schedule policies, and compatibility decisions, referencing the 2026-10-20 entity draft.
+- [Entity relationship draft](architecture/entities.md): the 2026-10-20 model from `docs/entities`, preserved as written, including open logging-policy questions.
+- [Implemented playground model](architecture/playground-model.md): milestones, home-base rewards, milestone-zero participation, schedule policies, and compatibility decisions. These prototype choices differ from parts of the entity draft.
 - [Playground model](../apps/playground/README.md): a runnable conceptual experiment with working ownership/participation assumptions, five rendered ERDs, and a [reference SQL shape](../apps/playground/schema.sql). These prototype choices are not final product decisions.
 
 ## Design
