@@ -9,10 +9,9 @@ New to the project? Start with the [contributing guide](CONTRIBUTING.md) for loc
 ## Apps and packages
 
 - `apps/website` (`beside-showcase`): the original Vite/React showcase website, with its six interactive chapters, pixel-art world, and project notes.
-- `apps/docs` (`docs`): the Next.js documentation starter.
 - `apps/mobile` (`mobile`): the Ignite/React Native app.
 - `apps/playground` (`playground`): the Next.js model workbench with local persistence and Mermaid ERDs.
-- `packages/ui`: shared React components.
+- `packages/rewards`: reward catalog types and pixel art shared by mobile and playground.
 - `packages/eslint-config`: shared ESLint configuration.
 - `packages/typescript-config`: shared TypeScript configuration.
 

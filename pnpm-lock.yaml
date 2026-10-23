@@ -18,43 +18,6 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
-  apps/docs:
-    dependencies:
-      '@beside/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      next:
-        specifier: 16.3.4
-        version: 16.3.4(@babel/core@8.0.1)(@types/node@26.4.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      react:
-        specifier: 19.2.8
-        version: 19.2.8
-      react-dom:
-        specifier: 19.2.8
-        version: 19.2.8(react@19.2.8)
-    devDependencies:
-      '@beside/eslint-config':
-        specifier: workspace:*
-        version: link:../../packages/eslint-config
-      '@beside/typescript-config':
-        specifier: workspace:*
-        version: link:../../packages/typescript-config
-      '@types/node':
-        specifier: 26.4.1
-        version: 26.4.1
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 19.2.5
-        version: 19.2.5(@types/react@19.2.18)
-      eslint:
-        specifier: 10.9.1
-        version: 10.9.1(supports-color@8.1.1)
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-
   apps/mobile:
     dependencies:
       '@beside/rewards':
@@ -353,37 +316,6 @@ importers:
         version: 7.0.2
 
   packages/typescript-config: {}
-
-  packages/ui:
-    dependencies:
-      react:
-        specifier: 19.2.8
-        version: 19.2.8
-      react-dom:
-        specifier: 19.2.8
-        version: 19.2.8(react@19.2.8)
-    devDependencies:
-      '@beside/eslint-config':
-        specifier: workspace:*
-        version: link:../eslint-config
-      '@beside/typescript-config':
-        specifier: workspace:*
-        version: link:../typescript-config
-      '@types/node':
-        specifier: 26.4.1
-        version: 26.4.1
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 19.2.5
-        version: 19.2.5(@types/react@19.2.18)
-      eslint:
-        specifier: 10.9.1
-        version: 10.9.1(supports-color@8.1.1)
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
 
 packages:
 

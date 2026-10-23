@@ -44,12 +44,9 @@ the workspace. Commit `pnpm-lock.yaml` when dependency changes update it.
   workbench. Demo identities simulate perspective; they are not authentication.
   Experiment data is stored locally in the browser. Use its export feature before
   resetting data or testing imports.
-- [`apps/docs`](apps/docs) (`docs`): a Next.js documentation starter. Product and
-  architecture documents currently live in the root [`docs`](docs/README.md) folder.
 - [`packages/rewards`](packages/rewards/README.md) (`@beside/rewards`): catalog types
   and pixel art shared by mobile and playground; it exports TypeScript source
   directly and has no build step.
-- [`packages/ui`](packages/ui) (`@beside/ui`): shared web React components.
 - [`packages/eslint-config`](packages/eslint-config) and
   [`packages/typescript-config`](packages/typescript-config): shared tooling.
 
@@ -63,9 +60,6 @@ pnpm dev --filter=beside-showcase
 
 # Model playground: http://localhost:3002
 pnpm dev --filter=playground
-
-# Documentation starter: http://localhost:3001
-pnpm dev --filter=docs
 
 # Mobile: starts Expo for a development client
 pnpm dev --filter=mobile
@@ -145,15 +139,6 @@ pnpm --filter mobile test --runInBand
 
 # Shared rewards: also check mobile and playground when changing their shared API
 pnpm --filter @beside/rewards check-types
-
-# Shared web UI
-pnpm --filter @beside/ui lint
-pnpm --filter @beside/ui check-types
-
-# Documentation starter
-pnpm --filter docs lint
-pnpm --filter docs check-types
-pnpm build --filter=docs
 
 # Showcase
 pnpm build --filter=beside-showcase
