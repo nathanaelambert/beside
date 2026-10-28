@@ -24,13 +24,13 @@
 - activity*        UUID [FK: activity.id]
 - parent*          UUID [FK: milestone.id]
 - reward           UUID [FK: reward.id]
-- start            TIME
-- end              TIME
+- start            DATETIME
+- end              DATETIME
 
 ## log
 - user*            UUID [FK: user.id]
 - milestone*       UUID [FK: milestone.id]
-- datetime         TIME
+- datetime         DATETIME
 - is_success       BOOL
 - note             TEXT
 
