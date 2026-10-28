@@ -1,6 +1,4 @@
 import "reflect-metadata";
-import { createRequire } from "node:module";
-import { dirname } from "node:path";
 import {
   Catch,
   HttpException,
@@ -141,9 +139,6 @@ export function configureApp(app: INestApplication) {
     }
   }
   SwaggerModule.setup("docs", app, document, {
-    customSwaggerUiPath: dirname(
-      createRequire(import.meta.url).resolve("swagger-ui-dist/package.json"),
-    ),
     jsonDocumentUrl: "/openapi.json",
     yamlDocumentUrl: "/openapi.yaml",
     swaggerOptions: { persistAuthorization: false },
