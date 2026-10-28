@@ -19,8 +19,10 @@ pnpm --filter @beside/api dev
 An existing PostgreSQL database works too: set `DATABASE_URL` in `apps/api/.env`.
 Use a separate local/test database instead of the production Neon connection.
 The migration seeds templates and the eight reward items, with no demo accounts.
-Register an account to create its personal home base. The migrator can be run
-again safely and uses a transaction and migration lock.
+Register without an invitation code to create an ordinary, inviteable home base.
+Pass optional `inviteCode` during registration to join an existing home base instead;
+no extra base is created. An invalid code rolls back the account so signup can be retried.
+The migrator can be run again safely and uses a transaction and migration lock.
 
 - API: `http://localhost:3001/api/v1`
 - Interactive OpenAPI explorer: `http://localhost:3001/docs`
@@ -45,7 +47,7 @@ await api.register({
   email: "alex@example.com",
   password: "a-long-unique-password",
 });
-const base = await api.createHomebase("Our reading corner");
+const [base] = await api.homebases(); // The base initialized during signup.
 const activity = await api.createActivity({
   templateId: "read-book",
   name: "Read together",
@@ -73,7 +75,10 @@ await api.recordLog({
 });
 ```
 
-Give a friend `base.inviteCode` to join through `joinHomebase`. Joining initializes
+Every home base, including the one created during signup, has an invitation code
+available immediately from `client.homebases()`. Give a friend that code to pass as
+`inviteCode` in `client.register({ name, email, password, inviteCode })`, or to join
+later through `joinHomebase`. Joining initializes
 participation in existing activities without changing previously saved reward
 rosters. To require both people for a reward, have both join before planning it.
 Invitation codes grant membership to anyone who has them; members can retrieve
@@ -114,6 +119,11 @@ the command engine. Its build bundles JavaScript for Node/Vercel while browser
 and React Native consumers can use the TypeScript sources. The local playground re-exports these modules to preserve
 its import paths and saved experiments. API request/response schemas live there
 too; OpenAPI uses those validators directly so its contract stays aligned.
+
+Activities require an explicit `connectionId` for a home base the caller belongs
+to. Home bases have no personal/shared type or special owner. The v3 migration
+converts existing one-person bases in place and backfills their invitation codes;
+existing activity logs become visible to anyone who subsequently joins that base.
 
 The API persists normalized relational tables with foreign keys and unique
 constraints. Each write loads the model in a transaction, applies the shared

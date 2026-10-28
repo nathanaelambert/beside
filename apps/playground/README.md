@@ -27,7 +27,7 @@ pnpm --filter playground test
 
 This pass implements the 2026-10-20 entity discussion on `docs/entities` (`51fe15b`). See [the implemented model and decisions](../../docs/architecture/playground-model.md), [the original entity draft](../../docs/architecture/entities.md), and [`schema.sql`](schema.sql).
 
-- **Activities:** create a personal/shared activity, set personal targets, and inspect its milestones. Creation automatically records milestone zero for every participant; everyone starts active.
+- **Activities:** create an activity in a home base, set personal targets, and inspect its milestones. Creation automatically records milestone zero for every participant; everyone starts active.
 - **Milestones** (`#milestones`): plan named achievements, optional same-activity parents, a progress quantity/position, schedule, and optional item reward. Milestone zero is self-parented, logged automatically as the first milestone for every participant, and can later record leaving.
 - **Record a log:** every new log references exactly one milestone and records success or failure. Each person can succeed once per milestone. Ordinary successes credit only their own activity; failures and root decisions give no progress.
 - **Reward items:** the eight shared pixel-art items remain reusable catalog artwork. A milestone can award one item to its whole home base. All participants joined at planning time must succeed. That roster is fixed and shown before saving. Earned and pending rewards appear above the temporary placement preview.
@@ -44,9 +44,9 @@ This pass implements the 2026-10-20 entity discussion on `docs/entities` (`51fe1
 
 ### Storage and compatibility
 
-Payload version is now **2**. The existing localStorage key `beside.playground.v1` is retained. Explicit v1 snapshots migrate without losing historical logs, progress, shares, events or ownership. Historical logs retain `milestoneId: null`; new commands require one. Migration adds personal home bases and root join/leave history, without guessing chapter completion or granting retroactive rewards. Add milestones to continue an existing experiment, or reset the seed for fully populated examples.
+Payload version is now **3**. The existing localStorage key `beside.playground.v1` is retained. Explicit v1 snapshots migrate without losing historical logs, progress, shares, events or ownership. Historical logs retain `milestoneId: null`; new commands require one. Migration adds home bases and root join/leave history, without guessing chapter completion or granting retroactive rewards. Add milestones to continue an existing experiment, or reset the seed for fully populated examples.
 
-Existing `connections` and `memberships` JSON keys represent home bases and their members. A personal home base has exactly its owner's membership. Cross-tab updates, export/import, recovery export, reset confirmation and memory fallback remain available. Imports validate milestone hierarchy, schedule, completion, reward scope, root decisions, foreign keys and contributions before replacing the current experiment.
+Existing `connections` and `memberships` JSON keys represent home bases and their members. All home bases behave alike; membership governs access. Former personal home bases and their activities migrate in place, with their existing history made visible to the base’s members. Cross-tab updates, export/import, recovery export, reset confirmation and memory fallback remain available. Imports validate milestone hierarchy, schedule, completion, reward scope, root decisions, foreign keys and contributions before replacing the current experiment.
 
 The sandbox checks submission time using its browser clock. A hosted adapter must use server time and atomically enforce the unique successful user/milestone pair and final reward grant. This pass does not deploy a backend, create saved world placements, or implement reward sacrifice, recurring generation, or failure cascades. The milestone schedule is explicit rather than hardcoded from an item's art category.
 

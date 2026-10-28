@@ -4,7 +4,7 @@ import type { Database } from "@beside/domain/types";
 export const tables = [
   ["rewardItems", "reward_item", ["id", "name", "category", "artifact"]],
   ["users", "app_user", ["id", "name", "email", "color"]],
-  ["connections", "homebase", ["id", "name", "personalOwnerId"]],
+  ["connections", "homebase", ["id", "name"]],
   ["memberships", "homebase_member", ["id", "connectionId", "userId"]],
   [
     "subjectTemplates",
@@ -28,7 +28,6 @@ export const tables = [
       "id",
       "templateId",
       "creatorUserId",
-      "personalOwnerId",
       "connectionId",
       "name",
       "description",

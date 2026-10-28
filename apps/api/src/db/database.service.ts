@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import type { Pool, PoolClient } from "pg";
 import { createPool } from "./storage.ts";
+import { latestMigration } from "./migrations.ts";
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
@@ -41,7 +42,8 @@ export class DatabaseService implements OnModuleDestroy {
   }
   async ready() {
     const result = await this.getPool().query(
-      "SELECT EXISTS (SELECT 1 FROM beside_migration WHERE name = '001_initial.sql') AS ready",
+      "SELECT EXISTS (SELECT 1 FROM beside_migration WHERE name = $1) AS ready",
+      [latestMigration],
     );
     if (!result.rows[0]?.ready)
       throw new ServiceUnavailableException("Database migration is pending.");

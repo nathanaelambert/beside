@@ -54,6 +54,13 @@ describe("public API contract without a database", () => {
       body.components.schemas.Register.properties.password.minLength,
       12,
     );
+    assert.ok(body.components.schemas.Register.properties.inviteCode);
+    assert.ok(
+      !body.components.schemas.Register.required.includes("inviteCode"),
+    );
+    assert.ok(
+      body.components.schemas.CreateActivity.required.includes("connectionId"),
+    );
     assert.ok(body.paths["/api/v1/state"].get.security);
     await request(server).get("/openapi.yaml").expect(200);
   });
@@ -96,6 +103,7 @@ describe(
   () => {
     let app: Awaited<ReturnType<typeof createApp>>;
     let alice: Session, bob: Session, stranger: Session;
+    let aliceBaseId: string;
     const nonce = crypto.randomUUID();
     const password = "test-only-password-12345";
     const auth = (session: Session) => ({
@@ -157,16 +165,24 @@ describe(
       alice = await register("Alice");
       bob = await register("Bob");
       stranger = await register("Stranger");
+      aliceBaseId = (await state(alice)).connections[0]!.id;
     });
     after(async () => {
       await app.close();
     });
-    it("creates real accounts, hashes credentials, and provisions personal home bases", async () => {
+    it("creates real accounts, hashes credentials, and provisions inviteable home bases", async () => {
       const snapshot = await state(alice);
       assert.equal(snapshot.users.length, 1);
       assert.equal(snapshot.users[0]!.id, alice.user.id);
       assert.equal("email" in snapshot.users[0]!, false);
-      assert.equal(snapshot.connections[0]!.personalOwnerId, alice.user.id);
+      assert.equal(snapshot.connections.length, 1);
+      assert.equal("personalOwnerId" in snapshot.connections[0]!, false);
+      const { body: bases } = await request(app.getHttpServer())
+        .get("/api/v1/homebases")
+        .set(auth(alice))
+        .expect(200);
+      assert.match(bases[0].inviteCode, /^[A-Za-z0-9_-]{32}$/);
+      assert.deepEqual(bases[0].memberIds, [alice.user.id]);
       assert.ok(
         snapshot.activityTemplates.length > 0 &&
           snapshot.rewardItems.length > 0,
@@ -196,6 +212,145 @@ describe(
         .send({ email: alice.user.email, password: "wrong-password-12345" })
         .expect(401);
     });
+    it("joins an initial home base during signup without creating another, including existing activities", async () => {
+      const activity = await create(alice, "activities", {
+        templateId: "read-book",
+        name: "Ready before my friend joins",
+        target: 3,
+        connectionId: aliceBaseId,
+      });
+      const milestone = await create(
+        alice,
+        "milestones",
+        milestoneBody(activity.entityId, "oak-tree"),
+      );
+      const before = await state(alice);
+      const rewardId = before.milestones.find(
+        (row) => row.id === milestone.entityId,
+      )!.rewardId;
+      const { body: bases } = await request(app.getHttpServer())
+        .get("/api/v1/homebases")
+        .set(auth(alice))
+        .expect(200);
+      const pool = app.get(DatabaseService).getPool();
+      const count = Number(
+        (await pool.query("SELECT count(*) FROM homebase")).rows[0].count,
+      );
+      const { body: friend } = await request(app.getHttpServer())
+        .post("/api/v1/auth/register")
+        .send({
+          name: "Invited friend",
+          email: `friend.${nonce}@example.test`,
+          password,
+          inviteCode: `  ${bases[0].inviteCode}  `,
+        })
+        .expect(201);
+      const snapshot = await state(friend);
+      assert.deepEqual(
+        snapshot.connections.map((base) => base.id),
+        [aliceBaseId],
+      );
+      assert.equal(
+        Number(
+          (await pool.query("SELECT count(*) FROM homebase")).rows[0].count,
+        ),
+        count,
+      );
+      const person = snapshot.participations.find(
+        (row) =>
+          row.activityId === activity.entityId && row.userId === friend.user.id,
+      )!;
+      assert.equal(person.status, "active");
+      const root = snapshot.milestones.find(
+        (row) => row.activityId === activity.entityId && row.kind === "join",
+      )!;
+      assert.equal(
+        snapshot.logs.filter(
+          (log) =>
+            log.authorUserId === friend.user.id &&
+            log.milestoneId === root.id &&
+            log.isSuccess,
+        ).length,
+        1,
+      );
+      assert.deepEqual(
+        snapshot.rewards.find((row) => row.id === rewardId)!.requiredUserIds,
+        [alice.user.id],
+      );
+      assert.ok(
+        snapshot.logShares.some((share) => share.connectionId === aliceBaseId),
+      );
+      const { body: friendBases } = await request(app.getHttpServer())
+        .get("/api/v1/homebases")
+        .set(auth(friend))
+        .expect(200);
+      assert.equal(friendBases[0].inviteCode, bases[0].inviteCode);
+      // Joining again is idempotent for membership and automatic start logs.
+      await create(
+        friend,
+        "homebases/join",
+        { inviteCode: bases[0].inviteCode },
+        200,
+      );
+      assert.equal((await state(friend)).logs.length, snapshot.logs.length);
+    });
+    it("rolls invalid signup invitations back entirely and treats a blank code as no invitation", async () => {
+      const email = `retry.${nonce}@example.test`;
+      const pool = app.get(DatabaseService).getPool();
+      const counts = async () =>
+        (
+          await pool.query(
+            "SELECT (SELECT count(*) FROM app_user) AS users, (SELECT count(*) FROM homebase) AS bases, (SELECT count(*) FROM homebase_member) AS members, (SELECT count(*) FROM auth_credential) AS credentials, (SELECT count(*) FROM auth_session) AS sessions",
+          )
+        ).rows[0];
+      const before = await counts();
+      const { body: error } = await request(app.getHttpServer())
+        .post("/api/v1/auth/register")
+        .send({
+          name: "Retry",
+          email,
+          password,
+          inviteCode: "invalid-invitation-code",
+        })
+        .expect(404);
+      assert.match(error.message, /Invitation code was not found/);
+      assert.deepEqual(await counts(), before);
+      assert.equal(
+        (await pool.query("SELECT 1 FROM app_user WHERE email = $1", [email]))
+          .rowCount,
+        0,
+      );
+      const { body: account } = await request(app.getHttpServer())
+        .post("/api/v1/auth/register")
+        .send({ name: "Retry", email, password, inviteCode: "   " })
+        .expect(201);
+      const { body: bases } = await request(app.getHttpServer())
+        .get("/api/v1/homebases")
+        .set(auth(account))
+        .expect(200);
+      assert.equal(bases.length, 1);
+      assert.deepEqual(bases[0].memberIds, [account.user.id]);
+      assert.ok(bases[0].inviteCode);
+      const snapshot = await state(account);
+      assert.equal(snapshot.connections.length, 1);
+      await create(account, "activities", {
+        templateId: "read-book",
+        name: "My initial base is ordinary",
+        target: 3,
+        connectionId: bases[0].id,
+      });
+      await create(
+        stranger,
+        "activities",
+        {
+          templateId: "read-book",
+          name: "Inaccessible base",
+          target: 3,
+          connectionId: bases[0].id,
+        },
+        400,
+      );
+    });
     it("keeps private subjects, activity history, and emails away from unrelated users", async () => {
       const subject = await create(alice, "subjects", {
         templateId: "book",
@@ -205,6 +360,7 @@ describe(
       const activity = await create(alice, "activities", {
         templateId: "read-book",
         name: "Private reading",
+        connectionId: aliceBaseId,
         target: 3,
         subjectIds: [subject.entityId],
       });
@@ -330,6 +486,7 @@ describe(
       const activity = await create(alice, "activities", {
         templateId: "reading-habit",
         name: "Scheduled reading",
+        connectionId: aliceBaseId,
         target: 1,
       });
       const milestone = await create(alice, "milestones", {

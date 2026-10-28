@@ -17,12 +17,10 @@ export interface User {
   email: string;
   color: "blue" | "rose" | "moss";
 }
-// The existing connection rows are the playground's home bases. Personal bases
-// have one owner/member; shared bases use ordinary membership rows.
+// Connection rows are home bases. Membership is identical for every base.
 export interface Homebase {
   id: string;
   name: string;
-  personalOwnerId: string | null;
 }
 export type Connection = Homebase;
 export type LoggingPolicy = "open" | "paced" | "deadline";
@@ -80,8 +78,7 @@ export interface Activity {
   id: string;
   templateId: string;
   creatorUserId: string;
-  personalOwnerId: string | null;
-  connectionId: string | null;
+  connectionId: string;
   name: string;
   description: string;
   category: Category;
@@ -148,7 +145,7 @@ export interface Delivery {
   kind: "private" | "update" | "progress" | "activity";
 }
 export interface Database {
-  version: 2;
+  version: 3;
   users: User[];
   connections: Connection[];
   memberships: Membership[];
@@ -191,7 +188,7 @@ export type Command =
       templateId: string;
       name: string;
       description: string;
-      connectionId: string | null;
+      connectionId: string;
       subjectIds: string[];
       target: number;
     }

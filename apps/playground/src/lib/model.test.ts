@@ -396,7 +396,7 @@ test("position, sum and session activities preserve their progress interpretatio
   for (const step of steps.slice(0, 2))
     db = record(db, { milestoneId: step.id }).db;
   assert.equal(progress(db, participation(db, french.id, "mosaab")!).value, 40);
-  assert.equal(homebaseForActivity(db, french)!.personalOwnerId, "mosaab");
+  assert.equal(homebaseForActivity(db, french)!.id, "personal_mosaab");
   const habit = db.activities.find(
     (a) => a.name === "A little reading, often",
   )!;
@@ -408,7 +408,7 @@ test("position, sum and session activities preserve their progress interpretatio
   assert.ok(parseDatabase(db));
 });
 
-test("personal milestones stay private, while later sharing changes visibility without adding credit", () => {
+test("one-member home-base milestones stay within their membership, while later sharing changes visibility without adding credit", () => {
   const db = createSeed();
   const activity = db.activities.find((a) => a.name === "A little French")!;
   const milestone = db.milestones.find(
@@ -508,14 +508,23 @@ test("imports reject broken milestone/reward references, cycles, false grants, d
   assert.deepEqual(parseDatabase(JSON.parse(JSON.stringify(base))), base);
 });
 
-test("v1 snapshots preserve historical logs and progress, add personal bases and milestone-zero join history, and round-trip as v2", () => {
+test("v1 snapshots preserve historical logs and progress, add home bases and milestone-zero join history, and round-trip as v3", () => {
   const db = createSeed();
   const legacy = JSON.parse(JSON.stringify(db));
   legacy.version = 1;
+  legacy.activities = legacy.activities.map((a: { connectionId: string }) => ({
+    ...a,
+    personalOwnerId: a.connectionId.startsWith("personal_")
+      ? a.connectionId.slice(9)
+      : null,
+    connectionId: a.connectionId.startsWith("personal_")
+      ? null
+      : a.connectionId,
+  }));
   delete legacy.milestones;
   delete legacy.rewards;
   legacy.connections = legacy.connections
-    .filter((b: { personalOwnerId: string | null }) => !b.personalOwnerId)
+    .filter((b: { id: string }) => !b.id.startsWith("personal_"))
     .map(({ id, name }: { id: string; name: string }) => ({ id, name }));
   legacy.memberships = legacy.memberships.filter(
     (m: { connectionId: string }) => !m.connectionId.startsWith("personal_"),
@@ -545,7 +554,7 @@ test("v1 snapshots preserve historical logs and progress, add personal bases and
     eventIds.has(d.eventId),
   );
   const upgraded = parseDatabase(legacy);
-  assert.equal(upgraded.version, 2);
+  assert.equal(upgraded.version, 3);
   assert.deepEqual(upgraded.contributions, legacy.contributions);
   assert.deepEqual(upgraded.events, legacy.events);
   for (const id of logIds)
@@ -566,7 +575,11 @@ test("legacy demo identity changes preserve home-base ownership, reward rosters 
   assert.equal(upgraded.users.find((u) => u.id === "rishik")!.name, "Rishik");
   assert.ok(!JSON.stringify(upgraded).includes('"maya"'));
   assert.equal(upgraded.logs.length, current.logs.length);
-  assert.ok(upgraded.connections.some((b) => b.personalOwnerId === "rishik"));
+  assert.ok(
+    upgraded.memberships.some(
+      (m) => m.connectionId === "personal_maya" && m.userId === "rishik",
+    ),
+  );
   assert.deepEqual(parseDatabase(upgraded), upgraded);
 });
 
@@ -706,8 +719,8 @@ test("users who left cannot plan or complete achievements; failed ordinary attem
   assert.ok(parseDatabase(db));
 });
 
-test("automatic milestone zero covers personal and multi-member activities, including all members in shared rewards", () => {
-  for (const connectionId of [null, "circle"] as const) {
+test("automatic milestone zero covers single-member and multi-member activities, including all members in shared rewards", () => {
+  for (const connectionId of ["personal_mosaab", "circle"] as const) {
     const before = createSeed();
     const result = execute(
       before,
@@ -729,7 +742,7 @@ test("automatic milestone zero covers personal and multi-member activities, incl
     const root = result.db.milestones.find(
       (m) => m.activityId === result.entityId,
     )!;
-    assert.equal(people.length, connectionId ? 3 : 1);
+    assert.equal(people.length, connectionId === "circle" ? 3 : 1);
     assert.ok(people.every((p) => p.status === "active"));
     assert.equal(result.db.logs.length - before.logs.length, people.length);
     assert.ok(

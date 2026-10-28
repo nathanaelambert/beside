@@ -73,7 +73,6 @@ function LogCard({ db, userId, run, log }: ViewProps & { log: Log }) {
   const credits = db.contributions.filter((c) => c.logId === log.id);
   const available = db.connections.filter(
     (base) =>
-      !base.personalOwnerId &&
       members(db, base.id).includes(userId) &&
       !shares.some((s) => s.connectionId === base.id),
   );

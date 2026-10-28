@@ -15,6 +15,7 @@ import type { User } from "@beside/domain/types";
 import type { LoginInput, RegisterInput, Session } from "@beside/domain/api";
 import { id } from "@beside/domain/model";
 import { DatabaseService } from "./db/database.service.ts";
+import { createHomebase, joinHomebase } from "./homebases.ts";
 
 const derive = promisify(scrypt);
 export const tokenHash = (token: string) =>
@@ -93,15 +94,9 @@ export class AuthService {
         "INSERT INTO auth_credential(user_id, password_hash) VALUES ($1, $2)",
         [user.id, passwordHash],
       );
-      const baseId = id("homebase");
-      await client.query(
-        "INSERT INTO homebase(id, name, personal_owner_id) VALUES ($1, $2, $3)",
-        [baseId, `${user.name}'s home base`, user.id],
-      );
-      await client.query(
-        "INSERT INTO homebase_member(id, connection_id, user_id) VALUES ($1, $2, $3)",
-        [id("member"), baseId, user.id],
-      );
+      const inviteCode = input.inviteCode?.trim();
+      if (inviteCode) await joinHomebase(client, user.id, inviteCode);
+      else await createHomebase(client, user.id, `${user.name}'s home base`);
       return this.session(client, user);
     });
   }

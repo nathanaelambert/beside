@@ -40,7 +40,8 @@ const definitions: Record<
   },
   connections: {
     name: "Home base",
-    meaning: "A personal or shared home for activities and earned items.",
+    meaning:
+      "A home for activities and earned items, accessible to its members.",
     purpose: "Give shared activities and updates a specific home and audience.",
     example: "Mosaab and Nathaniel’s shared space.",
   },

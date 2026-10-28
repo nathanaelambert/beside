@@ -5,7 +5,7 @@ import { rewardItems } from "@beside/rewards";
 
 export function createSeed(): Database {
   let db: Database = {
-    version: 2,
+    version: 3,
     rewardItems: structuredClone(rewardItems),
     milestones: [],
     rewards: [],
@@ -30,10 +30,10 @@ export function createSeed(): Database {
       },
     ],
     connections: [
-      { id: "mn", personalOwnerId: null, name: "Mosaab + Nathaniel" },
-      { id: "mm", personalOwnerId: null, name: "Reading rhythm" },
-      { id: "circle", personalOwnerId: null, name: "The Sunday circle" },
-      { id: "nm", personalOwnerId: null, name: "Nathaniel + Rishik" },
+      { id: "mn", name: "Mosaab + Nathaniel" },
+      { id: "mm", name: "Reading rhythm" },
+      { id: "circle", name: "The Sunday circle" },
+      { id: "nm", name: "Nathaniel + Rishik" },
     ],
     memberships: [
       ["mn", "mosaab"],
@@ -66,7 +66,6 @@ export function createSeed(): Database {
     db.connections.push({
       id: `personal_${user.id}`,
       name: `${user.name}'s home base`,
-      personalOwnerId: user.id,
     });
     db.memberships.push({
       id: `personal_member_${user.id}`,
@@ -91,8 +90,8 @@ export function createSeed(): Database {
     ["watch-series", "One more episode", "mn", [3], 9],
     ["workout", "Make room to move", "circle", [], 3],
     ["cook-recipe", "Nani's dal, two kitchens", "circle", [9], 1],
-    ["language-practice", "A little French", null, [13], 60],
-    ["journal-habit", "Three good things", null, [14], 5],
+    ["language-practice", "A little French", "personal_mosaab", [13], 60],
+    ["journal-habit", "Three good things", "personal_mosaab", [14], 5],
     ["custom-project", "Our photo zine", "circle", [16], 5],
   ] as const;
   const activityIds: string[] = [];

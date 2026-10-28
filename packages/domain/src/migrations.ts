@@ -1,4 +1,4 @@
-import type { Database } from "./types.ts";
+import type { Activity, Database, Homebase } from "./types.ts";
 
 // Preserve existing experiments when upgrading the third seeded identity.
 // Connection IDs and user-authored subject/log titles are deliberately stable.
@@ -25,7 +25,6 @@ export function migrateDemoIdentity(database: Database): Database {
   for (const row of db.subjects) row.ownerUserId = rename(row.ownerUserId)!;
   for (const row of db.activities) {
     row.creatorUserId = rename(row.creatorUserId)!;
-    row.personalOwnerId = rename(row.personalOwnerId);
     if (
       row.description ===
       "A separate connection, visible to Nathaniel and Maya."
@@ -48,7 +47,8 @@ export function migrateDemoIdentity(database: Database): Database {
       rename(userId)!,
     );
   for (const connection of db.connections) {
-    connection.personalOwnerId = rename(connection.personalOwnerId);
+    if (connection.name === "Maya's home base")
+      connection.name = "Rishik's home base";
     if (connection.name === "Nathaniel + Maya")
       connection.name = "Nathaniel + Rishik";
   }
@@ -79,7 +79,7 @@ export function migrateMilestones(input: unknown): unknown {
   )
     return input;
   // Structural validation still runs after this migration.
-  const old = db as unknown as Database;
+  const old = db as unknown as LegacyDatabaseV2;
   old.version = 2;
   old.milestones = [];
   old.rewards = [];
@@ -166,4 +166,117 @@ export function migrateMilestones(input: unknown): unknown {
     }
   }
   return old;
+}
+
+// Kept only at the import boundary so existing v1/v2 experiments retain IDs,
+// progress, rewards and history when their former personal base becomes ordinary.
+type LegacyDatabaseV2 = Omit<
+  Database,
+  "version" | "connections" | "activities"
+> & {
+  version: 2;
+  connections: (Homebase & { personalOwnerId: string | null })[];
+  activities: (Omit<Activity, "connectionId"> & {
+    connectionId: string | null;
+    personalOwnerId: string | null;
+  })[];
+};
+
+export function migrateHomebases(input: unknown): unknown {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    !("version" in input) ||
+    input.version !== 2
+  )
+    return input;
+  const source = input as Record<string, unknown>;
+  if (
+    ![
+      "users",
+      "connections",
+      "memberships",
+      "activities",
+      "milestones",
+      "logs",
+      "logShares",
+      "contributions",
+      "participations",
+    ].every((key) => Array.isArray(source[key]))
+  )
+    return input;
+  const old = structuredClone(input) as LegacyDatabaseV2;
+  const personalBases = new Map<string, string>();
+  for (const base of old.connections) {
+    if (base.personalOwnerId === null) continue;
+    const owner = base.personalOwnerId;
+    const memberships = old.memberships.filter(
+      (member) => member.connectionId === base.id,
+    );
+    if (
+      !owner ||
+      !old.users.some((user) => user.id === owner) ||
+      personalBases.has(owner) ||
+      memberships.length !== 1 ||
+      memberships[0]!.userId !== owner
+    )
+      throw new Error("Invalid legacy personal home base.");
+    personalBases.set(owner, base.id);
+  }
+  for (const user of old.users)
+    if (!personalBases.has(user.id))
+      throw new Error("Legacy user is missing a home base.");
+  const migratedActivities = new Map<string, string>();
+  const activities = old.activities.map(({ personalOwnerId, ...activity }) => {
+    if ((personalOwnerId === null) === (activity.connectionId === null))
+      throw new Error("Invalid legacy activity scope.");
+    if (personalOwnerId && activity.creatorUserId !== personalOwnerId)
+      throw new Error("Invalid legacy activity owner.");
+    const connectionId =
+      activity.connectionId ?? personalBases.get(personalOwnerId!);
+    if (!connectionId)
+      throw new Error("Legacy activity is missing its home base.");
+    if (personalOwnerId) migratedActivities.set(activity.id, connectionId);
+    return { ...activity, connectionId };
+  });
+  // Previously private milestone logs now have the same base audience as all
+  // other activity logs. Existing shares, contributions and events stay intact.
+  for (const log of old.logs) {
+    const activityIds = new Set([
+      ...old.milestones
+        .filter((milestone) => milestone.id === log.milestoneId)
+        .map((milestone) => milestone.activityId),
+      ...old.contributions
+        .filter((credit) => credit.logId === log.id)
+        .flatMap((credit) =>
+          old.participations
+            .filter((person) => person.id === credit.participationId)
+            .map((person) => person.activityId),
+        ),
+    ]);
+    for (const activityId of activityIds) {
+      const connectionId = migratedActivities.get(activityId);
+      if (
+        connectionId &&
+        !old.logShares.some(
+          (share) =>
+            share.logId === log.id && share.connectionId === connectionId,
+        )
+      )
+        old.logShares.push({
+          id: `share_${crypto.randomUUID()}`,
+          logId: log.id,
+          connectionId,
+          sharedByUserId: log.authorUserId,
+        });
+    }
+  }
+  return {
+    ...old,
+    version: 3,
+    activities,
+    connections: old.connections.map(
+      ({ personalOwnerId: _owner, ...base }) => base,
+    ),
+  };
 }

@@ -15,6 +15,7 @@ import {
   ApiBody,
   ApiCreatedResponse,
   ApiNoContentResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -52,10 +53,14 @@ export class AuthController {
   @Post("register")
   @ApiBody({ schema: ref("Register") })
   @ApiCreatedResponse({ schema: ref("Session") })
+  @ApiNotFoundResponse({
+    description: "Invitation code not found; no account created",
+    schema: ref("Error"),
+  })
   @ApiOperation({
-    summary: "Create an account and personal home base",
+    summary: "Create an account and join or initialize a home base",
     description:
-      "Returns a 30-day bearer session. Passwords must contain 12–128 characters. No email verification or password recovery in this first pass.",
+      "An optional inviteCode joins that existing home base. Without a code, creates an inviteable home base. Invalid codes roll back registration. Returns a 30-day bearer session. Passwords must contain 12–128 characters. No email verification or password recovery in this first pass.",
   })
   async register(@Body() body: unknown, @Req() request: Request) {
     const data = input.registerSchema.parse(body);
@@ -123,9 +128,13 @@ export class DomainController {
   @ApiBody({ schema: ref("JoinHomebase") })
   @ApiOkResponse({ schema: ref("Mutation") })
   @ApiOperation({
-    summary: "Join a shared home base with its invitation code",
+    summary: "Join a home base with its invitation code",
     description:
       "Initializes participation in existing activities. Existing reward rosters do not change. Treat the invitation code as a shared secret.",
+  })
+  @ApiNotFoundResponse({
+    description: "Invitation code not found",
+    schema: ref("Error"),
   })
   joinHomebase(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
     return this.domain.joinHomebase(

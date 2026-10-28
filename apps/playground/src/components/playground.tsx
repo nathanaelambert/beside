@@ -99,7 +99,7 @@ const sections = [
     icon: FlaskConical,
     group: "try",
     description:
-      "Create a personal or shared activity, initialize its participants, and set individual targets.",
+      "Create an activity in a home base, initialize its participants, and set individual targets.",
     detail: "Create an activity",
   },
   {

@@ -26,8 +26,7 @@ CREATE TABLE app_user (
 -- Existing JSON keeps the connections/memberships keys and connection_id names.
 CREATE TABLE homebase (
   id text PRIMARY KEY,
-  name text NOT NULL,
-  personal_owner_id text UNIQUE REFERENCES app_user(id)
+  name text NOT NULL
 );
 
 CREATE TABLE homebase_member (
@@ -70,15 +69,13 @@ CREATE TABLE activity (
   id text PRIMARY KEY,
   template_id text NOT NULL REFERENCES activity_template(id),
   creator_user_id text NOT NULL REFERENCES app_user(id),
-  personal_owner_id text REFERENCES app_user(id),
-  connection_id text REFERENCES homebase(id),
+  connection_id text NOT NULL REFERENCES homebase(id),
   name text NOT NULL,
   description text NOT NULL,
   category text NOT NULL,
   progress_mode text NOT NULL,
   unit text NOT NULL,
   created_at timestamptz NOT NULL,
-  CHECK ((personal_owner_id IS NULL) <> (connection_id IS NULL)),
   CHECK (progress_mode IN ('position', 'sum', 'sessions'))
 );
 
@@ -195,7 +192,7 @@ CREATE UNIQUE INDEX milestone_success_once ON activity_log(milestone_id, author_
 CREATE INDEX milestone_activity ON milestone(activity_id);
 CREATE INDEX reward_homebase ON reward(homebase_id);
 CREATE INDEX participation_user ON participation(user_id);
-CREATE INDEX activity_scope ON activity(connection_id, personal_owner_id);
+CREATE INDEX activity_scope ON activity(connection_id);
 CREATE INDEX subject_owner ON subject(owner_user_id);
 CREATE INDEX log_author_time ON activity_log(author_user_id, occurred_at);
 CREATE INDEX share_audience ON log_share(connection_id);

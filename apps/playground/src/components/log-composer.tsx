@@ -300,10 +300,8 @@ export function LogComposer({
       )}
       <div className="distribution-preview">
         <span>
-          {activity.connectionId
-            ? `Visible to ${homebase?.name}.`
-            : "Private to your personal home base."}{" "}
-          A successful achievement counts only toward {activity.name}.
+          {`Visible to ${homebase?.name}.`} A successful achievement counts only
+          toward {activity.name}.
         </span>
       </div>
       {rejection && (

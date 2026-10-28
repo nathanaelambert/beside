@@ -1,14 +1,6 @@
 "use client";
 import { useState } from "react";
-import {
-  ArrowRight,
-  Check,
-  Link2,
-  LockKeyhole,
-  Plus,
-  Users,
-  X,
-} from "lucide-react";
+import { ArrowRight, Check, Link2, Plus, Users, X } from "lucide-react";
 import type { Activity, Database } from "../lib/types";
 import {
   members,
@@ -43,15 +35,12 @@ export function Workbench({
   const [creating, setCreating] = useState(false);
   const activities = visibleActivities(db, userId).filter(
     (a) =>
-      (scope === "all" ||
-        (scope === "personal"
-          ? a.personalOwnerId === userId
-          : a.connectionId === scope)) &&
+      (scope === "all" || a.connectionId === scope) &&
       (category === "all" || a.category === category),
   );
   const selected = activities.find((a) => a.id === selectedId) ?? activities[0];
-  const connections = db.connections.filter(
-    (c) => !c.personalOwnerId && members(db, c.id).includes(userId),
+  const connections = db.connections.filter((c) =>
+    members(db, c.id).includes(userId),
   );
   return (
     <>
@@ -92,7 +81,6 @@ export function Workbench({
                 onChange={(e) => setScope(e.target.value)}
               >
                 <option value="all">All my spaces</option>
-                <option value="personal">Personal only</option>
                 {connections.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -137,13 +125,11 @@ export function Workbench({
                   <span className="activity-card-content">
                     <span className="activity-card-name">{a.name}</span>
                     <span className="activity-card-scope">
-                      {a.connectionId ? (
-                        <Users size={12} />
-                      ) : (
-                        <LockKeyhole size={12} />
-                      )}
-                      {db.connections.find((c) => c.id === a.connectionId)
-                        ?.name ?? "Personal"}
+                      <Users size={12} />
+                      {
+                        db.connections.find((c) => c.id === a.connectionId)
+                          ?.name
+                      }
                     </span>
                     <span className="mini-progress">
                       <span style={{ width: `${stats?.percent ?? 0}%` }} />
@@ -206,7 +192,9 @@ function ActivityForm({
   const [description, setDescription] = useState("");
   const [target, setTarget] = useState(String(template.target));
   const [targetEdited, setTargetEdited] = useState(false);
-  const [connectionId, setConnectionId] = useState("personal");
+  const [connectionId, setConnectionId] = useState(
+    db.connections.find((c) => members(db, c.id).includes(userId))!.id,
+  );
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
   const subjects = visibleSubjects(db, userId).filter(
     (s) =>
@@ -225,7 +213,7 @@ function ActivityForm({
             templateId,
             name,
             description,
-            connectionId: connectionId === "personal" ? null : connectionId,
+            connectionId,
             subjectIds,
             target: Number(target),
           },
@@ -290,16 +278,13 @@ function ActivityForm({
           placeholder="What would you like to do?"
         />
         <label>
-          Owner
+          Home base
           <select
             value={connectionId}
             onChange={(e) => setConnectionId(e.target.value)}
           >
-            <option value="personal">Personal · just me</option>
             {db.connections
-              .filter(
-                (c) => !c.personalOwnerId && members(db, c.id).includes(userId),
-              )
+              .filter((c) => members(db, c.id).includes(userId))
               .map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -405,10 +390,9 @@ function ActivityDetail({
       </div>
       <p>{a.description || "A shared intention, ready to explore."}</p>
       <div className="ownership-line">
-        <span>Owner</span>
+        <span>Home base</span>
         <strong>
-          {db.connections.find((c) => c.id === a.connectionId)?.name ??
-            db.users.find((u) => u.id === a.personalOwnerId)?.name}
+          {db.connections.find((c) => c.id === a.connectionId)?.name}
         </strong>
         <span>
           Created by{" "}

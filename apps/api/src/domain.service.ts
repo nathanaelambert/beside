@@ -1,15 +1,10 @@
-import { randomBytes } from "node:crypto";
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import { execute, id } from "@beside/domain/model";
+import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import { execute } from "@beside/domain/model";
 import { stateForUser } from "@beside/domain/view";
 import type { Command } from "@beside/domain/types";
 import { DatabaseService } from "./db/database.service.ts";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
+import { createHomebase, joinHomebase } from "./homebases.ts";
 
 @Injectable()
 export class DomainService {
@@ -39,7 +34,7 @@ export class DomainService {
   homebases(userId: string) {
     return this.database.transaction(false, async (client) => {
       const result = await client.query(
-        `SELECT h.id, h.name, h.personal_owner_id AS "personalOwnerId", i.code AS "inviteCode",
+        `SELECT h.id, h.name, i.code AS "inviteCode",
           (SELECT json_agg(m.user_id ORDER BY m.row_order) FROM homebase_member m WHERE m.connection_id = h.id) AS "memberIds"
          FROM homebase h LEFT JOIN homebase_invite i ON i.homebase_id = h.id
          WHERE EXISTS (SELECT 1 FROM homebase_member m WHERE m.connection_id = h.id AND m.user_id = $1)
@@ -50,89 +45,13 @@ export class DomainService {
     });
   }
   createHomebase(userId: string, name: string) {
-    return this.database.transaction(true, async (client) => {
-      const homebaseId = id("homebase");
-      const inviteCode = randomBytes(24).toString("base64url");
-      await client.query(
-        "INSERT INTO homebase(id, name, personal_owner_id) VALUES ($1, $2, NULL)",
-        [homebaseId, name],
-      );
-      await client.query(
-        "INSERT INTO homebase_member(id, connection_id, user_id) VALUES ($1, $2, $3)",
-        [id("member"), homebaseId, userId],
-      );
-      await client.query(
-        "INSERT INTO homebase_invite(homebase_id, code) VALUES ($1, $2)",
-        [homebaseId, inviteCode],
-      );
-      return {
-        id: homebaseId,
-        name,
-        personalOwnerId: null,
-        inviteCode,
-        memberIds: [userId],
-      };
-    });
+    return this.database.transaction(true, (client) =>
+      createHomebase(client, userId, name),
+    );
   }
   joinHomebase(userId: string, inviteCode: string) {
-    return this.database.transaction(true, async (client) => {
-      const invite = await client.query(
-        "SELECT homebase_id FROM homebase_invite WHERE code = $1",
-        [inviteCode],
-      );
-      if (!invite.rows[0])
-        throw new NotFoundException("Invitation was not found.");
-      const homebaseId = invite.rows[0].homebase_id as string;
-      const before = await loadDatabase(client);
-      if (
-        before.memberships.some(
-          (m) => m.connectionId === homebaseId && m.userId === userId,
-        )
-      )
-        return { entityId: homebaseId, duplicate: true };
-      let after = structuredClone(before);
-      after.memberships.push({
-        id: id("member"),
-        connectionId: homebaseId,
-        userId,
-      });
-      const now = new Date().toISOString();
-      // New members initialize participation without rewriting saved reward rosters.
-      for (const activity of after.activities.filter(
-        (a) => a.connectionId === homebaseId,
-      )) {
-        const root = after.milestones.find(
-          (m) => m.activityId === activity.id && m.kind === "join",
-        )!;
-        after.participations.push({
-          id: id("participation"),
-          activityId: activity.id,
-          userId,
-          target: after.activityTemplates.find(
-            (t) => t.id === activity.templateId,
-          )!.target,
-          status: "invited",
-        });
-        after = execute(
-          after,
-          {
-            type: "recordLog",
-            actorId: userId,
-            input: {
-              authorUserId: userId,
-              milestoneId: root.id,
-              isSuccess: true,
-              title: "Joined activity with home-base membership",
-              durationMinutes: 0,
-              occurredAt: now,
-              origin: "automation",
-            },
-          },
-          now,
-        ).db;
-      }
-      await persistChanges(client, before, after);
-      return { entityId: homebaseId, duplicate: false };
-    });
+    return this.database.transaction(true, (client) =>
+      joinHomebase(client, userId, inviteCode),
+    );
   }
 }

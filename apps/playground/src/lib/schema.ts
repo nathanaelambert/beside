@@ -64,8 +64,8 @@ export const tables: Table[] = [
     sql: "homebase",
     color: "neutral",
     description:
-      "A personal or shared home base. Membership grants access to its activities, logs, and collectively earned rewards. Existing JSON uses the connections key.",
-    columns: ["text id PK", "text name", "text personal_owner_id FK"],
+      "A home base. Membership grants access to its activities, logs, and collectively earned rewards. Existing JSON uses the connections key.",
+    columns: ["text id PK", "text name"],
   },
   {
     key: "memberships",
@@ -125,12 +125,11 @@ export const tables: Table[] = [
     sql: "activity",
     color: "ochre",
     description:
-      "Exactly one owner scope: personal_owner_id XOR connection_id. Shared rules, independent personal targets.",
+      "Every activity belongs to one home base. Shared rules, independent personal targets.",
     columns: [
       "text id PK",
       "text template_id FK",
       "text creator_user_id FK",
-      "text personal_owner_id FK",
       "text connection_id FK",
       "text name",
       "text description",
@@ -252,8 +251,7 @@ const relations: [TableKey, string, TableKey, string][] = [
   ["connections", "||--o{", "rewards", "owns"],
   ["users", "||--o{", "memberships", "belongs"],
   ["connections", "||--o{", "memberships", "includes"],
-  ["users", "o|--o{", "activities", "personal_owner"],
-  ["connections", "o|--o{", "activities", "shared_owner"],
+  ["connections", "||--o{", "activities", "owns"],
   ["users", "||--o{", "activities", "creates"],
   ["activityTemplates", "||--o{", "activities", "initializes"],
   ["activities", "||--o{", "participations", "has"],
@@ -298,7 +296,7 @@ export const modules: {
     id: "ownership",
     name: "People & ownership",
     description:
-      "A user belongs to connections. An activity belongs to one personal owner or one connection. Participation holds individual commitments.",
+      "A user belongs to connections. An activity belongs to one home base. Participation holds individual commitments.",
     keys: [
       "users",
       "connections",

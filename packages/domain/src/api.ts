@@ -12,7 +12,12 @@ const email = z
   .max(254)
   .transform((value) => value.toLowerCase());
 const password = z.string().min(12).max(128);
-export const registerSchema = z.strictObject({ name, email, password });
+export const registerSchema = z.strictObject({
+  name,
+  email,
+  password,
+  inviteCode: z.string().trim().max(100).optional(),
+});
 export const loginSchema = z.strictObject({ email, password });
 export const createHomebaseSchema = z.strictObject({ name });
 export const joinHomebaseSchema = z.strictObject({
@@ -27,7 +32,7 @@ export const createActivitySchema = z.strictObject({
   templateId: id,
   name,
   description: z.string().max(2000).default(""),
-  connectionId: id.nullable().default(null),
+  connectionId: id,
   subjectIds: z.array(id).max(100).default([]),
   target: z.number().positive().finite(),
 });
@@ -54,7 +59,7 @@ export const mutationSchema = z.object({
   duplicate: z.boolean(),
 });
 export const homebaseSchema = databaseSchema.shape.connections.element.extend({
-  inviteCode: z.string().nullable(),
+  inviteCode: z.string(),
   memberIds: z.array(id),
 });
 export const stateSchema = databaseSchema.extend({

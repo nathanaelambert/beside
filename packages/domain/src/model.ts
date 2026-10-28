@@ -29,11 +29,7 @@ export const members = (db: Database, connectionId: string) =>
     .filter((m) => m.connectionId === connectionId)
     .map((m) => m.userId);
 export const visibleActivities = (db: Database, userId: string) =>
-  db.activities.filter(
-    (a) =>
-      a.personalOwnerId === userId ||
-      (a.connectionId && members(db, a.connectionId).includes(userId)),
-  );
+  db.activities.filter((a) => members(db, a.connectionId).includes(userId));
 export const canSeeActivity = (
   db: Database,
   userId: string,
@@ -155,11 +151,7 @@ function shareLog(
   }
 }
 export const homebaseForActivity = (db: Database, activity: Activity) =>
-  db.connections.find((base) =>
-    activity.connectionId
-      ? base.id === activity.connectionId
-      : base.personalOwnerId === activity.personalOwnerId,
-  );
+  db.connections.find((base) => base.id === activity.connectionId);
 export const completedMilestone = (
   db: Database,
   milestoneId: string,
@@ -300,13 +292,8 @@ export function execute(
       positive(command.target, "Target");
       if (command.description.length > 2000)
         throw new Error("Description is too long.");
-      if (
-        command.connectionId &&
-        (!members(db, command.connectionId).includes(command.actorId) ||
-          db.connections.find((b) => b.id === command.connectionId)
-            ?.personalOwnerId !== null)
-      )
-        throw new Error("Choose a connection you belong to.");
+      if (!members(db, command.connectionId).includes(command.actorId))
+        throw new Error("Choose a home base you belong to.");
       for (const subjectId of command.subjectIds) {
         const subject = requireValue(
           visibleSubjects(db, command.actorId).find((s) => s.id === subjectId),
@@ -326,7 +313,6 @@ export function execute(
         description: command.description,
         creatorUserId: command.actorId,
         connectionId: command.connectionId,
-        personalOwnerId: command.connectionId ? null : command.actorId,
         category: template.category,
         progressMode: template.progressMode,
         unit: template.unit,
@@ -338,9 +324,7 @@ export function execute(
           activityId: entityId,
           subjectId,
         });
-      const participants = command.connectionId
-        ? members(db, command.connectionId)
-        : [command.actorId];
+      const participants = members(db, command.connectionId);
       for (const userId of participants)
         db.participations.push({
           id: id("participation"),
@@ -391,7 +375,7 @@ export function execute(
         "activity.created",
         "activity",
         entityId,
-        `Created “${command.name.trim()}” with ${participants.length} participation record(s). ${command.connectionId ? "The connection owns the activity." : "The creator owns this personal activity."}`,
+        `Created “${command.name.trim()}” with ${participants.length} participation record(s). The home base owns the activity.`,
         participants,
         command.connectionId,
         "activity",
@@ -624,8 +608,7 @@ export function execute(
         "private",
         log.origin,
       );
-      if (activity.connectionId)
-        shareLog(db, command.actorId, log, [activity.connectionId]);
+      shareLog(db, command.actorId, log, [activity.connectionId]);
       const person = requireValue(
         participation(db, activity.id, command.actorId),
         "Participation is missing.",

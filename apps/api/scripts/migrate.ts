@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import {
   createPool,
   emptyDatabase,
@@ -18,30 +18,36 @@ try {
   await client.query(
     "CREATE TABLE IF NOT EXISTS beside_migration (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())",
   );
-  const name = "001_initial.sql";
-  const result = await client.query(
-    "SELECT 1 FROM beside_migration WHERE name = $1",
-    [name],
-  );
-  if (!result.rowCount) {
-    const sql = await readFile(
-      new URL("../src/db/migrations/001_initial.sql", import.meta.url),
-      "utf8",
+  const directory = new URL("../src/db/migrations/", import.meta.url);
+  const migrations = (await readdir(directory))
+    .filter((name) => /^\d+_.*\.sql$/.test(name))
+    .sort();
+  let initialized = false;
+  for (const name of migrations) {
+    const result = await client.query(
+      "SELECT 1 FROM beside_migration WHERE name = $1",
+      [name],
     );
-    await client.query(sql);
+    if (result.rowCount) {
+      console.log(`${name} already applied.`);
+      continue;
+    }
+    await client.query(await readFile(new URL(name, directory), "utf8"));
+    await client.query("INSERT INTO beside_migration(name) VALUES ($1)", [
+      name,
+    ]);
+    if (name === "001_initial.sql") initialized = true;
+    console.log(`Applied ${name}.`);
+  }
+  // Seed a fresh database after every migration, using the current shape.
+  if (initialized) {
     const seeded = emptyDatabase();
     const blank = emptyDatabase();
     blank.rewardItems = [];
     blank.subjectTemplates = [];
     blank.activityTemplates = [];
     await persistChanges(client, blank, seeded);
-    await client.query("INSERT INTO beside_migration(name) VALUES ($1)", [
-      name,
-    ]);
-    console.log(
-      `Applied ${name}; seeded templates and reward catalog. No demo accounts created.`,
-    );
-  } else console.log(`${name} already applied.`);
+  }
   await client.query("COMMIT");
 } catch (error) {
   await client.query("ROLLBACK");

@@ -108,6 +108,7 @@ export function BackendApi() {
                 ? await client.register({
                     ...credentials,
                     name: String(data.get("name")),
+                    inviteCode: String(data.get("inviteCode") ?? ""),
                   })
                 : await client.login(credentials);
               setSession(next);
@@ -155,6 +156,20 @@ export function BackendApi() {
                   required
                 />
               </label>
+              {register && (
+                <label>
+                  Invitation code (optional)
+                  <input
+                    name="inviteCode"
+                    autoComplete="off"
+                    maxLength={100}
+                    aria-describedby="signup-invite-help"
+                  />
+                  <small id="signup-invite-help">
+                    Join your friend’s home base. Leave blank to start your own.
+                  </small>
+                </label>
+              )}
             </div>
             <p className="field-help">
               Use at least 12 characters. Email verification and password
@@ -209,8 +224,8 @@ export function BackendApi() {
           <section className="creation-panel" aria-labelledby="api-homebases">
             <h3 id="api-homebases">Home bases</h3>
             <p>
-              Create a shared space, then give its invitation code to a friend
-              with an API account.
+              Share any home base’s invitation code with a friend. They can use
+              it during signup or join from an existing account.
             </p>
             <div className="form-grid two">
               <form
@@ -222,12 +237,12 @@ export function BackendApi() {
                     await client.createHomebase(name);
                     await reload();
                     form.reset();
-                  }, "Shared home base created.");
+                  }, "Home base created.");
                 }}
               >
                 <fieldset disabled={busy}>
                   <label>
-                    New shared space
+                    New home base
                     <input
                       name="name"
                       maxLength={200}
@@ -274,9 +289,8 @@ export function BackendApi() {
                 <li key={base.id}>
                   <strong>{base.name}</strong>
                   <span>
-                    {base.personalOwnerId
-                      ? "Personal"
-                      : `${base.memberIds.length} members`}
+                    {base.memberIds.length}{" "}
+                    {base.memberIds.length === 1 ? "member" : "members"}
                   </span>
                   {base.inviteCode && (
                     <details>
@@ -304,7 +318,7 @@ export function BackendApi() {
                       templateId: String(data.get("template")),
                       name: String(data.get("name")),
                       target: Number(data.get("target")),
-                      connectionId: String(data.get("homebase")) || null,
+                      connectionId: String(data.get("homebase")),
                     });
                     await reload();
                     form.reset();
@@ -335,15 +349,12 @@ export function BackendApi() {
                     </label>
                     <label>
                       Home base
-                      <select name="homebase">
-                        <option value="">My personal home base</option>
-                        {bases
-                          .filter((base) => !base.personalOwnerId)
-                          .map((base) => (
-                            <option key={base.id} value={base.id}>
-                              {base.name}
-                            </option>
-                          ))}
+                      <select name="homebase" required>
+                        {bases.map((base) => (
+                          <option key={base.id} value={base.id}>
+                            {base.name}
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <label>

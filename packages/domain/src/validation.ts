@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { Database } from "./types.ts";
-import { migrateDemoIdentity, migrateMilestones } from "./migrations.ts";
+import {
+  migrateDemoIdentity,
+  migrateMilestones,
+  migrateHomebases,
+} from "./migrations.ts";
 import { rewardItems } from "@beside/rewards";
 
 const key = z.string().min(1).max(200);
@@ -107,7 +111,7 @@ export const logInputSchema = z
   })
   .strict();
 export const databaseSchema = z.object({
-  version: z.literal(2),
+  version: z.literal(3),
   // Only missing legacy catalogs are seeded. An intentionally empty one stays empty.
   rewardItems: rows(
     z.object({
@@ -125,9 +129,7 @@ export const databaseSchema = z.object({
       color: z.enum(["blue", "rose", "moss"]),
     }),
   ).min(1),
-  connections: rows(
-    z.object({ id: key, name: key, personalOwnerId: key.nullable() }),
-  ),
+  connections: rows(z.object({ id: key, name: key })),
   memberships: rows(z.object({ id: key, connectionId: key, userId: key })),
   subjectTemplates: rows(
     z.object({ id: key, name: key, category, fields: z.array(key), unit: key }),
@@ -158,8 +160,7 @@ export const databaseSchema = z.object({
       id: key,
       templateId: key,
       creatorUserId: key,
-      personalOwnerId: key.nullable(),
-      connectionId: key.nullable(),
+      connectionId: key,
       name: key,
       description: text,
       category,
@@ -257,7 +258,7 @@ export const databaseSchema = z.object({
 });
 export function parseDatabase(input: unknown): Database {
   const db = migrateDemoIdentity(
-    databaseSchema.parse(migrateMilestones(input)),
+    databaseSchema.parse(migrateHomebases(migrateMilestones(input))),
   );
   const tables = Object.entries(db).filter(([name]) => name !== "version") as [
     string,
@@ -282,16 +283,6 @@ export function parseDatabase(input: unknown): Database {
     db.users.map((u) => u.email),
     "user email",
   );
-  for (const base of db.connections) fk(db.users, base.personalOwnerId);
-  unique(
-    db.connections
-      .filter((b) => b.personalOwnerId)
-      .map((b) => b.personalOwnerId!),
-    "personal home base",
-  );
-  for (const user of db.users)
-    if (!db.connections.some((b) => b.personalOwnerId === user.id))
-      throw new Error("Every user needs a personal home base.");
   for (const m of db.memberships) {
     fk(db.connections, m.connectionId);
     fk(db.users, m.userId);
@@ -300,13 +291,6 @@ export function parseDatabase(input: unknown): Database {
     db.memberships.map((m) => `${m.connectionId}:${m.userId}`),
     "membership",
   );
-  for (const base of db.connections.filter((b) => b.personalOwnerId)) {
-    const people = db.memberships.filter((m) => m.connectionId === base.id);
-    if (people.length !== 1 || people[0]!.userId !== base.personalOwnerId)
-      throw new Error(
-        "A personal home base has exactly its owner's membership.",
-      );
-  }
   for (const s of db.subjects) {
     fk(db.subjectTemplates, s.templateId);
     fk(db.users, s.ownerUserId);
@@ -314,19 +298,9 @@ export function parseDatabase(input: unknown): Database {
   for (const a of db.activities) {
     fk(db.activityTemplates, a.templateId);
     fk(db.users, a.creatorUserId);
-    fk(db.users, a.personalOwnerId);
     fk(db.connections, a.connectionId);
-    if ((a.personalOwnerId === null) === (a.connectionId === null))
-      throw new Error("An activity needs exactly one owner scope.");
-    if (
-      a.connectionId &&
-      db.connections.find((b) => b.id === a.connectionId)!.personalOwnerId
-    )
-      throw new Error("Personal activities use their personal owner scope.");
-    if (a.personalOwnerId && a.creatorUserId !== a.personalOwnerId)
-      throw new Error("A personal activity must be created by its owner.");
-    if (a.connectionId && !inConnection(a.connectionId, a.creatorUserId))
-      throw new Error("Activity creator must belong to its connection.");
+    if (!inConnection(a.connectionId, a.creatorUserId))
+      throw new Error("Activity creator must belong to its home base.");
   }
   for (const l of db.activitySubjects) {
     fk(db.activities, l.activityId);
@@ -340,12 +314,8 @@ export function parseDatabase(input: unknown): Database {
     fk(db.activities, p.activityId);
     fk(db.users, p.userId);
     const a = db.activities.find((a) => a.id === p.activityId)!;
-    if (
-      a.connectionId
-        ? !inConnection(a.connectionId, p.userId)
-        : a.personalOwnerId !== p.userId
-    )
-      throw new Error("Participation is outside the activity owner scope.");
+    if (!inConnection(a.connectionId, p.userId))
+      throw new Error("Participant must belong to the activity’s home base.");
   }
   unique(
     db.participations.map((p) => `${p.activityId}:${p.userId}`),
@@ -402,11 +372,7 @@ export function parseDatabase(input: unknown): Database {
     if (!milestone)
       throw new Error("Reward must be assigned to exactly one milestone.");
     const activity = db.activities.find((a) => a.id === milestone.activityId)!;
-    const homebase =
-      activity.connectionId ??
-      db.connections.find(
-        (b) => b.personalOwnerId === activity.personalOwnerId,
-      )!.id;
+    const homebase = activity.connectionId;
     if (reward.homebaseId !== homebase)
       throw new Error("Reward belongs to another home base.");
     for (const userId of reward.requiredUserIds) {
@@ -465,7 +431,6 @@ export function parseDatabase(input: unknown): Database {
           "Successful milestone log must credit exactly its own activity.",
         );
       if (
-        activity.connectionId &&
         !db.logShares.some(
           (share) =>
             share.logId === l.id &&
@@ -600,12 +565,11 @@ export function parseDatabase(input: unknown): Database {
         "Contribution amount differs from the activity's interpretation.",
       );
     if (
-      a.connectionId &&
       !db.logShares.some(
         (s) => s.logId === l.id && s.connectionId === a.connectionId,
       )
     )
-      throw new Error("Shared contribution is missing its audience.");
+      throw new Error("Contribution is missing its home-base audience.");
   }
   unique(
     db.contributions.map((c) => `${c.logId}:${c.participationId}`),

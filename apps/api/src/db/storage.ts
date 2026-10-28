@@ -29,7 +29,7 @@ export function createPool(connectionString: string) {
 }
 export function emptyDatabase(): Database {
   return {
-    version: 2,
+    version: 3,
     rewardItems: structuredClone(rewardItems),
     activityTemplates: structuredClone(activityTemplates),
     subjectTemplates: structuredClone(subjectTemplates),
@@ -50,7 +50,7 @@ export function emptyDatabase(): Database {
   };
 }
 export async function loadDatabase(client: PoolClient): Promise<Database> {
-  const db = { version: 2 } as Database;
+  const db = { version: 3 } as Database;
   for (const [key, table, columns] of tables) {
     const result = await client.query(
       `SELECT ${columns.map(sqlName).join(", ")} FROM ${table} ORDER BY row_order`,

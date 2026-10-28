@@ -35,7 +35,7 @@ export function stateForUser(db: Database, userId: string): ApiState {
     ...rewards.flatMap((reward) => reward.requiredUserIds),
   ]);
   return {
-    version: 2,
+    version: 3,
     users: db.users
       .filter((user) => users.has(user.id))
       .map(({ email: _email, ...user }) => user),
