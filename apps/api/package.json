@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @beside/domain build && tsx watch --env-file-if-exists=.env src/main.ts",
+    "dev": "pnpm --filter @beside/domain build && node scripts/copy-swagger-assets.mjs && tsx watch --env-file-if-exists=.env src/main.ts",
     "build": "pnpm --filter @beside/domain build && tsc -p tsconfig.build.json && node scripts/copy-swagger-assets.mjs",
     "start": "node --env-file-if-exists=.env dist/apps/api/src/main.js",
     "check-types": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "db:migrate": "node --conditions=source --env-file-if-exists=.env --experimental-strip-types scripts/migrate.ts",
-    "test": "pnpm --filter @beside/domain build && tsx --test test/*.test.ts"
+    "test": "pnpm --filter @beside/domain build && node scripts/copy-swagger-assets.mjs && tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@beside/domain": "workspace:*",

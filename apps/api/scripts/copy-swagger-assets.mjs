@@ -8,15 +8,17 @@ import { fileURLToPath } from "node:url";
 const source = dirname(
   createRequire(import.meta.url).resolve("swagger-ui-dist/package.json"),
 );
-const destination = fileURLToPath(new URL("../public/docs/", import.meta.url));
-await mkdir(destination, { recursive: true });
-for (const name of [
-  "swagger-ui.css",
-  "swagger-ui-bundle.js",
-  "swagger-ui-standalone-preset.js",
-  "favicon-16x16.png",
-  "favicon-32x32.png",
-]) {
-  await copyFile(join(source, name), join(destination, name));
+for (const folder of ["../public/docs/", "../dist/apps/api/public/docs/"]) {
+  const destination = fileURLToPath(new URL(folder, import.meta.url));
+  await mkdir(destination, { recursive: true });
+  for (const name of [
+    "swagger-ui.css",
+    "swagger-ui-bundle.js",
+    "swagger-ui-standalone-preset.js",
+    "favicon-16x16.png",
+    "favicon-32x32.png",
+  ]) {
+    await copyFile(join(source, name), join(destination, name));
+  }
 }
 console.log("Prepared Swagger UI assets for Vercel's public directory.");
