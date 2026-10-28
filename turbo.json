@@ -14,7 +14,13 @@
         "POSTGRES_*",
         "NEON_PROJECT_ID"
       ],
-      "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**", "dist/**"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "!.next/dev/**",
+        "dist/**",
+        "public/docs/**"
+      ]
     },
     "lint": {
       "dependsOn": ["^lint"]

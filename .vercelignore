@@ -9,5 +9,6 @@
 apps/mobile/public/**
 apps/mobile/ios/**
 apps/mobile/android/**
+apps/api/public/docs/**
 .agents/**
 skills-lock.json

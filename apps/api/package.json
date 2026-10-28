@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @beside/domain build && tsx watch --env-file-if-exists=.env src/main.ts",
-    "build": "pnpm --filter @beside/domain build && tsc -p tsconfig.build.json",
+    "build": "pnpm --filter @beside/domain build && tsc -p tsconfig.build.json && node scripts/copy-swagger-assets.mjs",
     "start": "node --env-file-if-exists=.env dist/apps/api/src/main.js",
     "check-types": "tsc --noEmit",
     "lint": "tsc --noEmit",
