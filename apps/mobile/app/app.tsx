@@ -44,6 +44,7 @@ const config = {
     },
     Welcome: "welcome",
     RewardItems: "rewards",
+    PixelWorld: "world",
     Demo: {
       screens: {
         DemoShowroom: {

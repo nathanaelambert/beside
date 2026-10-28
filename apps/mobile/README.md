@@ -9,6 +9,70 @@ pnpm install
 pnpm dev --filter=mobile
 ```
 
+## Skia pixel-world PoC
+
+On the `pixel-world-skia-poc` branch, a fresh launch opens **A little beside**.
+Existing navigation state may restore another screen; use **Explore pixel world**
+on Login or Welcome, or open `beside://world`. No sign-in is needed.
+
+```sh
+# Rebuild the dev client once, because Skia adds native code.
+pnpm --filter mobile ios
+# Or, with an Android device/emulator:
+pnpm --filter mobile android
+```
+
+After that first build, `pnpm --filter mobile start` starts Metro for the installed
+development client. An older development client will need rebuilding.
+
+- Drag the meadow to pan, and use **Recenter** to return to the starting view.
+- Tap a catalogue item to read its mocked keepsake description.
+- Tap **Decorate**, choose any of the eight rewards, and tap an empty patch of lawn.
+  The translucent sprite is a preview; **Place here** confirms it and **Cancel**
+  discards it. Water, occupied spots, and the outer woodland reject placement.
+- **Reset scene** restores the original arrangement. **Photo** hides the header
+  and tray for a device/simulator screenshot; **Show controls** brings them back.
+
+The meadow, pond, bridge, avatars, and all world sprites are drawn by
+`@shopify/react-native-skia` (Expo SDK 55's compatible version, 2.4.18). The sprites
+come directly from `@beside/rewards` through `pixelPaths()`. Integer scale factors,
+snapped camera translation, and disabled path antialiasing keep pixels crisp.
+Gesture Handler and Reanimated pan the camera on the UI thread. Ordinary React
+Native views provide the text and placement tray. There are no downloaded art
+assets, backend calls, purchases, or persistence; the initial arrangement and
+memories are mock data. This is a visual/interaction spike, not a world engine or
+a performance benchmark.
+
+For the web version:
+
+```sh
+pnpm --filter mobile web
+# Open http://localhost:8081/world (or the port Expo prints).
+```
+
+The web script copies CanvasKit to `public/canvaskit.wasm`, then the web entry
+loads it before importing the app. `postinstall` also generates this ignored
+file. If invoking Expo directly instead of the web script, run
+`pnpm --filter mobile run postinstall` first. Native entry remains synchronous.
+
+Validation commands:
+
+```sh
+pnpm --filter mobile check-types
+pnpm --filter mobile lint:check
+pnpm --filter mobile test --runInBand
+pnpm --filter mobile exec expo export --platform all --output-dir /tmp/beside-pixel-world-export
+```
+
+The interaction tests cover picking the frontmost sprite, generous hit targets,
+placement snapping, and rejection of occupied land, water, and the map edge.
+Type checking, lint, all 23 tests, and iOS/Android/web exports passed. The native
+iOS build also passed, and the scene was exercised on an iPhone 16 Pro simulator
+running iOS 18.3: catalogue selection, previewing and confirming a tulip placement,
+resetting the scene, and photo mode. The exported web app passed the placement, reset, and
+photo-mode flow at a 390px viewport without runtime errors. Android runtime
+behavior has not been checked.
+
 ## Reward items
 
 Open **Preview reward items** on Login, or **Explore reward items** on Welcome.

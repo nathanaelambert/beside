@@ -65,6 +65,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = function WelcomeScreen(_pro
           text="Explore reward items"
           onPress={() => navigation.navigate("RewardItems")}
         />
+        <Button text="Explore pixel world" onPress={() => navigation.navigate("PixelWorld")} />
 
         <Button
           testID="next-screen-button"
