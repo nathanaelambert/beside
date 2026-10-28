@@ -67,3 +67,46 @@ it("returns validation errors and supports an empty logout response", async () =
   );
   await assert.doesNotReject(() => logout.logout());
 });
+
+it("sends typed CRUD changes with encoded identifiers and bearer authorization", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const client = new BesideClient("https://api.example.test", (async (
+    url,
+    init,
+  ) => {
+    calls.push({ url: String(url), init });
+    return Response.json({ entityId: "saved", duplicate: false });
+  }) as typeof fetch);
+  client.setToken("session-token");
+  await client.updateHomebase("base/1", "New name");
+  await client.deleteHomebase("base/1");
+  await client.updateActivity("activity/1", {
+    description: "New description",
+    target: 12,
+  });
+  await client.deleteActivity("activity/1");
+  await client.updateMilestone("milestone/1", { name: "New title" });
+  await client.deleteMilestone("milestone/1");
+  assert.deepEqual(
+    calls.map((call) => [new URL(call.url).pathname, call.init?.method]),
+    [
+      ["/api/v1/homebases/base%2F1", "PATCH"],
+      ["/api/v1/homebases/base%2F1", "DELETE"],
+      ["/api/v1/activities/activity%2F1", "PATCH"],
+      ["/api/v1/activities/activity%2F1", "DELETE"],
+      ["/api/v1/milestones/milestone%2F1", "PATCH"],
+      ["/api/v1/milestones/milestone%2F1", "DELETE"],
+    ],
+  );
+  assert.deepEqual(JSON.parse(String(calls[2]!.init!.body)), {
+    description: "New description",
+    target: 12,
+  });
+  assert.ok(
+    calls.every(
+      (call) =>
+        new Headers(call.init?.headers).get("Authorization") ===
+        "Bearer session-token",
+    ),
+  );
+});

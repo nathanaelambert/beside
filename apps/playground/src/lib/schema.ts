@@ -215,7 +215,7 @@ export const tables: Table[] = [
     sql: "domain_event",
     color: "rose",
     description:
-      "An append-only explanation of a mutation. entity_type/entity_id is an event-envelope reference validated by the command layer, not a polymorphic SQL foreign key.",
+      "An explanation of a mutation. Related events are removed with deleted records; deletion notices reference a surviving activity, base or actor. entity_type/entity_id is an event-envelope reference validated by the command layer, not a polymorphic SQL foreign key.",
     columns: [
       "text id PK",
       "text actor_user_id FK",

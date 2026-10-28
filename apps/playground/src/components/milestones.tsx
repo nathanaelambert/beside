@@ -13,6 +13,7 @@ import {
 import type { ViewProps } from "./playground";
 import { Badge, Empty, JsonRecord, Person, when } from "./ui";
 import { PixelSprite } from "./reward-items";
+import { RecordManager, MilestoneEditor } from "./record-management";
 
 export type RecordMilestone = (
   activityId?: string,
@@ -99,7 +100,8 @@ export function ActivityMilestones({
             <Badge color="blue">0 · Participation</Badge>
             <p>
               The first milestone is logged automatically for every participant
-              when the activity starts. It gives no achievement credit.
+              when the activity starts. It gives no achievement credit and
+              cannot be edited or deleted separately.
             </p>
             <small>
               Your status: {mine?.status ?? "not participating"}. Leaving
@@ -201,6 +203,39 @@ export function ActivityMilestones({
                     </div>
                   </div>
                 )}
+                <RecordManager
+                  kind="milestone"
+                  name={milestone.name}
+                  description="This deletes this milestone and its descendants for every participant, including their logs, progress and attached rewards."
+                  onDelete={() =>
+                    !!run(
+                      {
+                        type: "deleteMilestone",
+                        actorId: userId,
+                        milestoneId: milestone.id,
+                      },
+                      "Milestone and child milestones deleted.",
+                    )
+                  }
+                  editor={(close) => (
+                    <MilestoneEditor
+                      milestone={milestone}
+                      data={db}
+                      cancel={close}
+                      save={(changes) =>
+                        !!run(
+                          {
+                            type: "updateMilestone",
+                            actorId: userId,
+                            milestoneId: milestone.id,
+                            changes,
+                          },
+                          "Milestone updated.",
+                        )
+                      }
+                    />
+                  )}
+                />
                 <JsonRecord value={{ milestone, reward }} />
               </div>
               {done ? (

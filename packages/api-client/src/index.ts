@@ -9,6 +9,8 @@ import type {
   MutationResult,
   RegisterInput,
   Session,
+  UpdateActivityInput,
+  UpdateMilestoneInput,
 } from "@beside/domain/api";
 import type { User } from "@beside/domain/types";
 export type * from "@beside/domain/api";
@@ -112,6 +114,45 @@ export class BesideClient {
     return this.request<MutationResult>("/homebases/join", "POST", {
       inviteCode,
     });
+  }
+  updateHomebase(homebaseId: string, name: string) {
+    return this.request<MutationResult>(
+      `/homebases/${encodeURIComponent(homebaseId)}`,
+      "PATCH",
+      { name },
+    );
+  }
+  deleteHomebase(homebaseId: string) {
+    return this.request<MutationResult>(
+      `/homebases/${encodeURIComponent(homebaseId)}`,
+      "DELETE",
+    );
+  }
+  updateActivity(activityId: string, input: UpdateActivityInput) {
+    return this.request<MutationResult>(
+      `/activities/${encodeURIComponent(activityId)}`,
+      "PATCH",
+      input,
+    );
+  }
+  deleteActivity(activityId: string) {
+    return this.request<MutationResult>(
+      `/activities/${encodeURIComponent(activityId)}`,
+      "DELETE",
+    );
+  }
+  updateMilestone(milestoneId: string, input: UpdateMilestoneInput) {
+    return this.request<MutationResult>(
+      `/milestones/${encodeURIComponent(milestoneId)}`,
+      "PATCH",
+      input,
+    );
+  }
+  deleteMilestone(milestoneId: string) {
+    return this.request<MutationResult>(
+      `/milestones/${encodeURIComponent(milestoneId)}`,
+      "DELETE",
+    );
   }
   createSubject(input: CreateSubjectInput) {
     return this.request<MutationResult>("/subjects", "POST", input);

@@ -16,7 +16,7 @@ Creating an activity first creates exactly one root milestone, whose `parentId` 
 
 Milestone zero is the first milestone and initial log for every participant. Its automatic success initializes participation; logging a later failure leaves the activity. Milestone zero has no schedule or reward and never grants achievement progress. Participation rows retain personal targets and project the latest root decision. A user may successfully join once; after leaving a joined activity they cannot successfully join it again. Historical invited/declined states remain readable for compatibility with older experiments.
 
-Other milestones have a parent in the same activity. The hierarchy must be acyclic and reach milestone zero. Parents organize achievements; logging a child does not complete its parent or siblings. Existing milestones are immutable in this pass.
+Other milestones have a parent in the same activity. The hierarchy must be acyclic and reach milestone zero. Parents organize achievements; logging a child does not complete its parent or siblings. Milestone names are editable. Parent, quantity, schedule and reward item can change until the milestone has its first log; existing reward rosters stay fixed. Milestone zero cannot be edited or deleted separately.
 
 ## Implemented schedule policies
 
@@ -43,3 +43,9 @@ The reward requirement, submission-time schedules, and failed-attempt behavior w
 Database payloads now use version 3. Storage remains under `beside.playground.v1` so current experiments are found and upgraded. Migration preserves original v1 log IDs, contributions, events, ownership, and timestamps; those historical logs have `milestoneId: null`. It adds home bases and root decision logs for existing participation, without guessing achievements or retroactively granting items. The v2 → v3 migration removes personal-owner fields, points former personal activities at their existing base, and backfills their log audiences. IDs, memberships, progress and rewards remain intact. The API SQL migration also backfills invitation codes, preserving existing codes. New members can see that base’s earlier activity history. Old activity targets and progress remain intact. Add explicit milestones to continue logging in a migrated experiment, or reset the seed for chapter, episode, and workout examples.
 
 Import validation checks foreign keys, home-base membership, same-activity ancestry and cycles, one root per activity, unique successful user/milestone pairs, reward scope and completion, contribution attribution, schedule windows, and root/participation consistency. The browser remains a local sandbox with simulated identities and last-writer-wins storage; the SQL is a reference shape, not a deployed migration.
+
+## Editing and deletion
+
+All home-base members can manage its records. Home bases can be renamed; activities can change name and description, with personal targets applying only to the editor. Both the API workspace and the local experiment expose edit/delete controls.
+
+Deletion permanently removes dependent records: milestone deletion includes descendants, their milestone logs, contributions and attached rewards; activity deletion includes all its milestones, participation and subject links; base deletion includes its activities, members, audiences and invitation code. Accounts, subjects and unrelated activities remain. Related events/deliveries are removed with their records; a deletion notice points at a surviving activity, home base or actor. All SQL changes commit together under the shared write lock.

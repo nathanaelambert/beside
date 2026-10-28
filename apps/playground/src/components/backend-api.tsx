@@ -9,6 +9,12 @@ import {
   type Session,
 } from "@beside/api-client";
 import { Empty, JsonRecord } from "./ui";
+import {
+  RecordManager,
+  HomebaseEditor,
+  ActivityEditor,
+  MilestoneEditor,
+} from "./record-management";
 
 const apiUrl =
   process.env.NEXT_PUBLIC_BESIDE_API_URL ?? "http://localhost:3001";
@@ -37,6 +43,7 @@ export function BackendApi() {
     try {
       await action();
       if (message) setNotice({ error: false, text: message });
+      return true;
     } catch (error) {
       setNotice({
         error: true,
@@ -45,6 +52,7 @@ export function BackendApi() {
             ? error.message
             : "The API could not be reached.",
       });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -284,6 +292,13 @@ export function BackendApi() {
                 </fieldset>
               </form>
             </div>
+            {!bases.length && (
+              <Empty>Create or join a home base to start an activity.</Empty>
+            )}
+            <p className="field-help">
+              Members can edit or delete shared records. These changes affect
+              everyone in the home base.
+            </p>
             <ul className="api-homebase-list">
               {bases.map((base) => (
                 <li key={base.id}>
@@ -292,6 +307,31 @@ export function BackendApi() {
                     {base.memberIds.length}{" "}
                     {base.memberIds.length === 1 ? "member" : "members"}
                   </span>
+                  <RecordManager
+                    kind="home base"
+                    name={base.name}
+                    busy={busy}
+                    description={`This deletes the home base for all ${base.memberIds.length} members, including its activities, milestone logs, progress, earned rewards and invitation code. Accounts and subjects are kept.`}
+                    onDelete={() =>
+                      run(async () => {
+                        await client.deleteHomebase(base.id);
+                        await reload();
+                      }, "Home base deleted for all members.")
+                    }
+                    editor={(close) => (
+                      <HomebaseEditor
+                        base={base}
+                        busy={busy}
+                        cancel={close}
+                        save={(name) =>
+                          run(async () => {
+                            await client.updateHomebase(base.id, name);
+                            await reload();
+                          }, "Home base updated.")
+                        }
+                      />
+                    )}
+                  />
                   {base.inviteCode && (
                     <details>
                       <summary>Show invitation code</summary>
@@ -349,7 +389,12 @@ export function BackendApi() {
                     </label>
                     <label>
                       Home base
-                      <select name="homebase" required>
+                      <select name="homebase" required disabled={!bases.length}>
+                        {!bases.length && (
+                          <option value="">
+                            Create or join a home base first
+                          </option>
+                        )}
                         {bases.map((base) => (
                           <option key={base.id} value={base.id}>
                             {base.name}
@@ -369,7 +414,11 @@ export function BackendApi() {
                       />
                     </label>
                   </div>
-                  <button className="button" type="submit">
+                  <button
+                    className="button"
+                    type="submit"
+                    disabled={!bases.length}
+                  >
                     Create activity
                   </button>
                 </fieldset>
@@ -387,6 +436,38 @@ export function BackendApi() {
                     <summary>
                       <strong>{activity.name}</strong> · {activity.unit}
                     </summary>
+                    <RecordManager
+                      kind="activity"
+                      name={activity.name}
+                      busy={busy}
+                      description="This deletes the activity for all members, including its milestones, milestone logs, progress and earned rewards. Subjects are kept."
+                      onDelete={() =>
+                        run(async () => {
+                          await client.deleteActivity(activity.id);
+                          await reload();
+                        }, "Activity deleted.")
+                      }
+                      editor={(close) => (
+                        <ActivityEditor
+                          activity={activity}
+                          target={
+                            state.participations.find(
+                              (person) =>
+                                person.activityId === activity.id &&
+                                person.userId === session.user.id,
+                            )?.target
+                          }
+                          busy={busy}
+                          cancel={close}
+                          save={(input) =>
+                            run(async () => {
+                              await client.updateActivity(activity.id, input);
+                              await reload();
+                            }, "Activity updated.")
+                          }
+                        />
+                      )}
+                    />
                     <form
                       onSubmit={(event) => {
                         event.preventDefault();
@@ -452,7 +533,40 @@ export function BackendApi() {
                           );
                           return (
                             <li key={milestone.id}>
-                              <span>{milestone.name}</span>
+                              <div className="api-milestone-content">
+                                <strong>{milestone.name}</strong>
+                                <RecordManager
+                                  kind="milestone"
+                                  name={milestone.name}
+                                  busy={busy}
+                                  description="This deletes the milestone and all child milestones for every participant, including their logs, progress and attached rewards."
+                                  onDelete={() =>
+                                    run(async () => {
+                                      await client.deleteMilestone(
+                                        milestone.id,
+                                      );
+                                      await reload();
+                                    }, "Milestone and its child milestones deleted.")
+                                  }
+                                  editor={(close) => (
+                                    <MilestoneEditor
+                                      milestone={milestone}
+                                      data={state}
+                                      busy={busy}
+                                      cancel={close}
+                                      save={(input) =>
+                                        run(async () => {
+                                          await client.updateMilestone(
+                                            milestone.id,
+                                            input,
+                                          );
+                                          await reload();
+                                        }, "Milestone updated.")
+                                      }
+                                    />
+                                  )}
+                                />
+                              </div>
                               <button
                                 className="button small secondary"
                                 disabled={busy || complete}

@@ -131,7 +131,14 @@ export interface DomainEvent {
   id: string;
   actorUserId: string;
   type: string;
-  entityType: "subject" | "activity" | "log" | "milestone" | "reward";
+  entityType:
+    | "subject"
+    | "activity"
+    | "log"
+    | "milestone"
+    | "reward"
+    | "homebase"
+    | "user";
   entityId: string;
   message: string;
   origin: Origin;
@@ -174,7 +181,36 @@ export interface LogInput {
   origin: Origin;
   externalKey?: string | null;
 }
+export type ActivityUpdate = Partial<Pick<Activity, "name" | "description">> & {
+  target?: number;
+};
+export type MilestoneUpdate = Partial<
+  Pick<Milestone, "name" | "quantity" | "policy" | "startAt" | "endAt">
+> & { parentId?: string | null; itemId?: string | null };
+
 export type Command =
+  | { type: "createHomebase"; actorId: string; name: string }
+  | {
+      type: "updateHomebase";
+      actorId: string;
+      homebaseId: string;
+      name: string;
+    }
+  | { type: "deleteHomebase"; actorId: string; homebaseId: string }
+  | {
+      type: "updateActivity";
+      actorId: string;
+      activityId: string;
+      changes: ActivityUpdate;
+    }
+  | { type: "deleteActivity"; actorId: string; activityId: string }
+  | {
+      type: "updateMilestone";
+      actorId: string;
+      milestoneId: string;
+      changes: MilestoneUpdate;
+    }
+  | { type: "deleteMilestone"; actorId: string; milestoneId: string }
   | {
       type: "createSubject";
       actorId: string;

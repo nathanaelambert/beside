@@ -9,6 +9,7 @@ import type {
   Origin,
   Participation,
 } from "./types.ts";
+import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
 import { logInputSchema, milestoneInputSchema } from "./validation.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
@@ -234,6 +235,98 @@ function awardReward(
     origin,
   );
 }
+// All management actions use the same home-base membership boundary.
+function managedActivity(db: Database, actorId: string, activityId: string) {
+  const activity = requireValue(
+    db.activities.find((row) => row.id === activityId),
+    "Activity is missing.",
+  );
+  if (!canSeeActivity(db, actorId, activity))
+    throw new Error("Activity is not accessible.");
+  return activity;
+}
+export function milestoneSubtree(
+  db: Pick<Database, "milestones">,
+  milestoneId: string,
+): Set<string> {
+  const ids = new Set([milestoneId]);
+  for (let previous = 0; previous !== ids.size;) {
+    previous = ids.size;
+    for (const milestone of db.milestones)
+      if (ids.has(milestone.parentId)) ids.add(milestone.id);
+  }
+  return ids;
+}
+function removeGraph(
+  db: Database,
+  milestoneIds: Set<string>,
+  activityIds = new Set<string>(),
+  homebaseIds = new Set<string>(),
+) {
+  const logIds = new Set(
+    db.logs
+      .filter((log) => log.milestoneId && milestoneIds.has(log.milestoneId))
+      .map((log) => log.id),
+  );
+  const people = new Set(
+    db.participations
+      .filter((person) => activityIds.has(person.activityId))
+      .map((person) => person.id),
+  );
+  const rewardIds = new Set(
+    db.milestones
+      .filter(
+        (milestone) => milestoneIds.has(milestone.id) && milestone.rewardId,
+      )
+      .map((milestone) => milestone.rewardId!),
+  );
+  const removed = {
+    log: logIds,
+    milestone: milestoneIds,
+    activity: activityIds,
+    reward: rewardIds,
+    homebase: homebaseIds,
+    subject: new Set<string>(),
+    user: new Set<string>(),
+  };
+  const eventIds = new Set(
+    db.events
+      .filter((event) => removed[event.entityType].has(event.entityId))
+      .map((event) => event.id),
+  );
+  db.deliveries = db.deliveries.filter(
+    (delivery) =>
+      !eventIds.has(delivery.eventId) &&
+      !homebaseIds.has(delivery.connectionId ?? ""),
+  );
+  db.events = db.events.filter((event) => !eventIds.has(event.id));
+  db.contributions = db.contributions.filter(
+    (credit) =>
+      !logIds.has(credit.logId) && !people.has(credit.participationId),
+  );
+  db.logShares = db.logShares.filter(
+    (share) => !logIds.has(share.logId) && !homebaseIds.has(share.connectionId),
+  );
+  db.logs = db.logs.filter((log) => !logIds.has(log.id));
+  db.milestones = db.milestones.filter(
+    (milestone) => !milestoneIds.has(milestone.id),
+  );
+  db.rewards = db.rewards.filter((reward) => !rewardIds.has(reward.id));
+  db.participations = db.participations.filter(
+    (person) => !people.has(person.id),
+  );
+  db.activitySubjects = db.activitySubjects.filter(
+    (link) => !activityIds.has(link.activityId),
+  );
+  db.activities = db.activities.filter(
+    (activity) => !activityIds.has(activity.id),
+  );
+  db.memberships = db.memberships.filter(
+    (member) => !homebaseIds.has(member.connectionId),
+  );
+  db.connections = db.connections.filter((base) => !homebaseIds.has(base.id));
+}
+
 export function execute(
   database: Database,
   command: Command,
@@ -247,6 +340,287 @@ export function execute(
   );
   let entityId = "";
   switch (command.type) {
+    case "createHomebase": {
+      nonempty(command.name, "Home-base name", 200);
+      entityId = id("homebase");
+      db.connections.push({ id: entityId, name: command.name.trim() });
+      db.memberships.push({
+        id: id("member"),
+        connectionId: entityId,
+        userId: command.actorId,
+      });
+      emit(
+        db,
+        command.actorId,
+        "homebase.created",
+        "homebase",
+        entityId,
+        `Created home base “${command.name.trim()}”.`,
+        [command.actorId],
+        entityId,
+        "activity",
+      );
+      break;
+    }
+    case "updateHomebase": {
+      const base = requireValue(
+        db.connections.find((row) => row.id === command.homebaseId),
+        "Home base is missing.",
+      );
+      const people = members(db, base.id);
+      if (!people.includes(command.actorId))
+        throw new Error("Home base is not accessible.");
+      nonempty(command.name, "Home-base name", 200);
+      base.name = command.name.trim();
+      entityId = base.id;
+      emit(
+        db,
+        command.actorId,
+        "homebase.updated",
+        "homebase",
+        base.id,
+        `Renamed home base to “${base.name}”.`,
+        people,
+        base.id,
+        "activity",
+      );
+      break;
+    }
+    case "deleteHomebase": {
+      const base = requireValue(
+        db.connections.find((row) => row.id === command.homebaseId),
+        "Home base is missing.",
+      );
+      const people = members(db, base.id);
+      if (!people.includes(command.actorId))
+        throw new Error("Home base is not accessible.");
+      const activities = new Set(
+        db.activities
+          .filter((activity) => activity.connectionId === base.id)
+          .map((activity) => activity.id),
+      );
+      const milestones = new Set(
+        db.milestones
+          .filter((milestone) => activities.has(milestone.activityId))
+          .map((milestone) => milestone.id),
+      );
+      entityId = base.id;
+      removeGraph(db, milestones, activities, new Set([base.id]));
+      emit(
+        db,
+        command.actorId,
+        "homebase.deleted",
+        "user",
+        command.actorId,
+        `Deleted home base “${base.name}” and its activities, milestones, logs and rewards.`,
+        people,
+        null,
+        "activity",
+      );
+      break;
+    }
+    case "updateActivity": {
+      const activity = managedActivity(db, command.actorId, command.activityId);
+      const changes = updateActivitySchema.parse(command.changes);
+      if (changes.name !== undefined) activity.name = changes.name;
+      if (changes.description !== undefined)
+        activity.description = changes.description;
+      if (changes.target !== undefined)
+        requireValue(
+          participation(db, activity.id, command.actorId),
+          "Participation is missing.",
+        ).target = changes.target;
+      entityId = activity.id;
+      emit(
+        db,
+        command.actorId,
+        "activity.updated",
+        "activity",
+        activity.id,
+        `Updated “${activity.name}”. Personal target changes apply only to the editor.`,
+        members(db, activity.connectionId),
+        activity.connectionId,
+        "activity",
+      );
+      break;
+    }
+    case "deleteActivity": {
+      const activity = managedActivity(db, command.actorId, command.activityId);
+      const milestones = new Set(
+        db.milestones
+          .filter((milestone) => milestone.activityId === activity.id)
+          .map((milestone) => milestone.id),
+      );
+      entityId = activity.id;
+      removeGraph(db, milestones, new Set([activity.id]));
+      emit(
+        db,
+        command.actorId,
+        "activity.deleted",
+        "homebase",
+        activity.connectionId,
+        `Deleted activity “${activity.name}” and its milestones, logs, progress and rewards.`,
+        members(db, activity.connectionId),
+        activity.connectionId,
+        "activity",
+      );
+      break;
+    }
+    case "updateMilestone": {
+      const milestone = requireValue(
+        db.milestones.find((row) => row.id === command.milestoneId),
+        "Milestone is missing.",
+      );
+      const activity = managedActivity(
+        db,
+        command.actorId,
+        milestone.activityId,
+      );
+      if (milestone.kind === "join")
+        throw new Error(
+          "Milestone zero is managed by the activity and cannot be edited.",
+        );
+      const changes = updateMilestoneSchema.parse(command.changes);
+      const reward = db.rewards.find((row) => row.id === milestone.rewardId);
+      const input = milestoneInputSchema.parse({
+        ...milestone,
+        itemId: reward?.itemId ?? null,
+        ...changes,
+      });
+      const parent = requireValue(
+        db.milestones.find(
+          (row) =>
+            row.id ===
+            (input.parentId ??
+              db.milestones.find(
+                (root) =>
+                  root.activityId === activity.id && root.kind === "join",
+              )?.id),
+        ),
+        "Parent milestone is missing.",
+      );
+      if (
+        parent.activityId !== activity.id ||
+        milestoneSubtree(db, milestone.id).has(parent.id)
+      )
+        throw new Error(
+          "Parent must be in the same activity and cannot be this milestone or its descendant.",
+        );
+      const rulesChanged =
+        input.quantity !== milestone.quantity ||
+        input.policy !== milestone.policy ||
+        input.startAt !== milestone.startAt ||
+        input.endAt !== milestone.endAt ||
+        parent.id !== milestone.parentId ||
+        input.itemId !== (reward?.itemId ?? null);
+      if (
+        rulesChanged &&
+        db.logs.some((log) => log.milestoneId === milestone.id)
+      )
+        throw new Error(
+          "This milestone has logs. Only its name can change; recorded quantities, schedules and reward rules are fixed.",
+        );
+      if (input.itemId !== (reward?.itemId ?? null)) {
+        if (input.itemId) {
+          requireValue(
+            db.rewardItems.find((item) => item.id === input.itemId),
+            "Reward item is missing.",
+          );
+          if (reward) reward.itemId = input.itemId;
+          else {
+            milestone.rewardId = id("reward");
+            db.rewards.push({
+              id: milestone.rewardId,
+              homebaseId: activity.connectionId,
+              itemId: input.itemId,
+              obtainedAt: null,
+              requiredUserIds: db.participations
+                .filter(
+                  (person) =>
+                    person.activityId === activity.id &&
+                    person.status === "active",
+                )
+                .map((person) => person.userId),
+            });
+            if (!db.rewards.at(-1)!.requiredUserIds.length)
+              throw new Error(
+                "A reward needs at least one active participant.",
+              );
+          }
+        } else {
+          db.rewards = db.rewards.filter(
+            (row) => row.id !== milestone.rewardId,
+          );
+          // Reward events cannot exist before logs, but remove any obsolete references.
+          const eventIds = new Set(
+            db.events
+              .filter(
+                (event) =>
+                  event.entityType === "reward" &&
+                  event.entityId === milestone.rewardId,
+              )
+              .map((event) => event.id),
+          );
+          db.events = db.events.filter((event) => !eventIds.has(event.id));
+          db.deliveries = db.deliveries.filter(
+            (delivery) => !eventIds.has(delivery.eventId),
+          );
+          milestone.rewardId = null;
+        }
+      }
+      Object.assign(milestone, {
+        name: input.name,
+        parentId: parent.id,
+        quantity: input.quantity,
+        policy: input.policy,
+        startAt: input.startAt,
+        endAt: input.endAt,
+      });
+      entityId = milestone.id;
+      emit(
+        db,
+        command.actorId,
+        "milestone.updated",
+        "milestone",
+        milestone.id,
+        `Updated milestone “${milestone.name}”. Existing reward requirements stay fixed.`,
+        members(db, activity.connectionId),
+        activity.connectionId,
+        "activity",
+      );
+      break;
+    }
+    case "deleteMilestone": {
+      const milestone = requireValue(
+        db.milestones.find((row) => row.id === command.milestoneId),
+        "Milestone is missing.",
+      );
+      const activity = managedActivity(
+        db,
+        command.actorId,
+        milestone.activityId,
+      );
+      if (milestone.kind === "join")
+        throw new Error(
+          "Milestone zero cannot be deleted separately. Delete the activity instead.",
+        );
+      entityId = milestone.id;
+      const ids = milestoneSubtree(db, milestone.id);
+      removeGraph(db, ids);
+      emit(
+        db,
+        command.actorId,
+        "milestone.deleted",
+        "activity",
+        activity.id,
+        `Deleted milestone “${milestone.name}”, its descendants, logs, progress and attached rewards.`,
+        members(db, activity.connectionId),
+        activity.connectionId,
+        "activity",
+      );
+      break;
+    }
+
     case "createSubject": {
       const template = requireValue(
         db.subjectTemplates.find((t) => t.id === command.templateId),

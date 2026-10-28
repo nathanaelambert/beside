@@ -20,6 +20,22 @@ export const registerSchema = z.strictObject({
 });
 export const loginSchema = z.strictObject({ email, password });
 export const createHomebaseSchema = z.strictObject({ name });
+const hasChanges = (value: object) =>
+  Object.values(value).some((field) => field !== undefined);
+export const updateHomebaseSchema = createHomebaseSchema;
+export const updateActivitySchema = z
+  .strictObject({
+    name: name.optional(),
+    description: z.string().max(2000).optional(),
+    target: z.number().positive().finite().optional(),
+  })
+  .refine(hasChanges, "Provide at least one field to update.");
+// Validate schedules against the merged saved milestone in the command engine.
+export const updateMilestoneSchema = z
+  .strictObject({ ...milestoneInputSchema.shape })
+  .omit({ activityId: true })
+  .partial()
+  .refine(hasChanges, "Provide at least one field to update.");
 export const joinHomebaseSchema = z.strictObject({
   inviteCode: z.string().min(20).max(100),
 });
@@ -81,4 +97,6 @@ export type LoginInput = z.input<typeof loginSchema>;
 export type CreateSubjectInput = z.input<typeof createSubjectSchema>;
 export type CreateActivityInput = z.input<typeof createActivitySchema>;
 export type CreateMilestoneInput = z.input<typeof createMilestoneSchema>;
+export type UpdateActivityInput = z.input<typeof updateActivitySchema>;
+export type UpdateMilestoneInput = z.input<typeof updateMilestoneSchema>;
 export type CreateLogInput = z.input<typeof createLogSchema>;

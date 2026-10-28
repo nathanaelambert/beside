@@ -2968,3 +2968,64 @@ main:focus {
 .backend-api .creation-panel summary + form {
   margin-top: 1rem;
 }
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 10px;
+}
+.record-editor {
+  margin-block: 12px;
+  padding-block: 12px;
+}
+.delete-confirmation {
+  margin-block: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+.record-editor form,
+.record-editor fieldset {
+  min-width: 0;
+}
+.delete-confirmation p {
+  max-width: 70ch;
+  margin-block: 8px;
+}
+.api-milestone-content {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.local-homebases {
+  margin-bottom: 24px;
+}
+
+.record-editor .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.record-editor label,
+.record-editor input,
+.record-editor select,
+.record-editor textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+.record-editor .span-two {
+  grid-column: 1 / -1;
+}
+.local-homebases > .inline-form label {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 240px;
+  max-width: 400px;
+}
+.local-homebases > .inline-form input {
+  width: 100%;
+}
+@media (max-width: 640px) {
+  .record-editor .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

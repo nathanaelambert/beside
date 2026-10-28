@@ -22,6 +22,11 @@ import {
 import type { ViewProps } from "./playground";
 import { ActivityMilestones, type RecordMilestone } from "./milestones";
 import { AiFillInput } from "./ai-fill";
+import {
+  RecordManager,
+  HomebaseEditor,
+  ActivityEditor,
+} from "./record-management";
 
 export function Workbench({
   db,
@@ -51,12 +56,99 @@ export function Workbench({
         </div>
         <button
           className="button primary"
+          disabled={!connections.length}
           onClick={() => setCreating(!creating)}
         >
           {creating ? <X size={16} /> : <Plus size={16} />}
           {creating ? "Close form" : "New activity"}
         </button>
       </div>
+      <details className="local-homebases">
+        <summary>Manage home bases</summary>
+        <p className="field-help">
+          Changes affect all members in this local experiment. The Backend API
+          workspace manages your server data separately.
+        </p>
+        <form
+          className="inline-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            if (
+              run(
+                {
+                  type: "createHomebase",
+                  actorId: userId,
+                  name: String(new FormData(form).get("name")),
+                },
+                "Home base created.",
+              )
+            )
+              form.reset();
+          }}
+        >
+          <label>
+            New home base
+            <input
+              name="name"
+              required
+              maxLength={200}
+              placeholder="Our reading corner"
+            />
+          </label>
+          <button className="button small" type="submit">
+            Create home base
+          </button>
+        </form>
+        <ul className="api-homebase-list">
+          {connections.map((base) => (
+            <li key={base.id}>
+              <strong>{base.name}</strong>
+              <span>
+                {members(db, base.id).length}{" "}
+                {members(db, base.id).length === 1 ? "member" : "members"}
+              </span>
+              <RecordManager
+                kind="home base"
+                name={base.name}
+                description="This deletes the base for all members, with its activities, milestones, milestone logs, progress and rewards. Subjects are kept."
+                onDelete={() => {
+                  const result = run(
+                    {
+                      type: "deleteHomebase",
+                      actorId: userId,
+                      homebaseId: base.id,
+                    },
+                    "Home base deleted.",
+                  );
+                  if (result) {
+                    setScope("all");
+                    setCreating(false);
+                  }
+                  return !!result;
+                }}
+                editor={(close) => (
+                  <HomebaseEditor
+                    base={base}
+                    cancel={close}
+                    save={(name) =>
+                      !!run(
+                        {
+                          type: "updateHomebase",
+                          actorId: userId,
+                          homebaseId: base.id,
+                          name,
+                        },
+                        "Home base updated.",
+                      )
+                    }
+                  />
+                )}
+              />
+            </li>
+          ))}
+        </ul>
+      </details>
       {creating && (
         <ActivityForm
           db={db}
@@ -388,6 +480,34 @@ function ActivityDetail({
         </div>
         <code>{shortId(a.id)}</code>
       </div>
+      <RecordManager
+        kind="activity"
+        name={a.name}
+        description="This deletes the activity for every participant, including its milestones, milestone logs, progress and earned rewards. Subjects are kept."
+        onDelete={() =>
+          !!run(
+            { type: "deleteActivity", actorId: userId, activityId: a.id },
+            "Activity deleted.",
+          )
+        }
+        editor={(close) => (
+          <ActivityEditor
+            activity={a}
+            cancel={close}
+            save={(changes) =>
+              !!run(
+                {
+                  type: "updateActivity",
+                  actorId: userId,
+                  activityId: a.id,
+                  changes,
+                },
+                "Activity updated.",
+              )
+            }
+          />
+        )}
+      />
       <p>{a.description || "A shared intention, ready to explore."}</p>
       <div className="ownership-line">
         <span>Home base</span>

@@ -103,7 +103,7 @@ export function configureApp(app: INestApplication) {
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean),
-    methods: ["GET", "POST", "PATCH", "OPTIONS"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   });
   app.useGlobalFilters(new ApiExceptionFilter());

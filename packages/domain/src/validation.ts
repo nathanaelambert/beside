@@ -239,7 +239,15 @@ export const databaseSchema = z.object({
       id: key,
       actorUserId: key,
       type: key,
-      entityType: z.enum(["subject", "activity", "log", "milestone", "reward"]),
+      entityType: z.enum([
+        "subject",
+        "activity",
+        "log",
+        "milestone",
+        "reward",
+        "homebase",
+        "user",
+      ]),
       entityId: key,
       message: text,
       origin,
@@ -578,15 +586,19 @@ export function parseDatabase(input: unknown): Database {
   for (const e of db.events) {
     fk(db.users, e.actorUserId);
     fk(
-      e.entityType === "milestone"
-        ? db.milestones
-        : e.entityType === "reward"
-          ? db.rewards
-          : e.entityType === "log"
-            ? db.logs
-            : e.entityType === "subject"
-              ? db.subjects
-              : db.activities,
+      e.entityType === "homebase"
+        ? db.connections
+        : e.entityType === "user"
+          ? db.users
+          : e.entityType === "milestone"
+            ? db.milestones
+            : e.entityType === "reward"
+              ? db.rewards
+              : e.entityType === "log"
+                ? db.logs
+                : e.entityType === "subject"
+                  ? db.subjects
+                  : db.activities,
       e.entityId,
     );
   }

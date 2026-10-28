@@ -61,6 +61,15 @@ describe("public API contract without a database", () => {
     assert.ok(
       body.components.schemas.CreateActivity.required.includes("connectionId"),
     );
+    for (const [path, schema] of [
+      ["homebases/{homebaseId}", "UpdateHomebase"],
+      ["activities/{activityId}", "UpdateActivity"],
+      ["milestones/{milestoneId}", "UpdateMilestone"],
+    ] as const) {
+      assert.ok(body.paths[`/api/v1/${path}`].patch);
+      assert.ok(body.paths[`/api/v1/${path}`].delete);
+      assert.ok(body.components.schemas[schema]);
+    }
     assert.ok(body.paths["/api/v1/state"].get.security);
     await request(server).get("/openapi.yaml").expect(200);
   });
@@ -526,6 +535,231 @@ describe(
         },
         400,
       );
+    });
+    it("supports member-authorized CRUD with transactional cascades and revoked invitations", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", { name: "CRUD base" });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const subject = await create(alice, "subjects", {
+        templateId: "book",
+        title: "Keep this subject",
+      });
+      const activity = await create(alice, "activities", {
+        templateId: "read-book",
+        connectionId: base.id,
+        name: "CRUD activity",
+        target: 10,
+        subjectIds: [subject.entityId],
+      });
+      const sibling = await create(alice, "activities", {
+        templateId: "read-book",
+        connectionId: base.id,
+        name: "Keep sibling activity",
+        target: 10,
+      });
+      const parent = await create(
+        alice,
+        "milestones",
+        milestoneBody(activity.entityId, "oak-tree"),
+      );
+      const child = await create(alice, "milestones", {
+        ...milestoneBody(activity.entityId, "sunflower"),
+        parentId: parent.entityId,
+      });
+      const patch = async (
+        session: Session,
+        path: string,
+        body: object,
+        status = 200,
+      ) =>
+        request(server)
+          .patch(`/api/v1/${path}`)
+          .set(auth(session))
+          .send(body)
+          .expect(status);
+      const remove = async (session: Session, path: string, status = 200) =>
+        request(server)
+          .delete(`/api/v1/${path}`)
+          .set(auth(session))
+          .expect(status);
+      const original = await state(alice);
+      for (const path of [
+        `homebases/${base.id}`,
+        `activities/${activity.entityId}`,
+        `milestones/${parent.entityId}`,
+      ]) {
+        await patch(stranger, path, { name: "Forbidden" }, 400);
+        await remove(stranger, path, 400);
+        await request(server).delete(`/api/v1/${path}`).expect(401);
+      }
+      assert.deepEqual(await state(alice), original);
+      await patch(bob, `homebases/${base.id}`, { name: "Renamed CRUD base" });
+      await patch(bob, `activities/${activity.entityId}`, {
+        name: "Renamed CRUD activity",
+        description: "Edited together",
+        target: 25,
+      });
+      let snapshot = await state(alice);
+      assert.equal(
+        snapshot.connections.find((row) => row.id === base.id)!.name,
+        "Renamed CRUD base",
+      );
+      assert.equal(
+        snapshot.activities.find((row) => row.id === activity.entityId)!
+          .description,
+        "Edited together",
+      );
+      assert.equal(
+        snapshot.participations.find(
+          (row) =>
+            row.activityId === activity.entityId && row.userId === bob.user.id,
+        )!.target,
+        25,
+      );
+      assert.equal(
+        snapshot.participations.find(
+          (row) =>
+            row.activityId === activity.entityId &&
+            row.userId === alice.user.id,
+        )!.target,
+        10,
+      );
+      // Changing/removing rewards exercises FK-safe updates before deletion.
+      await patch(alice, `milestones/${parent.entityId}`, {
+        itemId: null,
+        quantity: 2,
+        parentId: null,
+      });
+      snapshot = await state(alice);
+      assert.equal(
+        snapshot.milestones.find((row) => row.id === parent.entityId)!.rewardId,
+        null,
+      );
+      await patch(alice, `milestones/${parent.entityId}`, {
+        itemId: "oak-tree",
+      });
+      await patch(
+        alice,
+        `milestones/${parent.entityId}`,
+        { parentId: child.entityId },
+        400,
+      );
+      await patch(
+        alice,
+        `milestones/${parent.entityId}`,
+        { policy: "paced", startAt: null, endAt: null },
+        400,
+      );
+      await patch(alice, `activities/${activity.entityId}`, {}, 400);
+      await patch(
+        alice,
+        `activities/${activity.entityId}`,
+        { connectionId: aliceBaseId },
+        400,
+      );
+      await create(
+        alice,
+        "logs",
+        logBody(child.entityId, `crud-a-${nonce}`),
+        200,
+      );
+      await create(
+        bob,
+        "logs",
+        logBody(child.entityId, `crud-b-${nonce}`),
+        200,
+      );
+      snapshot = await state(alice);
+      const root = snapshot.milestones.find(
+        (row) => row.activityId === activity.entityId && row.kind === "join",
+      )!;
+      const rewardId = snapshot.milestones.find(
+        (row) => row.id === child.entityId,
+      )!.rewardId!;
+      assert.ok(
+        snapshot.rewards.find((row) => row.id === rewardId)!.obtainedAt,
+      );
+      await patch(bob, `milestones/${child.entityId}`, {
+        name: "Renamed completed milestone",
+      });
+      await patch(bob, `milestones/${child.entityId}`, { quantity: 3 }, 400);
+      await remove(alice, `milestones/${root.id}`, 400);
+      await patch(
+        alice,
+        `milestones/${root.id}`,
+        { name: "No root editing" },
+        400,
+      );
+      await remove(bob, `milestones/${parent.entityId}`);
+      snapshot = await state(alice);
+      assert.ok(
+        !snapshot.milestones.some((row) =>
+          [parent.entityId, child.entityId].includes(row.id),
+        ),
+      );
+      assert.ok(
+        !snapshot.logs.some((row) => row.milestoneId === child.entityId),
+      );
+      assert.ok(!snapshot.rewards.some((row) => row.id === rewardId));
+      assert.ok(snapshot.milestones.some((row) => row.id === root.id));
+      await remove(bob, `activities/${activity.entityId}`);
+      snapshot = await state(alice);
+      assert.ok(
+        !snapshot.activities.some((row) => row.id === activity.entityId),
+      );
+      assert.ok(snapshot.activities.some((row) => row.id === sibling.entityId));
+      assert.ok(snapshot.subjects.some((row) => row.id === subject.entityId));
+      await remove(bob, `homebases/${base.id}`);
+      snapshot = await state(alice);
+      assert.ok(!snapshot.connections.some((row) => row.id === base.id));
+      assert.ok(
+        !snapshot.activities.some((row) => row.id === sibling.entityId),
+      );
+      const pool = app.get(DatabaseService).getPool();
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT 1 FROM homebase_invite WHERE homebase_id = $1",
+            [base.id],
+          )
+        ).rowCount,
+        0,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT 1 FROM homebase_member WHERE connection_id = $1",
+            [base.id],
+          )
+        ).rowCount,
+        0,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT 1 FROM participation WHERE activity_id = $1",
+            [activity.entityId],
+          )
+        ).rowCount,
+        0,
+      );
+      await create(
+        stranger,
+        "homebases/join",
+        { inviteCode: base.inviteCode },
+        404,
+      );
+      await patch(
+        alice,
+        `homebases/${base.id}`,
+        { name: "Already deleted" },
+        400,
+      );
+      assert.doesNotThrow(() => schemas.State.parse(snapshot));
+      const full = await app
+        .get(DatabaseService)
+        .transaction(false, (client) => loadDatabase(client));
+      assert.doesNotThrow(() => parseDatabase(full));
     });
     it("round-trips a valid domain model through relational persistence", async () => {
       const snapshot = await app

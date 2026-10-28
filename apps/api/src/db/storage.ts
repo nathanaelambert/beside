@@ -93,4 +93,20 @@ export async function persistChanges(
       );
     }
   }
+  for (const [key, table] of [...tables].reverse()) {
+    const retained = new Set(after[key].map((row) => row.id));
+    const removed = before[key]
+      .filter((row) => !retained.has(row.id))
+      .map((row) => row.id);
+    if (!removed.length) continue;
+    // Invitations live outside the domain snapshot and must disappear with a base.
+    if (key === "connections")
+      await client.query(
+        "DELETE FROM homebase_invite WHERE homebase_id = ANY($1::text[])",
+        [removed],
+      );
+    await client.query(`DELETE FROM ${table} WHERE id = ANY($1::text[])`, [
+      removed,
+    ]);
+  }
 }

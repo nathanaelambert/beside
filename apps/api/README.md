@@ -104,11 +104,35 @@ All data routes are under `/api/v1` and require a bearer session. See the served
 OpenAPI document for request fields, response schemas, and HTTP status codes.
 
 - Auth: register, login, current user, logout.
-- Home bases: list, create, join with invitation code.
+- Home bases: list, create, join with invitation code, rename, delete.
 - Read: state, templates, catalog, subjects, activities, milestones, logs,
   rewards, events.
 - Write: create subjects/activities/milestones, link subjects, change personal
   targets, record milestone outcomes, and distribute logs to home bases.
+- Manage: `PATCH` and `DELETE` on `/homebases/:homebaseId`,
+  `/activities/:activityId`, and `/milestones/:milestoneId`.
+
+Every home-base member can edit and delete its records; there are no owner/admin
+roles in this first pass. The playground exposes inline Edit/Delete controls, with
+a separate confirmation describing the deletion scope.
+
+Home-base edits change the name and keep membership/invitation codes. Activity
+edits change name, description, and optionally the caller's personal target;
+the template and home base stay fixed. Milestone edits accept partial name,
+parent, quantity, policy, schedule and reward-item fields. Parent links must stay
+in the same activity without cycles. After any log exists on a milestone, only
+its name can change. Changing an unlogged reward's item preserves its saved roster.
+Milestone zero is managed automatically and cannot be edited/deleted separately.
+
+Deletion is permanent and transactional. Deleting a milestone also deletes its
+descendants, milestone logs, progress contributions, attached rewards (including
+earned ones), and related events/deliveries. Activity deletion includes all its
+milestones, participation and subject links. Home-base deletion includes all its
+activities, memberships, invitation code and audience links. Accounts, subjects,
+other bases and their activity history remain. Standalone legacy logs retain
+their unrelated credit and sharing. A deletion notice references the surviving
+activity, base or actor so event references remain valid. The last base can be
+deleted; the account can create or join another.
 
 `GET /state` is an audience-filtered projection rather than an import/export
 format. User profiles omit email, and deliveries are limited to the recipient.

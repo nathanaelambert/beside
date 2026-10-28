@@ -175,7 +175,7 @@ CREATE TABLE domain_event (
   message text NOT NULL,
   origin text NOT NULL,
   created_at timestamptz NOT NULL,
-  CHECK (entity_type IN ('subject', 'activity', 'log', 'milestone', 'reward'))
+  CHECK (entity_type IN ('subject', 'activity', 'log', 'milestone', 'reward', 'homebase', 'user'))
 );
 
 CREATE TABLE event_delivery (

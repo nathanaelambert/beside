@@ -27,7 +27,7 @@ pnpm --filter playground test
 
 This pass implements the 2026-10-20 entity discussion on `docs/entities` (`51fe15b`). See [the implemented model and decisions](../../docs/architecture/playground-model.md), [the original entity draft](../../docs/architecture/entities.md), and [`schema.sql`](schema.sql).
 
-- **Activities:** create an activity in a home base, set personal targets, and inspect its milestones. Creation automatically records milestone zero for every participant; everyone starts active.
+- **Activities:** create, edit or delete activities, set personal targets, and inspect milestones. Manage local home bases from **Manage home bases**. Creation automatically records milestone zero for every participant; everyone starts active.
 - **Milestones** (`#milestones`): plan named achievements, optional same-activity parents, a progress quantity/position, schedule, and optional item reward. Milestone zero is self-parented, logged automatically as the first milestone for every participant, and can later record leaving.
 - **Record a log:** every new log references exactly one milestone and records success or failure. Each person can succeed once per milestone. Ordinary successes credit only their own activity; failures and root decisions give no progress.
 - **Reward items:** the eight shared pixel-art items remain reusable catalog artwork. A milestone can award one item to its whole home base. All participants joined at planning time must succeed. That roster is fixed and shown before saving. Earned and pending rewards appear above the temporary placement preview.
@@ -149,3 +149,7 @@ This destination uses a real account and its own server data. The perspective
 selector and all other destinations continue using the local experiment. Domain
 types, validators, seed data, templates, and commands now live in
 `@beside/domain`, re-exported by the existing `src/lib` modules.
+
+### Record management
+
+The Backend API workspace exposes inline edit/delete actions for home bases, activities and milestones. The local Activities and Milestones sections use the same command rules. Delete confirmations describe the cascade, including child milestones, milestone logs, progress and attached rewards. Names remain editable after logging; milestone quantities, schedules, parents and reward rules lock after the first log. Milestone zero stays automatic. API endpoints and client methods are documented in [the API README](../api/README.md) and the served OpenAPI explorer.

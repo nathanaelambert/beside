@@ -38,6 +38,7 @@ export function migrateDemoIdentity(database: Database): Database {
     row.sharedByUserId = rename(row.sharedByUserId)!;
   for (const row of db.events) {
     row.actorUserId = rename(row.actorUserId)!;
+    if (row.entityType === "user") row.entityId = rename(row.entityId)!;
     row.message = row.message.replace(/\bMaya\b/g, "Rishik");
   }
   for (const row of db.deliveries)

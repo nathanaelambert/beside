@@ -1,1 +1,1 @@
-export const latestMigration = "002_uniform_homebases.sql";
+export const latestMigration = "003_crud_events.sql";

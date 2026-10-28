@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
@@ -141,6 +142,123 @@ export class DomainController {
       request.actor.id,
       input.joinHomebaseSchema.parse(body).inviteCode,
     );
+  }
+  @Patch("homebases/:homebaseId")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiBody({ schema: ref("UpdateHomebase") })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Edit a home base",
+    description:
+      "Any home-base member can rename it. Membership and the invitation code are preserved.",
+  })
+  updateHomebase(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+    @Body() body: unknown,
+  ) {
+    return this.domain.command({
+      type: "updateHomebase",
+      actorId: request.actor.id,
+      homebaseId,
+      ...input.updateHomebaseSchema.parse(body),
+    });
+  }
+  @Delete("homebases/:homebaseId")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Delete a home base",
+    description:
+      "Any home-base member can delete. Removes the home base, its invitation code, activities, milestone logs, progress, rewards, membership and related events for every member. Accounts and subjects are retained.",
+  })
+  deleteHomebase(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+  ) {
+    return this.domain.command({
+      type: "deleteHomebase",
+      actorId: request.actor.id,
+      homebaseId,
+    });
+  }
+  @Patch("activities/:activityId")
+  @ApiParam({ name: "activityId", type: String })
+  @ApiBody({ schema: ref("UpdateActivity") })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Edit an activity",
+    description:
+      "Any home-base member can update name and description, and their own personal target. Template and home base stay fixed.",
+  })
+  updateActivity(
+    @Req() request: AuthenticatedRequest,
+    @Param("activityId") activityId: string,
+    @Body() body: unknown,
+  ) {
+    return this.domain.command({
+      type: "updateActivity",
+      actorId: request.actor.id,
+      activityId,
+      changes: input.updateActivitySchema.parse(body),
+    });
+  }
+  @Delete("activities/:activityId")
+  @ApiParam({ name: "activityId", type: String })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Delete an activity",
+    description:
+      "Any home-base member can delete. Removes the activity and its milestones, milestone logs, progress, rewards and related events for every member. Subjects are retained.",
+  })
+  deleteActivity(
+    @Req() request: AuthenticatedRequest,
+    @Param("activityId") activityId: string,
+  ) {
+    return this.domain.command({
+      type: "deleteActivity",
+      actorId: request.actor.id,
+      activityId,
+    });
+  }
+  @Patch("milestones/:milestoneId")
+  @ApiParam({ name: "milestoneId", type: String })
+  @ApiBody({ schema: ref("UpdateMilestone") })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Edit a milestone",
+    description:
+      "Any home-base member can update a milestone. Quantity, schedule, parent and reward item can change before the first log; afterward only the name can change. Saved reward rosters stay fixed. Milestone zero is managed automatically.",
+  })
+  updateMilestone(
+    @Req() request: AuthenticatedRequest,
+    @Param("milestoneId") milestoneId: string,
+    @Body() body: unknown,
+  ) {
+    return this.domain.command({
+      type: "updateMilestone",
+      actorId: request.actor.id,
+      milestoneId,
+      changes: input.updateMilestoneSchema.parse(body),
+    });
+  }
+  @Delete("milestones/:milestoneId")
+  @ApiParam({ name: "milestoneId", type: String })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Delete a milestone",
+    description:
+      "Any home-base member can delete. Removes this milestone and all descendants, their logs, progress, rewards and related events. Milestone zero cannot be deleted separately.",
+  })
+  deleteMilestone(
+    @Req() request: AuthenticatedRequest,
+    @Param("milestoneId") milestoneId: string,
+  ) {
+    return this.domain.command({
+      type: "deleteMilestone",
+      actorId: request.actor.id,
+      milestoneId,
+    });
   }
   @Get("templates")
   @ApiOkResponse({ schema: ref("Templates") })
