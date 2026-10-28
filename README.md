@@ -8,6 +8,10 @@ New to the project? Start with the [contributing guide](CONTRIBUTING.md) for loc
 
 ## Apps and packages
 
+- `apps/api` (`@beside/api`): the shared NestJS/PostgreSQL backend, with authentication, milestone/reward transactions, and served OpenAPI docs. See [API setup](apps/api/README.md).
+- `packages/domain`: model types, validation, templates, and commands shared by the API and local playground.
+- `packages/api-client`: typed fetch client for mobile and web.
+
 - `apps/website` (`beside-showcase`): the original Vite/React showcase website, with its six interactive chapters, pixel-art world, and project notes.
 - `apps/mobile` (`mobile`): the Ignite/React Native app.
 - `apps/playground` (`playground`): the Next.js model workbench with local persistence and Mermaid ERDs.

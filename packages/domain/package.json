@@ -1,0 +1,28 @@
+{
+  "name": "@beside/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": {
+      "types": "./src/*.ts",
+      "source": "./src/*.ts",
+      "node": "./dist/*.js",
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/*.ts --bundle --splitting --platform=node --format=esm --outdir=dist --external:zod",
+    "dev": "pnpm build --watch",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@beside/rewards": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "@beside/typescript-config": "workspace:*",
+    "typescript": "7.0.2"
+  }
+}

@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --port 3002",
-    "build": "next build",
+    "dev": "pnpm --filter @beside/domain build && next dev --port 3002",
+    "build": "pnpm --filter @beside/domain build && next build",
     "start": "next start --port 3002",
     "lint": "eslint --max-warnings 0",
     "check-types": "next typegen && tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/lib/*.test.ts"
+    "test": "node --conditions=source --experimental-strip-types --test src/lib/*.test.ts"
   },
   "dependencies": {
     "@beside/rewards": "workspace:*",
@@ -18,7 +18,9 @@
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@beside/domain": "workspace:*",
+    "@beside/api-client": "workspace:*"
   },
   "devDependencies": {
     "@beside/eslint-config": "workspace:*",

@@ -5,6 +5,15 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "DATABASE_URL_UNPOOLED",
+        "CORS_ORIGINS",
+        "API_PUBLIC_URL",
+        "PG*",
+        "POSTGRES_*",
+        "NEON_PROJECT_ID"
+      ],
       "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**", "dist/**"]
     },
     "lint": {
@@ -14,8 +23,17 @@
       "dependsOn": ["^check-types"]
     },
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "PORT",
+        "CORS_ORIGINS",
+        "API_PUBLIC_URL",
+        "NEXT_PUBLIC_BESIDE_API_URL",
+        "EXPO_PUBLIC_BESIDE_API_URL"
+      ]
     }
   }
 }

@@ -11,6 +11,8 @@ Start with the [working concept brief](product/concept-brief.md) for the product
 
 ## Architecture
 
+- [Shared backend API](../apps/api/README.md): NestJS, Neon/PostgreSQL, Vercel deployment, authentication, OpenAPI, and first-pass limitations.
+
 - [Entity relationship draft](architecture/entities.md): the 2026-10-20 model from `docs/entities`, preserved as written, including open logging-policy questions.
 - [Implemented playground model](architecture/playground-model.md): milestones, home-base rewards, milestone-zero participation, schedule policies, and compatibility decisions. These prototype choices differ from parts of the entity draft.
 - [Playground model](../apps/playground/README.md): a runnable conceptual experiment with working ownership/participation assumptions, five rendered ERDs, and a [reference SQL shape](../apps/playground/schema.sql). These prototype choices are not final product decisions.

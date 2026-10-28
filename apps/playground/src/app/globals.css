@@ -2929,3 +2929,42 @@ main:focus {
     align-items: flex-start;
   }
 }
+.backend-api {
+  display: grid;
+  gap: 1.25rem;
+}
+.backend-api > .section-heading p,
+.backend-api .creation-panel > p {
+  max-width: 72ch;
+}
+.api-links,
+.api-session,
+.api-milestone-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.api-session,
+.api-milestone-list li {
+  justify-content: space-between;
+}
+.api-homebase-list,
+.api-milestone-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.api-homebase-list li {
+  display: grid;
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+}
+.backend-api fieldset {
+  min-width: 0;
+}
+.backend-api .creation-panel summary + form {
+  margin-top: 1rem;
+}

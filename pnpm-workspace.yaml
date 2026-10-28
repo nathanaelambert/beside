@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  "@scarf/scarf": false
   esbuild: false
   unrs-resolver: false
 minimumReleaseAgeExclude:

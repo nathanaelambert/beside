@@ -1,0 +1,120 @@
+import type { Database } from "@beside/domain/types";
+
+// Fixed identifiers, in FK insertion order. Client input never becomes SQL.
+export const tables = [
+  ["rewardItems", "reward_item", ["id", "name", "category", "artifact"]],
+  ["users", "app_user", ["id", "name", "email", "color"]],
+  ["connections", "homebase", ["id", "name", "personalOwnerId"]],
+  ["memberships", "homebase_member", ["id", "connectionId", "userId"]],
+  [
+    "subjectTemplates",
+    "subject_template",
+    ["id", "name", "category", "fields", "unit"],
+  ],
+  [
+    "activityTemplates",
+    "activity_template",
+    ["id", "name", "category", "description", "progressMode", "unit", "target"],
+  ],
+  [
+    "subjects",
+    "subject",
+    ["id", "templateId", "ownerUserId", "title", "metadata", "createdAt"],
+  ],
+  [
+    "activities",
+    "activity",
+    [
+      "id",
+      "templateId",
+      "creatorUserId",
+      "personalOwnerId",
+      "connectionId",
+      "name",
+      "description",
+      "category",
+      "progressMode",
+      "unit",
+      "createdAt",
+    ],
+  ],
+  ["activitySubjects", "activity_subject", ["id", "activityId", "subjectId"]],
+  [
+    "participations",
+    "participation",
+    ["id", "activityId", "userId", "target", "status"],
+  ],
+  [
+    "rewards",
+    "reward",
+    ["id", "homebaseId", "itemId", "obtainedAt", "requiredUserIds"],
+  ],
+  [
+    "milestones",
+    "milestone",
+    [
+      "id",
+      "activityId",
+      "parentId",
+      "kind",
+      "name",
+      "quantity",
+      "policy",
+      "startAt",
+      "endAt",
+      "rewardId",
+      "createdAt",
+    ],
+  ],
+  [
+    "logs",
+    "activity_log",
+    [
+      "id",
+      "authorUserId",
+      "milestoneId",
+      "isSuccess",
+      "subjectId",
+      "category",
+      "title",
+      "quantity",
+      "unit",
+      "durationMinutes",
+      "occurredAt",
+      "origin",
+      "externalKey",
+      "createdAt",
+    ],
+  ],
+  ["logShares", "log_share", ["id", "logId", "connectionId", "sharedByUserId"]],
+  [
+    "contributions",
+    "log_contribution",
+    ["id", "logId", "participationId", "amount"],
+  ],
+  [
+    "events",
+    "domain_event",
+    [
+      "id",
+      "actorUserId",
+      "type",
+      "entityType",
+      "entityId",
+      "message",
+      "origin",
+      "createdAt",
+    ],
+  ],
+  [
+    "deliveries",
+    "event_delivery",
+    ["id", "eventId", "recipientUserId", "connectionId", "kind"],
+  ],
+] as const satisfies readonly (readonly [
+  Exclude<keyof Database, "version">,
+  string,
+  readonly string[],
+])[];
+export const sqlName = (value: string) =>
+  value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);

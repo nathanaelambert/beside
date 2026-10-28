@@ -16,6 +16,7 @@ import {
   NotebookPen,
   BookText,
   Radio,
+  Server,
   RotateCcw,
   Shapes,
   Upload,
@@ -39,6 +40,7 @@ import { Lexicon, UserStories } from "./reference";
 import { LogComposer } from "./log-composer";
 import { Milestones } from "./milestones";
 import { RewardItems } from "./reward-items";
+import { BackendApi } from "./backend-api";
 
 export type Run = (
   command: Command,
@@ -46,6 +48,15 @@ export type Run = (
 ) => ReturnType<typeof dispatch> | null;
 export type ViewProps = { db: Database; userId: string; run: Run };
 const sections = [
+  {
+    id: "api",
+    label: "Backend API",
+    icon: Server,
+    group: "inspect",
+    description:
+      "Try the shared mobile and web API, sign in, and inspect its OpenAPI contract.",
+    detail: "Live PostgreSQL workspace",
+  },
   {
     id: "lexicon",
     label: "Lexicon",
@@ -431,6 +442,7 @@ export function Playground() {
         {tab === "events" && <EventTrail {...view} />}
         {tab === "model" && <ModelView {...view} />}
         {tab === "templates" && <Templates db={db} />}
+        {tab === "api" && <BackendApi />}
       </main>
       <footer className="footer">
         <div>

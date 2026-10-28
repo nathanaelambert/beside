@@ -136,3 +136,16 @@ Initial, pre-redesign T3 preview verification on this worktree's port 3003 cover
 **Multiple-match verification (2026-10-14):** a live Luna/high lookup for the movie title “The Thing” selected John Carpenter's 1982 film and filled Director and Year, with official film sources available only in the info popup. The database remained byte-for-byte unchanged. A separate browser-only `ambiguous` response fixture verified that the chosen candidate fills the main form, preserves an already entered Year, keeps references hidden, and supports Undo without saving. The fixture was removed afterward. Provider-mocked tests cover multiple research candidates followed by extraction and draft filling; they do not measure the model's ranking accuracy. All 31 tests, type-check, lint and production build passed. Most-likely selection remains a reviewable AI judgment, not a guarantee that it chose the user's intended work.
 
 **Reward catalog verification (2026-10-21):** all 34 tests, type-check, lint, and production build passed. Local browser checks covered category filtering, name search, repeated placement, removal of the final item, and a downloaded valid 32 × 32 transparent SVG. Preview placement left the event count unchanged. The catalog fit a 390px viewport without horizontal overflow, and the reward model diagram and eight inspector rows rendered. No deployment was performed.
+
+## Backend API
+
+The **Backend API** destination links to the shared backend's interactive OpenAPI
+explorer, JSON spec, and database readiness endpoint. It also provides a live
+PostgreSQL workspace for signing in, creating/joining home bases, and planning and
+completing activity milestones. Set `NEXT_PUBLIC_BESIDE_API_URL` to the API origin
+(defaults to `http://localhost:3001`); see [API setup](../api/README.md).
+
+This destination uses a real account and its own server data. The perspective
+selector and all other destinations continue using the local experiment. Domain
+types, validators, seed data, templates, and commands now live in
+`@beside/domain`, re-exported by the existing `src/lib` modules.
