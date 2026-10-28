@@ -2,6 +2,8 @@
 
 A pnpm/Turborepo workspace for Beside.
 
+See [CI and automatic deployments](.github/README.md) for the GitHub Actions setup.
+
 See [the project documentation](docs/README.md) for the working concept, original brainstorming notes, interaction storyboard, and mobile UI concept.
 
 New to the project? Start with the [contributing guide](CONTRIBUTING.md) for local setup, development workflows, and pull request checks.

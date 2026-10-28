@@ -138,8 +138,10 @@ Current production projects:
 
 The first deployment was made through the authenticated Vercel CLI. The Vercel
 account could not connect `nathanaelambert/beside` through its GitHub integration.
-To enable automatic deploys, grant the Vercel GitHub app access to this repository
-and connect it in the `beside-api` project’s Git settings.
+A collaborator cannot connect another user’s personal GitHub repository through
+Vercel’s native integration. [GitHub Actions](../../.github/README.md) now handles
+checks and production deployments with the Vercel CLI, using a repository
+`VERCEL_TOKEN` secret.
 
 Create a separate Vercel project with root directory `apps/api`, the NestJS
 framework preset, Node 24, and Fluid compute. Deploy the repository root so
