@@ -1,7 +1,9 @@
-import { rewardItems } from "@beside/rewards"
+import { rewardItems, type PixelArt } from "@beside/rewards"
 
-export const WORLD_WIDTH = 288
-export const WORLD_HEIGHT = 240
+import { avatars } from "./avatars"
+import { Ground, groundAt } from "./terrain"
+
+export { WORLD_HEIGHT, WORLD_WIDTH } from "./terrain"
 export const catalogue = new Map(rewardItems.map((item) => [item.id, item]))
 
 export interface WorldItem {
@@ -13,20 +15,20 @@ export interface WorldItem {
 }
 
 export const initialItems: WorldItem[] = [
-  { key: "oak-west", itemId: "oak-tree", x: 66, y: 82 },
-  { key: "oak-north", itemId: "oak-tree", x: 104, y: 62 },
-  { key: "pine-north", itemId: "pine-tree", x: 177, y: 64 },
-  { key: "pine-east", itemId: "pine-tree", x: 222, y: 91 },
-  { key: "oak-east", itemId: "oak-tree", x: 250, y: 132 },
-  { key: "pine-west", itemId: "pine-tree", x: 38, y: 138 },
-  { key: "tulip-west", itemId: "pink-tulip", x: 80, y: 145 },
-  { key: "sunflower-west", itemId: "sunflower", x: 68, y: 172 },
+  { key: "oak-west", itemId: "oak-tree", x: 62, y: 86 },
+  { key: "oak-north", itemId: "oak-tree", x: 100, y: 64 },
+  { key: "pine-north", itemId: "pine-tree", x: 176, y: 66 },
+  { key: "pine-east", itemId: "pine-tree", x: 220, y: 94 },
+  { key: "oak-east", itemId: "oak-tree", x: 252, y: 108 },
+  { key: "pine-west", itemId: "pine-tree", x: 44, y: 140 },
+  { key: "tulip-west", itemId: "pink-tulip", x: 82, y: 146 },
+  { key: "sunflower-west", itemId: "sunflower", x: 68, y: 174 },
   { key: "owl", itemId: "owl-statue", x: 142, y: 107 },
-  { key: "pennant", itemId: "rose-pennant", x: 114, y: 131 },
-  { key: "star", itemId: "star-statue", x: 169, y: 177 },
-  { key: "banner", itemId: "blue-banner", x: 216, y: 201 },
-  { key: "oak-south", itemId: "oak-tree", x: 74, y: 222 },
-  { key: "tulip-south", itemId: "pink-tulip", x: 137, y: 213 },
+  { key: "pennant", itemId: "rose-pennant", x: 114, y: 132 },
+  { key: "star", itemId: "star-statue", x: 180, y: 190 },
+  { key: "banner", itemId: "blue-banner", x: 222, y: 204 },
+  { key: "oak-south", itemId: "oak-tree", x: 82, y: 214 },
+  { key: "tulip-south", itemId: "pink-tulip", x: 112, y: 202 },
 ]
 
 export function hitTest(items: WorldItem[], x: number, y: number, scale: number) {
@@ -40,13 +42,43 @@ export function hitTest(items: WorldItem[], x: number, y: number, scale: number)
     )
 }
 
+export function avatarAt(x: number, y: number, scale: number) {
+  const padding = Math.max(0, (44 / scale - 16) / 2)
+  return [...avatars]
+    .sort((a, b) => Math.abs(x - a.x) - Math.abs(x - b.x))
+    .find((a) => Math.abs(x - a.x) <= 7 + padding / 2 && y >= a.y - 20 - padding && y <= a.y + 2)
+}
+
 export function placementAt(x: number, y: number, items: WorldItem[]) {
   const position = { x: Math.round(x / 8) * 8, y: Math.round(y / 8) * 8 }
-  // Keep the mock on the lawn, away from the pond and outer woodland.
-  const onLawn = position.x >= 64 && position.x <= 224 && position.y >= 88 && position.y <= 216
-  const onPond = position.x >= 184 && position.y >= 112 && position.y <= 176
-  const occupied = items.some(
-    (item) => Math.abs(item.x - position.x) < 24 && Math.abs(item.y - position.y) < 20,
+  // The whole base must rest on open lawn: not woods, path, water, shore, dock, or blanket.
+  for (let dx = -8; dx <= 8; dx += 4)
+    for (let dy = -4; dy <= 0; dy += 2)
+      if (groundAt(position.x + dx, position.y - 3 + dy) !== Ground.Lawn) return null
+  const occupied = [...items, ...avatars].some(
+    (item) => Math.abs(item.x - position.x) < 22 && Math.abs(item.y - position.y) < 18,
   )
-  return onLawn && !onPond && !occupied ? position : null
+  return occupied ? null : position
+}
+
+// Visible extent of a sprite, used to size its ground shadow and place the selection marker.
+export function footprint(art: PixelArt) {
+  const rows = art.pixels
+  let top = rows.length
+  let bottom = -1
+  rows.forEach((row, y) => {
+    if (/[^.]/.test(row)) {
+      top = Math.min(top, y)
+      bottom = y
+    }
+  })
+  let left = rows[0].length
+  let right = -1
+  for (let y = Math.max(0, bottom - 2); y <= bottom; y++)
+    [...rows[y]].forEach((c, x) => {
+      if (c === ".") return
+      left = Math.min(left, x)
+      right = Math.max(right, x)
+    })
+  return { top, bottom, left, right }
 }

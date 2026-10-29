@@ -4,7 +4,9 @@ import { Pressable, ScrollView, StatusBar, StyleSheet, View } from "react-native
 import { rewardItems } from "@beside/rewards"
 import { SafeAreaView } from "react-native-safe-area-context"
 
+import { avatars } from "@/components/pixel-world/avatars"
 import {
+  avatarAt,
   catalogue,
   hitTest,
   initialItems,
@@ -27,6 +29,11 @@ const memories: Record<string, string> = {
   "blue-banner": "Planted here to mark a new beginning.",
 }
 
+const avatarNotes: Record<string, string> = {
+  you: "That's you, settled in on the picnic blanket.",
+  nathaniel: "Nathaniel saved you the sunny side of the blanket.",
+}
+
 export function PixelWorldScreen({ navigation }: AppStackScreenProps<"PixelWorld">) {
   const [items, setItems] = useState(initialItems)
   const [selectedKey, setSelectedKey] = useState<string | undefined>("owl")
@@ -38,7 +45,16 @@ export function PixelWorldScreen({ navigation }: AppStackScreenProps<"PixelWorld
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [status, setStatus] = useState("Drag to explore. Tap a little something.")
   const selected = items.find((item) => item.key === selectedKey)
+  const selectedAvatar = avatars.find((avatar) => avatar.key === selectedKey)
   const selectedItem = selected && catalogue.get(selected.itemId)
+  const thumbnail = selectedAvatar
+    ? {
+        id: selectedAvatar.key,
+        name: selectedAvatar.name,
+        category: "Friends",
+        artifact: selectedAvatar.frames.idle,
+      }
+    : selectedItem
   const chosen = catalogue.get(chosenId)!
 
   function tapWorld(x: number, y: number, scale: number) {
@@ -52,9 +68,14 @@ export function PixelWorldScreen({ navigation }: AppStackScreenProps<"PixelWorld
       )
     } else {
       const hit = hitTest(items, x, y, scale)
-      setSelectedKey(hit?.key)
+      const friend = hit ? undefined : avatarAt(x, y, scale)
+      setSelectedKey(hit?.key ?? friend?.key)
       setStatus(
-        hit ? `You found ${catalogue.get(hit.itemId)!.name}.` : "A little room to grow, together.",
+        hit
+          ? `You found ${catalogue.get(hit.itemId)!.name}.`
+          : friend
+            ? "A quiet afternoon, side by side."
+            : "A little room to grow, together.",
       )
     }
   }
@@ -129,26 +150,42 @@ export function PixelWorldScreen({ navigation }: AppStackScreenProps<"PixelWorld
 
       {!photo && (
         <ScrollView style={styles.dock} contentContainerStyle={styles.dockContent} bounces={false}>
-          <View style={styles.dockHeading}>
-            <Text
-              text={
-                decorating ? "Make yourself at home" : (selectedItem?.name ?? "Room for your story")
-              }
-              weight="semiBold"
-              style={styles.sectionTitle}
-            />
-            <Text text="LOCAL MOCK" style={styles.mock} />
+          <View style={styles.detail}>
+            {!decorating && thumbnail && (
+              <View style={styles.thumbnail}>
+                <RewardSprite
+                  item={thumbnail}
+                  scale={thumbnail.artifact.pixels.length > 24 ? 2 : 3}
+                />
+              </View>
+            )}
+            <View style={styles.detailText}>
+              <View style={styles.dockHeading}>
+                <Text
+                  text={
+                    decorating
+                      ? "Make yourself at home"
+                      : (selectedAvatar?.name ?? selectedItem?.name ?? "Room for your story")
+                  }
+                  weight="semiBold"
+                  style={styles.sectionTitle}
+                />
+                <Text text="LOCAL MOCK" style={styles.mock} />
+              </View>
+              <Text
+                text={
+                  decorating
+                    ? "Choose a decoration, then tap an open spot."
+                    : selectedAvatar
+                      ? avatarNotes[selectedAvatar.key]
+                      : selectedItem
+                        ? memories[selectedItem.id]
+                        : "Trees, keepsakes, and a place to return to."
+                }
+                style={styles.description}
+              />
+            </View>
           </View>
-          <Text
-            text={
-              decorating
-                ? "Choose a decoration, then tap an open spot."
-                : selectedItem
-                  ? memories[selectedItem.id]
-                  : "Trees, keepsakes, and a place to return to."
-            }
-            style={styles.description}
-          />
 
           {decorating && (
             <ScrollView
@@ -256,6 +293,8 @@ const styles = StyleSheet.create({
   backText: { color: "#344b3d", fontSize: 36, lineHeight: 40 },
   chosenItem: { backgroundColor: "#e5eacb", borderColor: "#6e8659" },
   description: { color: "#717762", fontSize: 13, lineHeight: 20 },
+  detail: { alignItems: "center", flexDirection: "row", gap: 14 },
+  detailText: { flex: 1, gap: 2 },
   disabled: { opacity: 0.4 },
   dock: { flexGrow: 0, maxHeight: "48%" },
   dockContent: { gap: 10, padding: 20, paddingBottom: 12 },
@@ -308,6 +347,16 @@ const styles = StyleSheet.create({
   smallText: { color: "#435a46", fontSize: 13, lineHeight: 20 },
   status: { color: "#4e674c", fontSize: 12, lineHeight: 18 },
   subtitle: { color: "#747a68", fontSize: 12, lineHeight: 18, marginLeft: 48, marginTop: 10 },
+  thumbnail: {
+    alignItems: "center",
+    backgroundColor: "#e8ecd2",
+    borderColor: "#d3dab8",
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 72,
+    justifyContent: "center",
+    width: 72,
+  },
   title: { color: "#344b3d", fontSize: 27, lineHeight: 34 },
   tray: { gap: 8, paddingVertical: 4 },
   trayItem: {
@@ -318,7 +367,7 @@ const styles = StyleSheet.create({
     padding: 6,
     width: 94,
   },
-  world: { backgroundColor: "#92af70", flex: 1, minHeight: 200, overflow: "hidden" },
+  world: { backgroundColor: "#2b4632", flex: 1, minHeight: 200, overflow: "hidden" },
   worldLabel: {
     alignItems: "center",
     backgroundColor: "#f3f0d8",

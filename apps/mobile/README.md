@@ -26,17 +26,29 @@ After that first build, `pnpm --filter mobile start` starts Metro for the instal
 development client. An older development client will need rebuilding.
 
 - Drag the meadow to pan, and use **Recenter** to return to the starting view.
-- Tap a catalogue item to read its mocked keepsake description.
+- Tap a catalogue item, or either friend on the picnic blanket, to read about it.
 - Tap **Decorate**, choose any of the eight rewards, and tap an empty patch of lawn.
   The translucent sprite is a preview; **Place here** confirms it and **Cancel**
-  discards it. Water, occupied spots, and the outer woodland reject placement.
+  discards it. The path, pond, shore, dock, blanket, occupied spots, and the
+  woodland border reject placement.
 - **Reset scene** restores the original arrangement. **Photo** hides the header
   and tray for a device/simulator screenshot; **Show controls** brings them back.
 
-The meadow, pond, bridge, avatars, and all world sprites are drawn by
-`@shopify/react-native-skia` (Expo SDK 55's compatible version, 2.4.18). The sprites
-come directly from `@beside/rewards` through `pixelPaths()`. Integer scale factors,
-snapped camera translation, and disabled path antialiasing keep pixels crisp.
+Everything in the world is drawn by `@shopify/react-native-skia` (Expo SDK 55's
+compatible version, 2.4.18) as bitmaps at one texel per world pixel, scaled by an
+integer factor with nearest-neighbour sampling, so pixels stay crisp:
+
+- `terrain.ts` paints the 288 × 240 meadow once at runtime (lawn, woodland
+  border, winding path, pond with dock, picnic blanket) and records a ground kind
+  per pixel. Placement rules read that map, so they always match the art. A
+  periodic tile of the same canopy surrounds the world, so tall screens and photo
+  mode never show a bare edge.
+- `avatars.ts` holds the two hand-drawn 16 × 20 friends, with blink and breathing
+  frames. A slow stepped clock (paused under Reduce Motion) drives them and the
+  pond glints; the canvas only redraws when a frame changes.
+- Reward sprites come straight from `@beside/rewards`. Their shadows are sized
+  from each sprite's footprint.
+
 Gesture Handler and Reanimated pan the camera on the UI thread. Ordinary React
 Native views provide the text and placement tray. There are no downloaded art
 assets, backend calls, purchases, or persistence; the initial arrangement and
@@ -65,13 +77,13 @@ pnpm --filter mobile exec expo export --platform all --output-dir /tmp/beside-pi
 ```
 
 The interaction tests cover picking the frontmost sprite, generous hit targets,
-placement snapping, and rejection of occupied land, water, and the map edge.
-Type checking, lint, all 23 tests, and iOS/Android/web exports passed. The native
-iOS build also passed, and the scene was exercised on an iPhone 16 Pro simulator
-running iOS 18.3: catalogue selection, previewing and confirming a tulip placement,
-resetting the scene, and photo mode. The exported web app passed the placement, reset, and
-photo-mode flow at a 390px viewport without runtime errors. Android runtime
-behavior has not been checked.
+selecting either friend, placement snapping, rejection of occupied land, water,
+path, blanket, dock, and the map edge, and that every sprite's base lines up with
+its shadow. Type checking, lint, and all 26 tests pass. The reworked art was
+exercised on an iPhone 16 Pro simulator running iOS 18.3: catalogue and friend
+selection, previewing and confirming a placement, panning, and photo mode. The
+iOS/Android/web exports and the web flow were checked before the art rework and
+have not been re-run since. Android runtime behavior has not been checked.
 
 ## Reward items
 
