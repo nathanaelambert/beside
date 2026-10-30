@@ -11,6 +11,7 @@ import Config from "@/config"
 import { useAuth } from "@/context/AuthContext"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { LoginScreen } from "@/screens/LoginScreen"
+import { PixelWorldScreen } from "@/screens/PixelWorldScreen"
 import { RewardItemsScreen } from "@/screens/RewardItemsScreen"
 import { WelcomeScreen } from "@/screens/WelcomeScreen"
 import { useAppTheme } from "@/theme/context"
@@ -44,7 +45,8 @@ const AppStack = () => {
           backgroundColor: colors.background,
         },
       }}
-      initialRouteName={isAuthenticated ? "Welcome" : "Login"}
+      // This branch opens straight into the pixel-art spike on a fresh launch.
+      initialRouteName="PixelWorld"
     >
       {isAuthenticated ? (
         <>
@@ -60,6 +62,7 @@ const AppStack = () => {
 
       {/** 🔥 Your screens go here */}
       <Stack.Screen name="RewardItems" component={RewardItemsScreen} />
+      <Stack.Screen name="PixelWorld" component={PixelWorldScreen} />
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
     </Stack.Navigator>
   )

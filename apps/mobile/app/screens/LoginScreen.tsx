@@ -124,6 +124,11 @@ export const LoginScreen: FC<LoginScreenProps> = ({ navigation }) => {
         style={themed($tapButton)}
         onPress={() => navigation.navigate("RewardItems")}
       />
+      <Button
+        text="Explore pixel world"
+        style={themed($tapButton)}
+        onPress={() => navigation.navigate("PixelWorld")}
+      />
     </Screen>
   )
 }
