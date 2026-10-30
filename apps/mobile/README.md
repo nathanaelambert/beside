@@ -55,9 +55,10 @@ assets, backend calls, purchases, or persistence; the initial arrangement and
 memories are mock data. This is a visual/interaction spike, not a world engine or
 a performance benchmark.
 
-For the web version:
+For the web version, run from the repository root:
 
 ```sh
+pnpm install
 pnpm --filter mobile web
 # Open http://localhost:8081/world (or the port Expo prints).
 ```

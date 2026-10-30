@@ -32,6 +32,15 @@ pnpm dev --filter=mobile
 pnpm dev --filter=playground
 ```
 
+To run the mobile app in a browser without a simulator, use these commands from the repository root:
+
+```sh
+pnpm install
+pnpm --filter mobile web
+```
+
+Open the URL Expo prints. Use `/world` for the pixel world or `/rewards` for reward items.
+
 The website runs at `http://127.0.0.1:5173`. See [the website README](apps/website/README.md) for its controls and demos. See [the mobile README](apps/mobile/README.md) for Ignite, simulators, and workspace scripts.
 
 Playground runs at `http://localhost:3002`. See [its README](apps/playground/README.md) for experiments, ownership assumptions, trigger simulations, and import/export.
