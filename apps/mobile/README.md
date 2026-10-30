@@ -67,6 +67,29 @@ loads it before importing the app. `postinstall` also generates this ignored
 file. If invoking Expo directly instead of the web script, run
 `pnpm --filter mobile run postinstall` first. Native entry remains synchronous.
 
+### Vercel deployment
+
+Shared browser preview: https://beside-mobile.vercel.app. Open `/world` for the
+pixel world or `/rewards` for reward items. Coworkers do not need a local setup.
+
+Deploy this app as a separate Vercel project with **Root Directory** set to
+`apps/mobile` and **Include source files outside of the Root Directory** enabled
+for its workspace dependencies. `vercel.json` configures the web export and
+routes direct links such as `/world` and `/rewards` through the app's entry page.
+The build generates and includes `canvaskit.wasm`; it does not require Xcode or
+an iOS simulator.
+
+From the repository root, deploy to the mobile project explicitly so the
+repository's upload exclusions apply:
+
+```sh
+pnpm dlx vercel deploy --project beside-mobile --prod --scope mosaab-emams-projects
+```
+
+The world and reward previews use local demo data. When using backend-connected
+features, set `EXPO_PUBLIC_BESIDE_API_URL` to the shared HTTPS API before building
+and include the mobile site's origin in the API's `CORS_ORIGINS` setting.
+
 Validation commands:
 
 ```sh
