@@ -24,11 +24,13 @@ Other milestones have a parent in the same activity. The hierarchy must be acycl
 - **Paced:** requires a start and end. Accept submissions within that window, including the exact boundaries.
 - **Deadline:** requires an end, with no start restriction. Several milestones can be logged in the same session before that deadline.
 
-All entry points (manual, simulated voice, MCP, automation) use the same command validation. The actual submission time decides schedule eligibility. A reported historical occurrence cannot bypass a closed window, and occurrence times cannot be in the future. Browser clocks are the sandbox clock; a hosted adapter must supply authoritative server time.
+All entry points (manual, simulated voice, MCP, automation) use the same command validation. The actual submission time decides success eligibility. A reported historical occurrence cannot bypass a closed window, and occurrence times cannot be in the future. Failure can be recorded after closing but not before opening. Browser clocks are the sandbox clock; the API supplies authoritative server time.
 
 An unsuccessful attempt grants no progress or reward. It may be followed by a successful attempt while the schedule remains open. Once successful, that user cannot add further outcomes to that ordinary milestone. A missed or failed milestone does not automatically block later milestones.
 
-The policy is explicit on the milestone rather than inferred from an artwork category: a tree's image alone must not decide whether a log is accepted. The draft's Plant/Decoration/Building combinations, reward sacrifice, automatic recurring milestones, policy cascades, and saved placements are not modeled as hidden behavior.
+The policy is explicit on the milestone rather than inferred from an artwork category: a tree's image alone must not decide whether a log is accepted. The draft's Plant/Decoration/Building combinations, reward sacrifice, policy cascades, and saved placements are not modeled as hidden behavior.
+
+The API now supports explicit recurring schedules (daily, weekly, monthly by date or weekday), producing independent paced milestones. A protected Vercel cron generates upcoming occurrences and records missing outcomes as automatic failures after closing; API reads also settle expired milestones. The local sandbox does not run a background scheduler. See [the API scheduling contract and hosting limits](../../apps/api/README.md#recurring-milestones-and-missed-deadlines).
 
 ## Shared reward requirement
 

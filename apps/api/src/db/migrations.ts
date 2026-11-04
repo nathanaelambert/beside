@@ -1,1 +1,1 @@
-export const latestMigration = "003_crud_events.sql";
+export const latestMigration = "004_milestone_schedules.sql";

@@ -18,6 +18,11 @@ import {
   HealthController,
 } from "./controllers.ts";
 import { DatabaseService } from "./db/database.service.ts";
+import {
+  CronController,
+  SchedulingController,
+} from "./scheduling.controller.ts";
+import { SchedulingService } from "./scheduling.service.ts";
 import { DomainService } from "./domain.service.ts";
 import { SwaggerAssetsController } from "./swagger-assets.controller.ts";
 import { openApiSchema, ref, schemas } from "./openapi.ts";
@@ -71,12 +76,20 @@ class ApiExceptionFilter implements ExceptionFilter {
 
 @Module({
   controllers: [
+    CronController,
+    SchedulingController,
     HealthController,
     AuthController,
     DomainController,
     SwaggerAssetsController,
   ],
-  providers: [DatabaseService, DomainService, AuthService, AuthGuard],
+  providers: [
+    DatabaseService,
+    DomainService,
+    SchedulingService,
+    AuthService,
+    AuthGuard,
+  ],
 })
 export class AppModule {}
 

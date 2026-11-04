@@ -161,6 +161,98 @@ origin. Logs, progress, rewards, events, and recipient deliveries commit togethe
 Database records are the event trail; push/email delivery workers are not
 implemented yet. Non-log creation requests are not idempotent.
 
+## Recurring milestones and missed deadlines
+
+Create, list, and stop recurring schedules through:
+
+- `POST /api/v1/activities/:activityId/schedules`
+- `GET /api/v1/activities/:activityId/schedules`
+- `DELETE /api/v1/schedules/:scheduleId`
+
+The shared client exposes `createSchedule`, `schedules`, and `deleteSchedule`.
+After all four people join the home base and the activity is created:
+
+```ts
+await api.createSchedule(activity.entityId, {
+  name: "Wednesday workout",
+  quantity: 1,
+  timeZone: "America/Toronto",
+  startDate: "2026-11-11",
+  startTime: "09:00",
+  endTime: "10:00",
+  recurrence: { frequency: "weekly", interval: 1, weekdays: [3] },
+  count: 12,
+});
+```
+
+Weekdays use Sunday = 0 through Saturday = 6. Other recurrence shapes are
+`{ frequency: "daily", interval: 1 }`,
+`{ frequency: "monthly", interval: 1, dayOfMonth: 4 }`, and
+`{ frequency: "monthly-weekday", interval: 1, weekday: 3, ordinal: 1 }`
+(first Wednesday; `ordinal: -1` means last). Weekly intervals use Monday-starting
+calendar weeks. `until` is an inclusive local start-date cutoff; use either
+`until` or `count`, or omit both for no end. `endDayOffset` permits overnight
+windows, up to seven days. `itemId` optionally adds a separate shared reward to
+each occurrence, with the active roster saved when that occurrence is generated.
+
+Schedule creation requires active participation and a start date today or later
+in the chosen timezone. Each occurrence becomes an ordinary `paced` milestone
+with independent UTC timestamps, logs, progress, and reward. Creation generates
+through 35 days ahead; cron extends the horizon. A future schedule starts
+generating when it enters that horizon. Timezone conversion keeps wall times
+stable across DST. Months missing the requested day and nonexistent spring DST
+times are skipped; autumn overlaps use the earlier instant. Count limits actual
+generated occurrences, excluding skips. Stopping a schedule cancels future
+unlogged occurrences and their rewards, preserving current/past milestones and
+outcomes. To change recurrence, stop the schedule and create a replacement.
+Schedules are server-managed records exposed by their own routes; `/state`
+contains the generated milestones, not the recurrence configuration.
+
+Success is accepted only within the inclusive logging window, based on server
+submission time. Failure can be submitted after closing, but not before opening.
+An outcome after a successful completion is still rejected. After an achievement
+window closes, missing outcomes for active participants are recorded as failures
+with origin `automation`, zero progress, and the deadline as `occurredAt`.
+Existing successes and manual failures are preserved. People who joined after
+the deadline and people who have left are excluded. Open milestones and
+milestone zero never expire.
+
+`GET /api/cron/milestones` extends schedules and settles expired milestones in
+one database transaction under the same write lock as user submissions.
+Concurrent invocations and retries cannot duplicate occurrences or automatic
+failures. A persisted date cursor catches up after outages (at most 366 scanned
+days per schedule per invocation); any remaining backlog resumes on the next run.
+State-backed reads also settle expired milestones, so a refreshed workspace
+reflects missed outcomes between scheduled runs. These reads now take the shared
+write lock. As with existing commands, whole-model processing is intended for
+the current small deployment, not unbounded production scale.
+
+### Vercel activation
+
+The current `mosaab-emams-projects` team is on **Hobby**. Its native cron schedule
+is restricted to once a day; `vercel.json` schedules the sweep at `0 5 * * *`
+(05:00 UTC, potentially anywhere within that hour). Unattended failure records
+therefore appear on the next daily sweep. Reading the workspace settles them
+immediately; success eligibility always closes at the exact deadline. For
+unattended minute-level processing, upgrade the hosting plan or use an external
+scheduler calling the same protected endpoint. See [Vercel's cron limits and
+authentication](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
+
+Before production deployment, set a random, server-only `CRON_SECRET` in the
+API project's **Production** environment. Vercel supplies
+`Authorization: Bearer <CRON_SECRET>` automatically. Missing or incorrect secrets
+return 401 before database access; user sessions cannot run the cron. Keep this
+variable out of frontend projects and client bundles. Apply migration
+`004_milestone_schedules.sql`, then deploy through the existing CI/CLI flow.
+Cron configuration takes effect on production deployments.
+
+For a local test, set `CRON_SECRET` in `apps/api/.env` and invoke the endpoint
+with the matching bearer token after closing a short milestone window. The API
+responds with `processedAt`, `milestonesCreated`, and `failuresRecorded`.
+The PostgreSQL test suite covers the complete four-person scenario with a
+controlled clock, concurrency, late membership, retries, recurring catch-up,
+and cancellation without waiting for real Wednesdays.
+
 ## Vercel and Neon
 
 Current production projects:

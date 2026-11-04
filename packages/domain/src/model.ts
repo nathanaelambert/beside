@@ -165,6 +165,7 @@ export const completedMilestone = (
 export function scheduleStatus(
   milestone: Milestone,
   now: string,
+  isSuccess = true,
 ): string | null {
   if (
     milestone.policy === "paced" &&
@@ -173,6 +174,7 @@ export function scheduleStatus(
   )
     return "This milestone has not started yet.";
   if (
+    isSuccess &&
     milestone.policy !== "open" &&
     milestone.endAt &&
     Date.parse(now) > Date.parse(milestone.endAt)
@@ -203,7 +205,7 @@ export function logRejection(
     return "Join the activity through milestone zero before logging achievements.";
   if (completedMilestone(db, milestone.id, userId))
     return "You have already completed this milestone.";
-  return scheduleStatus(milestone, now);
+  return scheduleStatus(milestone, now, isSuccess);
 }
 function awardReward(
   db: Database,

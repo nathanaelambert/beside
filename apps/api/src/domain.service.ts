@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { execute } from "@beside/domain/model";
+import { settleExpiredMilestones } from "@beside/domain/expiry";
 import { stateForUser } from "@beside/domain/view";
 import type { Command } from "@beside/domain/types";
 import { DatabaseService } from "./db/database.service.ts";
@@ -12,9 +13,15 @@ export class DomainService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
   state(userId: string) {
-    return this.database.transaction(false, async (client) =>
-      stateForUser(await loadDatabase(client), userId),
-    );
+    // Hobby cron runs daily. Settle on reads too so an opened workspace reflects
+    // expired windows immediately, even between scheduled invocations.
+    return this.database.transaction(true, async (client) => {
+      const before = await loadDatabase(client);
+      const settled = settleExpiredMilestones(before, new Date().toISOString());
+      if (settled.failuresRecorded)
+        await persistChanges(client, before, settled.db);
+      return stateForUser(settled.db, userId);
+    });
   }
   command(command: Command) {
     return this.database.transaction(true, async (client) => {

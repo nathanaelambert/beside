@@ -2,6 +2,52 @@ import { it } from "node:test";
 import assert from "node:assert/strict";
 import { ApiError, BesideClient } from "./index.ts";
 
+it("exposes recurring schedules with bearer authorization and encoded identifiers", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const client = new BesideClient("https://api.example.test", (async (
+    url,
+    init,
+  ) => {
+    calls.push({ url: String(url), init });
+    return Response.json({});
+  }) as typeof fetch);
+  client.setToken("schedule-session");
+  const configuration = {
+    name: "Wednesday",
+    quantity: 1,
+    timeZone: "America/Toronto",
+    startDate: "2030-01-02",
+    startTime: "09:00",
+    endTime: "10:00",
+    recurrence: { frequency: "weekly" as const, weekdays: [3] },
+  };
+  await client.createSchedule("activity/1", configuration);
+  await client.schedules("activity/1");
+  await client.deleteSchedule("schedule/1");
+  assert.deepEqual(
+    calls.map((c) => [c.url, c.init?.method]),
+    [
+      [
+        "https://api.example.test/api/v1/activities/activity%2F1/schedules",
+        "POST",
+      ],
+      [
+        "https://api.example.test/api/v1/activities/activity%2F1/schedules",
+        "GET",
+      ],
+      ["https://api.example.test/api/v1/schedules/schedule%2F1", "DELETE"],
+    ],
+  );
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), configuration);
+  assert.ok(
+    calls.every(
+      (c) =>
+        new Headers(c.init?.headers).get("Authorization") ===
+        "Bearer schedule-session",
+    ),
+  );
+});
+
 it("calls browser fetch with the global receiver", async () => {
   const client = new BesideClient("https://api.example.test", function (
     this: typeof globalThis,

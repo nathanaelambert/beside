@@ -373,7 +373,7 @@ export class DomainController {
   @ApiOperation({
     summary: "Record success or failure on one milestone",
     description:
-      "The session determines the author. Reuse externalKey with the same origin when retrying a log; the original log is returned without duplicate credit, events, or rewards. Schedule eligibility uses server time.",
+      "The session determines the author. Reuse externalKey with the same origin when retrying a log; the original log is returned without duplicate credit, events, or rewards. Success must be submitted within the schedule using server time. Failure may be recorded after the window closes, but not before it opens. Outcomes after success are rejected.",
   })
   createLog(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
     return this.domain.command({

@@ -17,6 +17,12 @@ The Vercel projects do not need a native Git repository connection. The
 repository remains owned by `nathanaelambert`. The showcase website's existing
 deployment setup is not changed by this workflow.
 
+The API also needs a server-only `CRON_SECRET` in its Vercel Production
+environment. Its `vercel.json` activates the daily milestone sweep on production
+deployment; the token stays in Vercel and is not a GitHub Actions secret. The
+current Hobby plan runs at 05:00 UTC within the hour. API reads settle expired
+outcomes between runs. See [recurring milestones and hosting limits](../apps/api/README.md#recurring-milestones-and-missed-deadlines).
+
 ## Repository configuration
 
 Under **Settings → Secrets and variables → Actions**, configure:

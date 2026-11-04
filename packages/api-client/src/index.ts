@@ -1,4 +1,12 @@
 import type {
+  CreateScheduleInput,
+  MilestoneSchedule,
+} from "@beside/domain/schedules";
+export type {
+  CreateScheduleInput,
+  MilestoneSchedule,
+} from "@beside/domain/schedules";
+import type {
   ApiHomebase,
   ApiState,
   CreateActivityInput,
@@ -176,6 +184,24 @@ export class BesideClient {
   }
   createMilestone(input: CreateMilestoneInput) {
     return this.request<MutationResult>("/milestones", "POST", input);
+  }
+  schedules(activityId: string) {
+    return this.request<MilestoneSchedule[]>(
+      `/activities/${encodeURIComponent(activityId)}/schedules`,
+    );
+  }
+  createSchedule(activityId: string, input: CreateScheduleInput) {
+    return this.request<MilestoneSchedule>(
+      `/activities/${encodeURIComponent(activityId)}/schedules`,
+      "POST",
+      input,
+    );
+  }
+  deleteSchedule(scheduleId: string) {
+    return this.request<MutationResult>(
+      `/schedules/${encodeURIComponent(scheduleId)}`,
+      "DELETE",
+    );
   }
   recordLog(input: CreateLogInput) {
     return this.request<MutationResult>("/logs", "POST", input);

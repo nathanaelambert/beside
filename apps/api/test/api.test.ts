@@ -83,6 +83,13 @@ describe("public API contract without a database", () => {
       body.issues.some((issue: { path: string }) => issue.path === "email"),
     );
   });
+  it("rejects unauthenticated cron requests before touching the database", async () => {
+    await request(app.getHttpServer()).get("/api/cron/milestones").expect(401);
+    await request(app.getHttpServer())
+      .get("/api/cron/milestones")
+      .set("Authorization", "Bearer not-a-cron-secret")
+      .expect(401);
+  });
   it("allows configured browser origins and never caches account responses", async () => {
     const server = app.getHttpServer();
     await request(server)

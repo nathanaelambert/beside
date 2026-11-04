@@ -421,7 +421,8 @@ export function parseDatabase(input: unknown): Database {
         (milestone.policy === "paced" &&
           milestone.startAt &&
           Date.parse(l.createdAt) < Date.parse(milestone.startAt)) ||
-        (milestone.policy !== "open" &&
+        (l.isSuccess &&
+          milestone.policy !== "open" &&
           milestone.endAt &&
           Date.parse(l.createdAt) > Date.parse(milestone.endAt))
       )
