@@ -35,6 +35,7 @@
     "build:android:prod": "eas build --profile production --platform android --local"
   },
   "dependencies": {
+    "@beside/api-client": "workspace:*",
     "@beside/rewards": "workspace:*",
     "@expo-google-fonts/space-grotesk": "^0.4.0",
     "@expo/config": "~55.0.21",
@@ -52,6 +53,7 @@
     "expo-font": "~55.0.4",
     "expo-linking": "~55.0.7",
     "expo-localization": "~55.0.8",
+    "expo-secure-store": "~55.0.18",
     "expo-splash-screen": "~55.0.10",
     "expo-system-ui": "~55.0.9",
     "i18next": "^23.14.0",
@@ -70,8 +72,7 @@
     "react-native-screens": "~4.23.0",
     "react-native-web": "~0.21.0",
     "react-native-worklets": "0.7.2",
-    "setimmediate": "^1.0.5",
-    "@beside/api-client": "workspace:*"
+    "setimmediate": "^1.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

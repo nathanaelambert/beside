@@ -4,12 +4,22 @@
  * Generally speaking, it will contain an auth flow (registration, login, forgot password)
  * and a "main" flow which the user will use once logged in.
  */
+import { useEffect } from "react"
+import { ActivityIndicator, View, ViewStyle } from "react-native"
+import * as SplashScreen from "expo-splash-screen"
 import { NavigationContainer } from "@react-navigation/native"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
+import { BesideMark } from "@/components/BesideMark"
+import { Button } from "@/components/Button"
+import { Text } from "@/components/Text"
 import Config from "@/config"
 import { useAuth } from "@/context/AuthContext"
+import { ActivitiesScreen } from "@/screens/ActivitiesScreen"
+import { ActivityCreateScreen } from "@/screens/ActivityCreateScreen"
+import { ActivityDetailScreen } from "@/screens/ActivityDetailScreen"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
+import { HomeBaseScreen } from "@/screens/HomeBaseScreen"
 import { LoginScreen } from "@/screens/LoginScreen"
 import { PixelWorldScreen } from "@/screens/PixelWorldScreen"
 import { RewardItemsScreen } from "@/screens/RewardItemsScreen"
@@ -30,14 +40,37 @@ const exitRoutes = Config.exitRoutes
 const Stack = createNativeStackNavigator<AppStackParamList>()
 
 const AppStack = () => {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isRestoring, restoreError, retryRestore } = useAuth()
 
   const {
     theme: { colors },
   } = useAppTheme()
 
+  useEffect(() => {
+    if (!isRestoring) SplashScreen.hideAsync().catch(() => undefined)
+  }, [isRestoring])
+
+  if (isRestoring || restoreError) {
+    return (
+      <View style={[$restoring, { backgroundColor: colors.background }]}>
+        {isRestoring ? (
+          <>
+            <BesideMark scale={4} />
+            <ActivityIndicator accessibilityLabel="Restoring session" color={colors.tint} />
+          </>
+        ) : (
+          <>
+            <Text text={restoreError} accessibilityRole="alert" />
+            <Button text="Try again" onPress={retryRestore} />
+          </>
+        )}
+      </View>
+    )
+  }
+
   return (
     <Stack.Navigator
+      key={isAuthenticated ? "signed-in" : "signed-out"}
       screenOptions={{
         headerShown: false,
         navigationBarColor: colors.background,
@@ -45,11 +78,14 @@ const AppStack = () => {
           backgroundColor: colors.background,
         },
       }}
-      // This branch opens straight into the pixel-art spike on a fresh launch.
-      initialRouteName="PixelWorld"
+      initialRouteName={isAuthenticated ? "HomeBase" : "Login"}
     >
       {isAuthenticated ? (
         <>
+          <Stack.Screen name="HomeBase" component={HomeBaseScreen} />
+          <Stack.Screen name="Activities" component={ActivitiesScreen} />
+          <Stack.Screen name="ActivityCreate" component={ActivityCreateScreen} />
+          <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
 
           <Stack.Screen name="Demo" component={DemoNavigator} />
@@ -80,4 +116,12 @@ export const AppNavigator = (props: NavigationProps) => {
       </ErrorBoundary>
     </NavigationContainer>
   )
+}
+
+const $restoring: ViewStyle = {
+  flex: 1,
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+  gap: 16,
 }

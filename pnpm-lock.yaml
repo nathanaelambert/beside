@@ -141,6 +141,9 @@ importers:
       expo-localization:
         specifier: ~55.0.8
         version: 55.0.19(expo@55.0.5)(react@19.2.0)
+      expo-secure-store:
+        specifier: ~55.0.18
+        version: 55.0.18(expo@55.0.5)
       expo-splash-screen:
         specifier: ~55.0.10
         version: 55.0.25(expo@55.0.5)(supports-color@8.1.1)(typescript@5.9.3)
@@ -4862,6 +4865,11 @@ packages:
         optional: true
       react-server-dom-webpack:
         optional: true
+
+  expo-secure-store@55.0.18:
+    resolution: {integrity: sha512-shKZYQf7/KA45Z3oEIXUkXdrfRNFxsc+fJC182bbpuKqS4nLPZslsJUqruQ937Zkkbev126N/QJv+zmd6FpZjA==}
+    peerDependencies:
+      expo: '*'
 
   expo-server@55.0.12:
     resolution: {integrity: sha512-yuNHbxobUKCXWn9Z/H+lgYk6heXEFub6q1h8Yo9kCLxgL2afluWZ/YylbtxgHgmFwDVUmi6milQYfL+wwQMlzw==}
@@ -13162,6 +13170,10 @@ snapshots:
       - react-native-worklets
       - supports-color
     optional: true
+
+  expo-secure-store@55.0.18(expo@55.0.5):
+    dependencies:
+      expo: 55.0.5(@babel/core@7.29.7(supports-color@8.1.1))(@expo/dom-webview@55.0.6)(@expo/metro-runtime@55.0.12)(expo-router@57.0.25)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.0)(supports-color@8.1.1))(react@19.2.0)(supports-color@8.1.1)(typescript@5.9.3)
 
   expo-server@55.0.12: {}
 

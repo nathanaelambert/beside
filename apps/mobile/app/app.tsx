@@ -21,6 +21,7 @@ import "./utils/gestureHandler"
 import { useEffect, useState } from "react"
 import { useFonts } from "expo-font"
 import * as Linking from "expo-linking"
+import * as SplashScreen from "expo-splash-screen"
 import { KeyboardProvider } from "react-native-keyboard-controller"
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context"
 
@@ -63,6 +64,10 @@ const config = {
  * @param {AppProps} props - The props for the `App` component.
  * @returns {JSX.Element} The rendered `App` component.
  */
+// Keep the native splash up until fonts load and the saved session is restored,
+// so launch goes straight from splash to the first real screen.
+SplashScreen.preventAutoHideAsync().catch(() => undefined)
+
 export function App() {
   const {
     initialNavigationState,

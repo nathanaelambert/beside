@@ -19,6 +19,9 @@ export type GroundKind = (typeof Ground)[keyof typeof Ground]
 export const POND = { x: 220, y: 146, rx: 36, ry: 27 }
 export const DOCK = { x0: 180, x1: 205, y0: 141, y1: 149 }
 export const BLANKET = { x0: 135, x1: 177, y0: 133, y1: 150 }
+// A four-person picnic extends onto the lawn, keeping the dock and pond clear.
+export const GROUP_BLANKET = { ...BLANKET, x0: 108 }
+export type PicnicLayout = "pair" | "group"
 
 // Path centre line: from the south edge to the blanket, with a branch to the dock.
 const PATH_SEGMENTS: [number, number][][] = [
@@ -171,11 +174,11 @@ export interface Terrain {
   ground: Uint8Array
 }
 
-let cached: Terrain | undefined
+const cached: Partial<Record<PicnicLayout, Terrain>> = {}
 
-export function getTerrain(): Terrain {
-  if (!cached) cached = paintTerrain()
-  return cached
+export function getTerrain(picnic: PicnicLayout = "pair"): Terrain {
+  if (!cached[picnic]) cached[picnic] = paintTerrain(picnic)
+  return cached[picnic]!
 }
 
 export function groundAt(x: number, y: number): GroundKind {
@@ -185,7 +188,8 @@ export function groundAt(x: number, y: number): GroundKind {
   return getTerrain().ground[iy * WORLD_WIDTH + ix] as GroundKind
 }
 
-function paintTerrain(): Terrain {
+function paintTerrain(picnic: PicnicLayout): Terrain {
+  const blanket = picnic === "group" ? GROUP_BLANKET : BLANKET
   const rgba = new Uint8Array(WORLD_WIDTH * WORLD_HEIGHT * 4)
   const ground = new Uint8Array(WORLD_WIDTH * WORLD_HEIGHT)
   const put = (x: number, y: number, color: string, kind?: GroundKind) => {
@@ -329,34 +333,37 @@ function paintTerrain(): Terrain {
   for (let y = DOCK.y0 - 1; y <= DOCK.y1 + 1; y++) put(DOCK.x1 + 1, y, C.plank[0])
 
   // 5. Picnic blanket: gingham with a stitched rim and a small cast shadow.
-  for (let y = BLANKET.y0; y <= BLANKET.y1 + 1; y++)
-    for (let x = BLANKET.x0; x <= BLANKET.x1 + 1; x++) {
-      if (y > BLANKET.y1 || x > BLANKET.x1) {
-        if (y > BLANKET.y0 && x > BLANKET.x0) put(x, y, C.grass[0])
+  for (let y = blanket.y0; y <= blanket.y1 + 1; y++)
+    for (let x = blanket.x0; x <= blanket.x1 + 1; x++) {
+      if (y > blanket.y1 || x > blanket.x1) {
+        if (y > blanket.y0 && x > blanket.x0) put(x, y, C.grass[0])
         continue
       }
-      const rim = x === BLANKET.x0 || x === BLANKET.x1 || y === BLANKET.y0 || y === BLANKET.y1
-      const bx = Math.floor((x - BLANKET.x0) / 3) % 2
-      const by = Math.floor((y - BLANKET.y0) / 3) % 2
+      const rim = x === blanket.x0 || x === blanket.x1 || y === blanket.y0 || y === blanket.y1
+      const bx = Math.floor((x - blanket.x0) / 3) % 2
+      const by = Math.floor((y - blanket.y0) / 3) % 2
       const tone = rim ? 0 : bx && by ? 1 : bx || by ? 2 : 3
       put(x, y, C.blanket[tone], Ground.Blanket)
     }
-  // Basket in the corner of the blanket.
-  const basket = ["..aaaa..", ".a....a.", "abbbbbba", "acdcdcda", "adcdcdca", ".aaaaaa."]
-  const basketPal: Record<string, string> = {
-    a: C.plank[0],
-    b: C.plank[5],
-    c: C.plank[4],
-    d: C.plank[3],
+  // Keep the group blanket clear: the basket otherwise peeks out like a stray hand.
+  if (picnic === "pair") {
+    // Basket in the corner of the blanket.
+    const basket = ["..aaaa..", ".a....a.", "abbbbbba", "acdcdcda", "adcdcdca", ".aaaaaa."]
+    const basketPal: Record<string, string> = {
+      a: C.plank[0],
+      b: C.plank[5],
+      c: C.plank[4],
+      d: C.plank[3],
+    }
+    basket.forEach((row, j) =>
+      [...row].forEach((ch, i) => {
+        if (ch !== ".") put(blanket.x1 - 10 + i, blanket.y0 + 4 + j, basketPal[ch])
+      }),
+    )
+    // A napkin peeking out of the basket.
+    put(blanket.x1 - 7, blanket.y0 + 5, C.blanket[2])
+    put(blanket.x1 - 6, blanket.y0 + 5, C.blanket[1])
   }
-  basket.forEach((row, j) =>
-    [...row].forEach((ch, i) => {
-      if (ch !== ".") put(BLANKET.x1 - 10 + i, BLANKET.y0 + 4 + j, basketPal[ch])
-    }),
-  )
-  // A napkin peeking out of the basket.
-  put(BLANKET.x1 - 7, BLANKET.y0 + 5, C.blanket[2])
-  put(BLANKET.x1 - 6, BLANKET.y0 + 5, C.blanket[1])
 
   // 6. Woodland border with a soft shadow on the lawn beneath it.
   const woods = new Int8Array(WORLD_WIDTH * WORLD_HEIGHT)

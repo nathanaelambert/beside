@@ -7,9 +7,8 @@ export interface ConfigBaseProps {
 export type PersistNavigationConfig = ConfigBaseProps["persistNavigation"]
 
 const BaseConfig: ConfigBaseProps = {
-  // This feature is particularly useful in development mode, but
-  // can be used in production as well if you prefer.
-  persistNavigation: "dev",
+  // Session restoration chooses the authenticated home base on every launch.
+  persistNavigation: "never",
 
   /**
    * Only enable if we're catching errors in the right environment
@@ -20,7 +19,7 @@ const BaseConfig: ConfigBaseProps = {
    * This is a list of all the route names that will exit the app if the back button
    * is pressed while in that screen. Only affects Android.
    */
-  exitRoutes: ["Welcome"],
+  exitRoutes: ["HomeBase", "Login", "Welcome"],
 }
 
 export default BaseConfig

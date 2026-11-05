@@ -19,6 +19,10 @@ export type DemoTabParamList = {
 export type AppStackParamList = {
   Welcome: undefined
   Login: undefined
+  HomeBase: { connectionId?: string } | undefined
+  Activities: { connectionId: string }
+  ActivityCreate: { connectionId: string }
+  ActivityDetail: { activityId: string }
   Demo: NavigatorScreenParams<DemoTabParamList>
   RewardItems: undefined
   PixelWorld: undefined
