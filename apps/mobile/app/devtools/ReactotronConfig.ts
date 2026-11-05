@@ -26,7 +26,8 @@ reactotron.use(mmkvPlugin<ReactotronReactNative>({ storage }))
 if (Platform.OS !== "web") {
   reactotron.useReactNative({
     networking: {
-      ignoreUrls: /symbolicate/,
+      // Auth bodies and bearer headers must stay out of the debug timeline.
+      ignoreUrls: /symbolicate|\/api\/v1\//,
     },
   })
 }

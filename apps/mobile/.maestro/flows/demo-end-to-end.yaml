@@ -1,0 +1,203 @@
+# Run with scratchpad/record-end-to-end.sh. The driver clears the session,
+# warms Metro, records the launcher/splash and types credentials at human pace.
+# LOGIN_EMAIL comes via -e; the password goes from the secret file to adb only,
+# avoiding Maestro command logs/artifacts. Never put a literal password here.
+appId: ${MAESTRO_APP_ID}
+name: Beside end-to-end attendance demo
+---
+- runFlow:
+    when:
+      true: ${E2E_PHASE === 'login'}
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: login-heading
+          timeout: 60000
+      - assertVisible: "Welcome back"
+      - assertTrue: ${LOGIN_EMAIL.length > 0}
+- runFlow:
+    when:
+      true: ${E2E_PHASE === 'journey'}
+    commands:
+      - extendedWaitUntil:
+          visible: "Project Beside"
+          timeout: 90000
+      - assertVisible:
+          id: homebase-screen
+      - assertVisible: "Your people, together"
+      - assertVisible: "Project Beside"
+      - assertVisible: "4 members"
+      - takeScreenshot: demo-e2e-homebase
+      - evalScript: ${ (function() { var until = Date.now() + 3000; while (Date.now() < until) {} })() }
+      - tapOn:
+          id: homebase-create-activity
+          waitToSettleTimeoutMs: 500
+          retryTapIfNoChange: true
+      - extendedWaitUntil:
+          visible:
+            id: activity-name
+          timeout: 20000
+      - tapOn:
+          id: activity-name
+          waitToSettleTimeoutMs: 500
+      # Driver types after this explicit marker, without Android accessibility idle waits.
+      - evalScript: ${output.driverInput = 'activity-name'}
+      - extendedWaitUntil:
+          visible: "CivicTechWR Hacknight Attendance"
+          timeout: 20000
+      - assertVisible: "CivicTechWR Hacknight Attendance"
+      - copyTextFrom:
+          id: activity-name
+      - assertTrue: ${maestro.copiedText === 'CivicTechWR Hacknight Attendance'}
+      - hideKeyboard
+      - evalScript: ${ (function() { var until = Date.now() + 1500; while (Date.now() < until) {} })() }
+      - scrollUntilVisible:
+          element:
+            id: activity-next
+          direction: DOWN
+          speed: 50
+      - tapOn:
+          id: activity-next
+          waitToSettleTimeoutMs: 500
+      - tapOn:
+          id: milestone-name
+          waitToSettleTimeoutMs: 500
+      - evalScript: ${output.driverInput = 'milestone-name'}
+      - extendedWaitUntil:
+          visible: "Hacknight attendance"
+          timeout: 20000
+      - assertVisible: "Hacknight attendance"
+      - copyTextFrom:
+          id: milestone-name
+      - assertTrue: ${maestro.copiedText === 'Hacknight attendance'}
+      - hideKeyboard
+      - evalScript: ${ (function() { var until = Date.now() + 1500; while (Date.now() < until) {} })() }
+      - assertVisible: "Nov 4, 2026"
+      - tapOn:
+          id: schedule-repeat
+          waitToSettleTimeoutMs: 500
+      - scrollUntilVisible:
+          element:
+            id: schedule-repeat-weekly
+          direction: DOWN
+          speed: 50
+      - tapOn:
+          id: schedule-repeat-weekly
+          waitToSettleTimeoutMs: 500
+      - evalScript: ${ (function() { var until = Date.now() + 1500; while (Date.now() < until) {} })() }
+      - scrollUntilVisible:
+          element:
+            id: schedule-start-time
+          direction: DOWN
+          speed: 50
+      - assertVisible: "5:00 PM"
+      - scrollUntilVisible:
+          element:
+            id: schedule-end-time
+          direction: DOWN
+          speed: 50
+      - tapOn:
+          id: schedule-end-time
+          waitToSettleTimeoutMs: 500
+      - scrollUntilVisible:
+          element:
+            id: schedule-end-time-0000
+          direction: DOWN
+          speed: 50
+      - tapOn:
+          id: schedule-end-time-0000
+          waitToSettleTimeoutMs: 500
+      - evalScript: ${ (function() { var until = Date.now() + 1500; while (Date.now() < until) {} })() }
+      - scrollUntilVisible:
+          element:
+            id: schedule-end
+          direction: DOWN
+          speed: 50
+      - tapOn:
+          id: schedule-end
+          waitToSettleTimeoutMs: 500
+      - tapOn:
+          id: schedule-end-date
+          waitToSettleTimeoutMs: 500
+      - scrollUntilVisible:
+          element:
+            id: schedule-until
+          direction: DOWN
+          speed: 50
+      - tapOn:
+          id: schedule-until
+          waitToSettleTimeoutMs: 500
+      - scrollUntilVisible:
+          element:
+            id: schedule-until-2026-12-31
+          direction: DOWN
+          speed: 50
+      - tapOn:
+          id: schedule-until-2026-12-31
+          waitToSettleTimeoutMs: 500
+      - evalScript: ${ (function() { var until = Date.now() + 2000; while (Date.now() < until) {} })() }
+      - scrollUntilVisible:
+          element:
+            id: activity-save
+          direction: DOWN
+          speed: 50
+      - assertVisible: "Every Wednesday · 5:00 PM – midnight · until Dec 31, 2026"
+      - takeScreenshot: demo-e2e-summary
+      - evalScript: ${ (function() { var until = Date.now() + 2000; while (Date.now() < until) {} })() }
+      - tapOn:
+          id: activity-save
+          waitToSettleTimeoutMs: 500
+      - extendedWaitUntil:
+          visible:
+            id: activity-detail-name
+          timeout: 30000
+      - assertVisible:
+          id: activity-schedule-summary
+      - assertNotVisible: "1 step"
+      - assertVisible: "WHO'S IN"
+      - assertVisible: "Open now"
+      - takeScreenshot: demo-e2e-detail-top
+      - evalScript: ${ (function() { var until = Date.now() + 2000; while (Date.now() < until) {} })() }
+      - scrollUntilVisible:
+          element:
+            id: milestone-log-success
+          direction: DOWN
+          speed: 40
+      - assertVisible: "Wed, Nov 4"
+      - tapOn:
+          id: milestone-log-success
+          waitToSettleTimeoutMs: 500
+      - extendedWaitUntil:
+          visible:
+            id: milestone-done
+          timeout: 20000
+      - assertNotVisible:
+          id: milestone-log-success
+      - assertVisible: "WHO'S IN"
+      - assertVisible: "Mosaab"
+      - assertVisible:
+          id: member-done-.*
+      - takeScreenshot: demo-e2e-done
+      - evalScript: ${ (function() { var until = Date.now() + 3000; while (Date.now() < until) {} })() }
+      - swipe:
+          start: "50%, 80%"
+          end: "50%, 47%"
+          duration: 2400
+      - swipe:
+          start: "50%, 80%"
+          end: "50%, 47%"
+          duration: 2400
+      - assertVisible: "Wed, Dec 9"
+      - evalScript: ${ (function() { var until = Date.now() + 1500; while (Date.now() < until) {} })() }
+      - tapOn:
+          id: activity-world-back
+          waitToSettleTimeoutMs: 500
+      - extendedWaitUntil:
+          visible:
+            id: homebase-create-activity
+          timeout: 20000
+      - assertVisible: "Project Beside"
+      - assertVisible: "4 members"
+      - assertVisible: "Your people, together"
+      - takeScreenshot: demo-e2e-final-homebase
+      - evalScript: ${ (function() { var until = Date.now() + 2000; while (Date.now() < until) {} })() }

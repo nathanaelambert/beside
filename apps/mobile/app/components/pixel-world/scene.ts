@@ -1,6 +1,6 @@
 import { rewardItems, type PixelArt } from "@beside/rewards"
 
-import { avatars } from "./avatars"
+import { avatars, type Avatar } from "./avatars"
 import { Ground, groundAt } from "./terrain"
 
 export { WORLD_HEIGHT, WORLD_WIDTH } from "./terrain"
@@ -42,9 +42,9 @@ export function hitTest(items: WorldItem[], x: number, y: number, scale: number)
     )
 }
 
-export function avatarAt(x: number, y: number, scale: number) {
+export function avatarAt(x: number, y: number, scale: number, roster: Avatar[] = avatars) {
   const padding = Math.max(0, (44 / scale - 16) / 2)
-  return [...avatars]
+  return [...roster]
     .sort((a, b) => Math.abs(x - a.x) - Math.abs(x - b.x))
     .find((a) => Math.abs(x - a.x) <= 7 + padding / 2 && y >= a.y - 20 - padding && y <= a.y + 2)
 }

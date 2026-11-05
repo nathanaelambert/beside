@@ -1,160 +1,218 @@
-import { ComponentType, FC, useEffect, useMemo, useRef, useState } from "react"
+import { useRef, useState } from "react"
 // eslint-disable-next-line no-restricted-imports
-import { TextInput, TextStyle, ViewStyle } from "react-native"
+import { ActivityIndicator, Keyboard, TextInput, TextStyle, View, ViewStyle } from "react-native"
 
+import { BesideMark } from "@/components/BesideMark"
 import { Button } from "@/components/Button"
-import { PressableIcon } from "@/components/Icon"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import { TextField, type TextFieldAccessoryProps } from "@/components/TextField"
+import { TextField } from "@/components/TextField"
 import { useAuth } from "@/context/AuthContext"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import { besideApi } from "@/services/api/beside"
+import { loginValidation } from "@/services/auth/validation"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { world, worldShape } from "@/theme/world"
 
-interface LoginScreenProps extends AppStackScreenProps<"Login"> {}
+export function LoginScreen() {
+  const passwordInput = useRef<TextInput>(null)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  const { completeSignIn } = useAuth()
+  const { themed } = useAppTheme()
 
-export const LoginScreen: FC<LoginScreenProps> = ({ navigation }) => {
-  const authPasswordInput = useRef<TextInput>(null)
-
-  const [authPassword, setAuthPassword] = useState("")
-  const [isAuthPasswordHidden, setIsAuthPasswordHidden] = useState(true)
-  const [isSubmitted, setIsSubmitted] = useState(false)
-  const [attemptsCount, setAttemptsCount] = useState(0)
-  const { authEmail, setAuthEmail, setAuthToken, validationError } = useAuth()
-
-  const {
-    themed,
-    theme: { colors },
-  } = useAppTheme()
-
-  useEffect(() => {
-    // Here is where you could fetch credentials from keychain or storage
-    // and pre-fill the form fields.
-    setAuthEmail("ignite@infinite.red")
-    setAuthPassword("ign1teIsAwes0m3")
-  }, [setAuthEmail])
-
-  const error = isSubmitted ? validationError : ""
-
-  function login() {
-    setIsSubmitted(true)
-    setAttemptsCount(attemptsCount + 1)
-
-    if (validationError) return
-
-    // Make a request to your server to get an authentication token.
-    // If successful, reset the fields and set the token.
-    setIsSubmitted(false)
-    setAuthPassword("")
-    setAuthEmail("")
-
-    // We'll mock this with a fake token.
-    setAuthToken(String(Date.now()))
+  async function login() {
+    if (busy) return
+    const validation = loginValidation(email, password)
+    setError(validation)
+    if (validation) return
+    Keyboard.dismiss()
+    setBusy(true)
+    try {
+      const session = await besideApi.login({ email: email.trim(), password })
+      await completeSignIn(session)
+      setPassword("")
+    } catch (cause) {
+      setError(
+        cause instanceof Error && cause.name !== "AbortError"
+          ? cause.message
+          : "We couldn’t connect. Check your connection and try again.",
+      )
+    } finally {
+      setBusy(false)
+    }
   }
-
-  const PasswordRightAccessory: ComponentType<TextFieldAccessoryProps> = useMemo(
-    () =>
-      function PasswordRightAccessory(props: TextFieldAccessoryProps) {
-        return (
-          <PressableIcon
-            icon={isAuthPasswordHidden ? "view" : "hidden"}
-            color={colors.palette.neutral800}
-            containerStyle={props.style}
-            size={20}
-            onPress={() => setIsAuthPasswordHidden(!isAuthPasswordHidden)}
-          />
-        )
-      },
-    [isAuthPasswordHidden, colors.palette.neutral800],
-  )
 
   return (
     <Screen
       preset="auto"
-      contentContainerStyle={themed($screenContentContainer)}
       safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($page)}
+      backgroundColor={world.paper}
     >
-      <Text testID="login-heading" tx="loginScreen:logIn" preset="heading" style={themed($logIn)} />
-      <Text tx="loginScreen:enterDetails" preset="subheading" style={themed($enterDetails)} />
-      {attemptsCount > 2 && (
-        <Text tx="loginScreen:hint" size="sm" weight="light" style={themed($hint)} />
-      )}
-
-      <TextField
-        value={authEmail}
-        onChangeText={setAuthEmail}
-        containerStyle={themed($textField)}
-        autoCapitalize="none"
-        autoComplete="email"
-        autoCorrect={false}
-        keyboardType="email-address"
-        labelTx="loginScreen:emailFieldLabel"
-        placeholderTx="loginScreen:emailFieldPlaceholder"
-        helper={error}
-        status={error ? "error" : undefined}
-        onSubmitEditing={() => authPasswordInput.current?.focus()}
-      />
-
-      <TextField
-        ref={authPasswordInput}
-        value={authPassword}
-        onChangeText={setAuthPassword}
-        containerStyle={themed($textField)}
-        autoCapitalize="none"
-        autoComplete="password"
-        autoCorrect={false}
-        secureTextEntry={isAuthPasswordHidden}
-        labelTx="loginScreen:passwordFieldLabel"
-        placeholderTx="loginScreen:passwordFieldPlaceholder"
-        onSubmitEditing={login}
-        RightAccessory={PasswordRightAccessory}
-      />
-
-      <Button
-        testID="login-button"
-        tx="loginScreen:tapToLogIn"
-        style={themed($tapButton)}
-        preset="reversed"
-        onPress={login}
-      />
-      <Button
-        testID="reward-items-preview-button"
-        text="Preview reward items"
-        style={themed($tapButton)}
-        onPress={() => navigation.navigate("RewardItems")}
-      />
-      <Button
-        text="Explore pixel world"
-        style={themed($tapButton)}
-        onPress={() => navigation.navigate("PixelWorld")}
-      />
+      <View style={themed($hero)}>
+        <BesideMark scale={7} animated />
+        <View style={themed($ground)} />
+      </View>
+      <View style={themed($intro)}>
+        <Text text="beside" weight="bold" style={themed($wordmark)} />
+        <Text text="A little closer, at your own pace." style={themed($tagline)} />
+      </View>
+      <View style={themed($card)}>
+        <Text text="Welcome back" testID="login-heading" preset="subheading" style={$heading} />
+        <Text text="Log in to your home base." style={themed([$muted, $description])} />
+        <TextField
+          testID="login-email"
+          label="Email"
+          placeholder="you@example.com"
+          value={email}
+          onChangeText={setEmail}
+          editable={!busy}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          autoCorrect={false}
+          returnKeyType="next"
+          onSubmitEditing={() => passwordInput.current?.focus()}
+          containerStyle={themed($field)}
+          inputWrapperStyle={themed($input)}
+          style={$inputText}
+          LabelTextProps={{ style: $label }}
+          placeholderTextColor={world.muted}
+        />
+        <TextField
+          ref={passwordInput}
+          testID="login-password"
+          label="Password"
+          placeholder="Your password"
+          value={password}
+          onChangeText={setPassword}
+          editable={!busy}
+          autoCapitalize="none"
+          autoComplete="password"
+          autoCorrect={false}
+          secureTextEntry
+          returnKeyType="go"
+          onSubmitEditing={login}
+          containerStyle={themed($field)}
+          inputWrapperStyle={themed($input)}
+          style={$inputText}
+          LabelTextProps={{ style: $label }}
+          placeholderTextColor={world.muted}
+        />
+        {!!error && (
+          <Text
+            testID="login-error"
+            text={error}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            style={themed($error)}
+          />
+        )}
+        <Button
+          testID="login-button"
+          text={busy ? "Logging in…" : "Log in"}
+          preset="reversed"
+          onPress={login}
+          disabled={busy}
+          style={themed($button)}
+          textStyle={$buttonText}
+          pressedStyle={$buttonPressed}
+          RightAccessory={
+            busy
+              ? () => (
+                  <ActivityIndicator
+                    accessibilityLabel="Logging in"
+                    color={world.onForest}
+                    style={themed($progress)}
+                  />
+                )
+              : undefined
+          }
+        />
+      </View>
     </Screen>
   )
 }
 
-const $screenContentContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingVertical: spacing.xxl,
+const $page: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.lg,
+  paddingTop: spacing.lg,
+  paddingBottom: spacing.xl,
+  flexGrow: 1,
 })
-
-const $logIn: ThemedStyle<TextStyle> = ({ spacing }) => ({
+const $hero: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  height: 212,
+  borderRadius: spacing.lg,
+  backgroundColor: world.panel,
+  alignItems: "center",
+  justifyContent: "flex-end",
+  overflow: "hidden",
+  paddingBottom: 28,
+})
+const $ground: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  height: 28,
+  backgroundColor: "#95b46b",
+  borderTopWidth: 4,
+  borderTopColor: "#7e9d5a",
+})
+const $intro: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  marginTop: spacing.lg,
+  marginBottom: spacing.lg,
+  gap: spacing.xxs,
+})
+const $wordmark: ThemedStyle<TextStyle> = () => ({
+  color: world.forest,
+  fontSize: 44,
+  lineHeight: 52,
+  letterSpacing: -1.5,
+})
+const $tagline: ThemedStyle<TextStyle> = () => ({
+  color: world.muted,
+  fontSize: 17,
+  lineHeight: 24,
+})
+const $card: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  backgroundColor: world.panel,
+  borderRadius: spacing.lg,
+  padding: spacing.lg,
+  borderWidth: 1,
+  borderColor: world.line,
+})
+const $muted: ThemedStyle<TextStyle> = () => ({ color: world.muted })
+const $description: ThemedStyle<TextStyle> = ({ spacing }) => ({
+  marginTop: spacing.xxxs,
+  marginBottom: spacing.lg,
+})
+const $field: ThemedStyle<ViewStyle> = ({ spacing }) => ({ marginBottom: spacing.md })
+const $input: ThemedStyle<ViewStyle> = () => ({
+  borderRadius: worldShape.radius,
+  backgroundColor: world.paper,
+  borderColor: world.line,
+  minHeight: 52,
+  alignItems: "center",
+})
+const $button: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginTop: spacing.xs,
+  minHeight: 56,
+  borderRadius: worldShape.radius,
+  borderWidth: 0,
+  backgroundColor: world.forest,
+})
+const $buttonText: TextStyle = { color: world.onForest }
+const $buttonPressed: ViewStyle = { backgroundColor: world.ink }
+const $heading: TextStyle = { color: world.ink }
+const $label: TextStyle = { color: world.text }
+const $inputText: TextStyle = { color: world.ink }
+const $error: ThemedStyle<TextStyle> = ({ spacing }) => ({
+  color: world.error,
   marginBottom: spacing.sm,
 })
-
-const $enterDetails: ThemedStyle<TextStyle> = ({ spacing }) => ({
-  marginBottom: spacing.lg,
-})
-
-const $hint: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.tint,
-  marginBottom: spacing.md,
-})
-
-const $textField: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginBottom: spacing.lg,
-})
-
-const $tapButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginTop: spacing.xs,
-})
+const $progress: ThemedStyle<ViewStyle> = ({ spacing }) => ({ marginLeft: spacing.xs })

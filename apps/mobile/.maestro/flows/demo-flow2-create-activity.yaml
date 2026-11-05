@@ -1,0 +1,139 @@
+# Start at logged-in HomeBase. Creates one production activity; clean up before reruns.
+# Wednesday 5 PM through Thursday 00:00, America/Toronto. Target recording: 60–80s.
+appId: ${MAESTRO_APP_ID}
+name: Create the CivicTechWR Wednesday schedule
+---
+- assertVisible:
+    id: homebase-screen
+- assertVisible: "Your people, together"
+- evalScript: ${ (function() { var until = Date.now() + 2000; while (Date.now() < until) {} })() }
+- tapOn:
+    id: homebase-create-activity
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: activity-name
+    timeout: 20000
+- tapOn:
+    id: activity-name
+- inputText: "CivicTechWR "
+- inputText: "Hacknight "
+- inputText: "Attendance"
+- assertVisible: "CivicTechWR Hacknight Attendance"
+- copyTextFrom:
+    id: activity-name
+- assertTrue: ${maestro.copiedText === 'CivicTechWR Hacknight Attendance'}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: activity-next
+    direction: DOWN
+    speed: 50
+- tapOn:
+    id: activity-next
+- tapOn:
+    id: milestone-name
+- eraseText
+- inputText: "Hacknight "
+- inputText: "attendance"
+- assertVisible: "Hacknight attendance"
+- copyTextFrom:
+    id: milestone-name
+- assertTrue: ${maestro.copiedText === 'Hacknight attendance'}
+- hideKeyboard
+- assertVisible: "Nov 4, 2026"
+- tapOn:
+    id: schedule-repeat
+- scrollUntilVisible:
+    element:
+      id: schedule-repeat-weekly
+    direction: DOWN
+    speed: 50
+- tapOn:
+    id: schedule-repeat-weekly
+- scrollUntilVisible:
+    element:
+      id: schedule-start-time
+    direction: DOWN
+    speed: 50
+- assertVisible: "5:00 PM"
+- scrollUntilVisible:
+    element:
+      id: schedule-end-time
+    direction: DOWN
+    speed: 50
+- tapOn:
+    id: schedule-end-time
+- scrollUntilVisible:
+    element:
+      id: schedule-end-time-0000
+    direction: DOWN
+    speed: 50
+- tapOn:
+    id: schedule-end-time-0000
+- scrollUntilVisible:
+    element:
+      id: schedule-end
+    direction: DOWN
+    speed: 50
+- tapOn:
+    id: schedule-end
+- tapOn:
+    id: schedule-end-date
+- scrollUntilVisible:
+    element:
+      id: schedule-until
+    direction: DOWN
+    speed: 50
+- tapOn:
+    id: schedule-until
+- scrollUntilVisible:
+    element:
+      id: schedule-until-2026-12-31
+    direction: DOWN
+    speed: 50
+- tapOn:
+    id: schedule-until-2026-12-31
+- scrollUntilVisible:
+    element:
+      id: activity-save
+    direction: DOWN
+    speed: 50
+- assertVisible: "Every Wednesday · 5:00 PM – midnight · until Dec 31, 2026"
+- takeScreenshot: flow2-summary
+- evalScript: ${ (function() { var until = Date.now() + 2000; while (Date.now() < until) {} })() }
+- tapOn:
+    id: activity-save
+- extendedWaitUntil:
+    visible:
+      id: activity-detail-name
+    timeout: 30000
+- assertVisible:
+    id: activity-schedule-summary
+- assertNotVisible: "1 step"
+- assertVisible: "WHO'S IN"
+- assertVisible: "Open now"
+- takeScreenshot: flow2-detail-top
+- evalScript: ${ (function() { var until = Date.now() + 3000; while (Date.now() < until) {} })() }
+- swipe:
+    start: "50%, 78%"
+    end: "50%, 52%"
+    duration: 1400
+- assertVisible: "WHO'S IN"
+- assertVisible: "Wed, Nov 4"
+- takeScreenshot: flow2-detail
+- tapOn:
+    id: activity-world-back
+- extendedWaitUntil:
+    visible:
+      id: homebase-activities
+    timeout: 20000
+- tapOn:
+    id: homebase-activities
+- extendedWaitUntil:
+    visible: "CivicTechWR Hacknight Attendance"
+    timeout: 20000
+- assertVisible:
+    id: activities-screen
+- takeScreenshot: flow2-activities-list
+- evalScript: ${ (function() { var until = Date.now() + 2000; while (Date.now() < until) {} })() }

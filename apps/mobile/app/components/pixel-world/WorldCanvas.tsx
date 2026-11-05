@@ -24,9 +24,10 @@ import {
   type SharedValue,
 } from "react-native-reanimated"
 
-import { AVATAR_HEIGHT, AVATAR_WIDTH, avatars, type Avatar } from "./avatars"
+import { AVATAR_HEIGHT, AVATAR_WIDTH, avatars as defaultAvatars, type Avatar } from "./avatars"
+import { cameraFrame, type WorldFraming } from "./camera"
 import { catalogue, footprint, WORLD_HEIGHT, WORLD_WIDTH, type WorldItem } from "./scene"
-import { getTerrain, getWoodsTile, WOODS_TILE } from "./terrain"
+import { getTerrain, getWoodsTile, WOODS_TILE, type PicnicLayout } from "./terrain"
 
 // Everything is a bitmap at one texel per world pixel, scaled by an integer with nearest
 // sampling. No interpolation, no antialiasing, and only one draw per sprite.
@@ -72,11 +73,11 @@ function getWoodsImage() {
   return woodsImage
 }
 
-let terrainImage: SkImage | null | undefined
-function getTerrainImage() {
-  if (terrainImage === undefined)
-    terrainImage = makeImage(WORLD_WIDTH, WORLD_HEIGHT, getTerrain().rgba)
-  return terrainImage
+const terrainImages = new Map<PicnicLayout, SkImage | null>()
+function getTerrainImage(picnic: PicnicLayout) {
+  if (!terrainImages.has(picnic))
+    terrainImages.set(picnic, makeImage(WORLD_WIDTH, WORLD_HEIGHT, getTerrain(picnic).rgba))
+  return terrainImages.get(picnic)!
 }
 
 // A stepped, pixel-exact ellipse, centred on (0, 0).
@@ -220,6 +221,10 @@ export interface WorldCanvasProps {
   width: number
   height: number
   items: WorldItem[]
+  avatars?: Avatar[]
+  framing?: WorldFraming
+  picnic?: PicnicLayout
+  accessibilityLabel?: string
   selectedKey?: string
   preview?: WorldItem
   resetCamera: number
@@ -230,13 +235,17 @@ export function WorldCanvas({
   width,
   height,
   items,
+  avatars = defaultAvatars,
+  framing,
+  picnic = "pair",
+  accessibilityLabel = "Pixel meadow ringed by woods, with a pond and dock, two friends on a picnic blanket, and catalogue decorations. Drag to explore; tap an item to inspect it.",
   selectedKey,
   preview,
   resetCamera,
   onTap,
 }: WorldCanvasProps) {
   // Opening the tray changes height, so derive zoom from width to keep pixels the same size.
-  const scale = Math.max(1, Math.floor(width / 176))
+  const { scale, x: initialX, y: initialY } = cameraFrame(width, height, framing)
   const cameraX = useSharedValue(0)
   const cameraY = useSharedValue(0)
   const startX = useSharedValue(0)
@@ -245,9 +254,9 @@ export function WorldCanvas({
   const reduceMotion = useReducedMotion()
 
   useEffect(() => {
-    cameraX.value = Math.round((width - WORLD_WIDTH * scale) / 2)
-    cameraY.value = Math.round((height - WORLD_HEIGHT * scale) / 2)
-  }, [width, height, scale, resetCamera, cameraX, cameraY])
+    cameraX.value = initialX
+    cameraY.value = initialY
+  }, [initialX, initialY, resetCamera, cameraX, cameraY])
 
   useEffect(() => {
     if (reduceMotion) return
@@ -324,10 +333,7 @@ export function WorldCanvas({
   return (
     <GestureHandlerRootView style={styles.fill}>
       <GestureDetector gesture={Gesture.Race(pan, tap)}>
-        <Canvas
-          style={styles.fill}
-          accessibilityLabel="Pixel meadow ringed by woods, with a pond and dock, two friends on a picnic blanket, and catalogue decorations. Drag to explore; tap an item to inspect it."
-        >
+        <Canvas style={styles.fill} accessibilityLabel={accessibilityLabel}>
           <Group transform={transform} antiAlias={false}>
             {/* Forest continues past the world, so tall or wide screens never show a bare edge. */}
             <Rect
@@ -345,7 +351,7 @@ export function WorldCanvas({
               />
             </Rect>
             <Image
-              image={getTerrainImage()}
+              image={getTerrainImage(picnic)}
               x={0}
               y={0}
               width={WORLD_WIDTH}

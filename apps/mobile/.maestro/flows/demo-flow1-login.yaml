@@ -1,0 +1,44 @@
+# The driver runs prepare, focus-password, and submit in sequence.
+# Email is supplied with -e LOGIN_EMAIL. The driver injects the password directly
+# with adb, so Maestro's command logs and test artifacts never contain it.
+appId: com.beside
+---
+- runFlow:
+    when:
+      true: ${FLOW1_PHASE === 'prepare'}
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: login-heading
+          timeout: 60000
+      - assertVisible: Welcome back
+      - tapOn:
+          id: login-email
+      - inputText: ${LOGIN_EMAIL}
+      - hideKeyboard
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      true: ${FLOW1_PHASE === 'focus-password'}
+    commands:
+      - tapOn:
+          id: login-password
+- runFlow:
+    when:
+      true: ${FLOW1_PHASE === 'submit'}
+    commands:
+      - assertVisible:
+          id: login-heading
+      - tapOn:
+          id: login-button
+      - extendedWaitUntil:
+          visible: Project Beside
+          timeout: 30000
+      - assertVisible: 4 members
+      - assertVisible: Mosaab Emam
+      - assertVisible: Nathanael Lambert
+      - assertVisible: Vaibhav Kapoor
+      - assertVisible: Pritesh Parmar
+      - assertVisible:
+          id: homebase-create-activity
+      - waitForAnimationToEnd
