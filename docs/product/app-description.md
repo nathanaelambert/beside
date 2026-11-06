@@ -1,29 +1,31 @@
-Here I describe in general the idea of the app 'beside'.
+## beside
+A mobile-first app mixing activity tracking, habit building, social elements, and RPG elements.
+### Async-first
+Beside is meant to enable friends to do activities with each other, not at the same time, necessarily, but the same activity nonetheless. 
+it's optimized for long-distance friendships.
+### diverse activity support
+01. Reading the same book together.
+02. Building a gym routine.
+03. Watching the same movie / tv show.
+04. Learning the same language.
+05. Building the same habit.
+06. Working on a Minecraft build together.
+07. Writing a story together.
+08. Running parallel DnD campaigns in a shared world and keeping each other updated.
+09. Studying for the same exam together.
+### multi-user shared space
+Activities are shared in a virtual space by a group  of users.
+A virtual shared space is called a homebase.
+The app is optimized for homebases with two people (couples and friends).
+The app supports larger homebases (3-5 people friend group, 8-15 people club, 25-30 people school class...).
+### activity centered
+Beside focuses on helping people who already know each other outside the platform do activities together.
+Beside does not prioritize helping people meet strangers. 
+Social elements, when introduced, are meant to serve and feed into the activity part.
+### RPG and gamification
+Each user has an avatar and a name in each of the homebase they are part of. 
+Each homebase is independent. Progress in one homebase doesn't affect progress in another.
 
-It's a platform that mixes activity logging with social elements and RPG elements to create a new unique experience.
-
-It's meant to enable friends to do activities with each other, not at the same time, necessarily, but the same activity nonetheless. Why they would use the app / platform is because we're thinking of cases where they're long-distance, meaning they don't live in the same city / country or share the same timezone.
-
-By activities I mean stuff like reading a book, wathcing a TV show or movie, going to the gym, cooking, studying, building habits, ...etc. There are countless apps for people to log and track these activities, ours is meant to address the case where more than one person is doing the same activity.
-Examples:
-1. Reading the same book together.
-2. Building a gym routine.
-3. Watching the same movie / tv show.
-4. Learning the same language.
-5. Building the same habit.
-
-Some activities will have a sense of accountability when done together, like habits and the gym. Others are just fun to do with someone else, like watching a tv show.
-
----
-
-The most common case scenario as we see it is going to be with two people. They could be best friends or in a relationship, ...etc. However, we also want to support groups with more than two people.
-This still isn't like social media where you can just send friend requests and befriend random people, this is for people who already know each other and talk outside of the platform. The main issue this platform addresses is the activity part, not the social part. Social elements, when introduced, are meant to serve and feed into the activity part.
-
----
-
-Let's talk about those RPG elements I mentioned. Each user can have an avatar, with a name... etc. When two users who know each other decide to use the platform, a type of 'connection' is formed. Our idea is to have xp and levels but on the connection level, not the character level.
-This is because one user can have connections with multiple real-life people where they share different interests. For example: A could share a connection with B that includes watching shows and reading books. And B can have a different connection with C where their activities are around cooking and drinking, which A doesn't share.
-The idea behind levels and xp is to encourage the together aspect. For example, if one person goes regularly to the gym but the other doesn't, the former cannot carry both of them, this should encourage both people to be active in their decided activities.
 
 In terms of UI, we are thinking of a game-y kind of interface. Avatars and map made with pixel art. Interests, activities, ...etc can be shown as objects like islands, houses, and that "!" sign we see on NPCs on many games.
 This could help with the separation of 'connections'. A and B could have a Reading 'island', this island shows the avatars of A and B. B can also navigate to the Cooking island, which they share with C.
