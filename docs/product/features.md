@@ -41,4 +41,33 @@ Carve a permanent message in its bark.
 - In the dance club homebase some people joined a few month ago but only came once to practice. I don't want to kick them but I want to do things with the people who are coming.
 - I would love to start a Minecraft server with friends from school as well as with my cousins but they are on separate homebases. I don't want to create a new homebase just for this activity. 
 - I invited this guy I met last week at the dance club to my birthday. I had a bunch of friends mostly from school and I made an activity on our school friend group homebase. How can I include the guy in the activity without having him looking at our private jokes and all.
-- I just want to play our game once in a while. I don't want to have to plan for every session. 
+- I just want to play our game once in a while. I don't want to have to plan for every session. ## general features
+### onboarding
+### login
+### create homebase
+### invite to homebase
+### join homebase
+### leave homebase
+### discover homebases
+### view homebase invite
+### accept homebase invite
+### decline homebase invite
+### rename homebase
+
+## homebase specific features
+### view homebase
+### view participants
+### view participants recent activity
+### view souvenirs
+### interact with souvenir
+
+## activity specific features
+### create activity
+### accept activity
+### decline activity
+### veto activity 
+### log activity milestone
+### update activity 
+
+
+
