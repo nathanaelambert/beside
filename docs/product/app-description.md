@@ -1,9 +1,9 @@
-## beside
+## Beside
 A mobile-first app mixing activity tracking, habit building, social elements, and RPG elements.
-### Async-first
+### Async-First
 Beside is meant to enable friends to do activities with each other, not at the same time, necessarily, but the same activity nonetheless. 
 it's optimized for long-distance friendships.
-### diverse activity support
+### Diverse Activity Support
 01. Reading the same book together.
 02. Building a gym routine.
 03. Watching the same movie / tv show.
@@ -13,16 +13,16 @@ it's optimized for long-distance friendships.
 07. Writing a story together.
 08. Running parallel DnD campaigns in a shared world and keeping each other updated.
 09. Studying for the same exam together.
-### multi-user shared space
-Activities are shared in a virtual space by a group  of users.
+### Multi-User Shared Space
+Activities are shared in a virtual space by a group of users.
 A virtual shared space is called a homebase.
 The app is optimized for homebases with two people (couples and friends).
 The app supports larger homebases (3-5 people friend group, 8-15 people club, 25-30 people school class...).
-### activity centered
+### Activity Centered
 Beside focuses on helping people who already know each other outside the platform do activities together.
 Beside does not prioritize helping people meet strangers. 
 Social elements, when introduced, are meant to serve and feed into the activity part.
-### RPG and gamification
+### RPG and Gamification
 Each user has an avatar and a name in each of the homebase they are part of. 
 Each homebase is independent. Progress in one homebase doesn't affect progress in another.
 
