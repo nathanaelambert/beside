@@ -35,6 +35,13 @@ describe("public API contract without a database", () => {
     assert.ok(body.paths["/api/v1/logs"].post);
     assert.ok(body.paths["/api/v1/auth/register"].post);
     assert.equal(body.components.schemas.CreateLog.additionalProperties, false);
+    assert.ok(
+      !body.components.schemas.CreateLog.required.includes("occurredAt"),
+    );
+    assert.equal(
+      body.components.schemas.State.properties.serverTime.format,
+      "date-time",
+    );
     assert.equal(
       body.components.schemas.CreateLog.properties.authorUserId,
       undefined,
@@ -543,6 +550,60 @@ describe(
         400,
       );
     });
+    it("records immediate attendance at server time and replays it without another log", async () => {
+      const activity = await create(alice, "activities", {
+        templateId: "read-book",
+        name: "Immediate attendance",
+        connectionId: aliceBaseId,
+        target: 1,
+      });
+      const now = Date.now();
+      const stamp = (minutes: number) =>
+        new Date(now + minutes * 60_000).toISOString();
+      const paced = (startAt: string, endAt: string) =>
+        create(alice, "milestones", {
+          ...milestoneBody(activity.entityId),
+          policy: "paced",
+          startAt,
+          endAt,
+        });
+      const [open, future, closed] = await Promise.all([
+        paced(stamp(-5), stamp(5)),
+        paced(stamp(5), stamp(10)),
+        paced(stamp(-10), stamp(-5)),
+      ]);
+      const immediate = (milestoneId: string) => ({
+        milestoneId,
+        isSuccess: true,
+        title: "I was there",
+        durationMinutes: 0,
+        origin: "manual",
+        externalKey: `attendance:${milestoneId}`,
+      });
+      for (const milestone of [future, closed])
+        await create(alice, "logs", immediate(milestone.entityId), 400);
+      await create(
+        alice,
+        "logs",
+        { ...immediate(open.entityId), occurredAt: stamp(1) },
+        400,
+      );
+      const first = await create(alice, "logs", immediate(open.entityId), 200);
+      const retry = await create(alice, "logs", immediate(open.entityId), 200);
+      assert.equal(first.duplicate, false);
+      assert.deepEqual(retry, { entityId: first.entityId, duplicate: true });
+      const snapshot = await state(alice);
+      const [log, ...duplicates] = snapshot.logs.filter(
+        (row) => row.milestoneId === open.entityId,
+      );
+      assert.ok(log);
+      assert.equal(duplicates.length, 0);
+      assert.equal(log.occurredAt, log.createdAt);
+      assert.ok(Date.parse(log.occurredAt) >= now);
+      assert.ok(
+        Date.parse(snapshot.serverTime ?? "") >= Date.parse(log.occurredAt),
+      );
+    });
     it("supports member-authorized CRUD with transactional cascades and revoked invitations", async () => {
       const server = app.getHttpServer();
       const base = await create(alice, "homebases", { name: "CRUD base" });
@@ -589,7 +650,7 @@ describe(
           .delete(`/api/v1/${path}`)
           .set(auth(session))
           .expect(status);
-      const original = await state(alice);
+      const { serverTime: originalTime, ...original } = await state(alice);
       for (const path of [
         `homebases/${base.id}`,
         `activities/${activity.entityId}`,
@@ -599,7 +660,9 @@ describe(
         await remove(stranger, path, 400);
         await request(server).delete(`/api/v1/${path}`).expect(401);
       }
-      assert.deepEqual(await state(alice), original);
+      const { serverTime: latestTime, ...unchanged } = await state(alice);
+      assert.deepEqual(unchanged, original);
+      assert.ok(Date.parse(latestTime ?? "") >= Date.parse(originalTime ?? ""));
       await patch(bob, `homebases/${base.id}`, { name: "Renamed CRUD base" });
       await patch(bob, `activities/${activity.entityId}`, {
         name: "Renamed CRUD activity",
