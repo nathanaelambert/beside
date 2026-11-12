@@ -1,12 +1,6 @@
 packages:
   - "apps/*"
   - "packages/*"
-packageExtensions:
-  # Worklets 0.7.2 imports Babel types without declaring it. Its Babel 7
-  # transform passes signed hashes to numericLiteral, which Babel 8 rejects.
-  react-native-worklets@0.7.2:
-    dependencies:
-      "@babel/types": 7.29.8
 allowBuilds:
   "@scarf/scarf": false
   "@shopify/react-native-skia": true
