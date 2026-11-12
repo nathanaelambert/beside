@@ -7,14 +7,13 @@ import {
   useEffect,
   useState,
 } from "react"
-import * as SecureStore from "expo-secure-store"
 import type { Session } from "@beside/api-client"
 
 import { besideApi } from "@/services/api/beside"
+import { sessionToken } from "@/services/session/sessionToken"
 import { remove } from "@/utils/storage"
 
 type AuthUser = Session["user"]
-const SESSION_KEY = "beside.session-token"
 
 export type AuthContextType = {
   isAuthenticated: boolean
@@ -44,7 +43,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
       setIsRestoring(true)
       setRestoreError("")
       try {
-        const token = await SecureStore.getItemAsync(SESSION_KEY)
+        const token = await sessionToken.get()
         if (!active) return
         besideApi.setToken(token)
         if (token) {
@@ -53,7 +52,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
             if (active) setUser(profile)
           } catch (error) {
             if (error instanceof Error && "status" in error && error.status === 401) {
-              await SecureStore.deleteItemAsync(SESSION_KEY)
+              await sessionToken.clear()
               besideApi.setToken(null)
             } else {
               throw error
@@ -75,9 +74,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
 
   const completeSignIn = useCallback(async (session: Session) => {
     try {
-      await SecureStore.setItemAsync(SESSION_KEY, session.token, {
-        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-      })
+      await sessionToken.set(session.token)
     } catch {
       await besideApi.logout().catch(() => undefined)
       besideApi.setToken(null)
@@ -88,7 +85,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
   }, [])
 
   const logout = useCallback(async () => {
-    await SecureStore.deleteItemAsync(SESSION_KEY)
+    await sessionToken.clear()
     await besideApi.logout().catch(() => undefined)
     besideApi.setToken(null)
     setUser(null)
