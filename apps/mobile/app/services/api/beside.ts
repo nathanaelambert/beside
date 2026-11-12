@@ -1,6 +1,6 @@
 import { BesideClient } from "@beside/api-client"
 
-// Public API origin only. AuthProvider restores the token from SecureStore.
+// Public API origin only. AuthProvider restores the token via services/session/sessionToken.
 export const besideApi = new BesideClient(
   process.env.EXPO_PUBLIC_BESIDE_API_URL || "http://localhost:3001",
 )
