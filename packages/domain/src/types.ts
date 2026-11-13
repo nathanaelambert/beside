@@ -45,6 +45,34 @@ export interface Reward {
   // Snapshot the people whose cooperation this reward requires.
   requiredUserIds: string[];
 }
+export type AcornEntryKind = "check-in" | "together" | "purchase" | "refund";
+// Ledger row for a home base's shared acorn pool. The balance is the sum of
+// amounts; each row credits the person whose action caused it.
+export interface AcornEntry {
+  id: string;
+  homebaseId: string;
+  userId: string;
+  amount: number;
+  kind: AcornEntryKind;
+  // Null once the milestone or decoration is deleted; the note keeps history readable.
+  milestoneId: string | null;
+  decorationId: string | null;
+  note: string;
+  createdAt: string;
+}
+// A purchased catalog item placed in a home base's meadow.
+export interface Decoration {
+  id: string;
+  homebaseId: string;
+  itemId: string;
+  price: number;
+  purchasedByUserId: string;
+  // Bottom-centre anchor in world pixels, on the 8 px placement grid.
+  x: number;
+  y: number;
+  externalKey: string | null;
+  createdAt: string;
+}
 export interface Membership {
   id: string;
   connectionId: string;
@@ -170,6 +198,8 @@ export interface Database {
   rewardItems: RewardItem[];
   milestones: Milestone[];
   rewards: Reward[];
+  acornEntries: AcornEntry[];
+  decorations: Decoration[];
 }
 export interface LogInput {
   authorUserId: string;
@@ -257,6 +287,16 @@ export type Command =
       actorId: string;
       input: Omit<LogInput, "occurredAt"> & { occurredAt?: string };
     }
+  | {
+      type: "buyDecoration";
+      actorId: string;
+      homebaseId: string;
+      itemId: string;
+      x: number;
+      y: number;
+      externalKey?: string | null;
+    }
+  | { type: "returnDecoration"; actorId: string; decorationId: string }
   | {
       type: "distributeLog";
       actorId: string;

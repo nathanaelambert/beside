@@ -25,6 +25,12 @@ export function stateForUser(db: Database, userId: string): ApiState {
   const eventIds = new Set(deliveries.map((d) => d.eventId));
   const events = db.events.filter((event) => eventIds.has(event.id));
   const rewards = db.rewards.filter((reward) => bases.has(reward.homebaseId));
+  const acornEntries = db.acornEntries.filter((row) =>
+    bases.has(row.homebaseId),
+  );
+  const decorations = db.decorations.filter((row) =>
+    bases.has(row.homebaseId),
+  );
   const users = new Set([
     userId,
     ...memberships.map((m) => m.userId),
@@ -33,6 +39,8 @@ export function stateForUser(db: Database, userId: string): ApiState {
     ...logs.map((log) => log.authorUserId),
     ...events.map((event) => event.actorUserId),
     ...rewards.flatMap((reward) => reward.requiredUserIds),
+    ...acornEntries.map((row) => row.userId),
+    ...decorations.map((row) => row.purchasedByUserId),
   ]);
   return {
     version: 3,
@@ -48,6 +56,8 @@ export function stateForUser(db: Database, userId: string): ApiState {
     events,
     deliveries,
     rewards,
+    acornEntries,
+    decorations,
     subjectTemplates: db.subjectTemplates,
     activityTemplates: db.activityTemplates,
     rewardItems: db.rewardItems,

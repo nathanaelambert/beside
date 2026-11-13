@@ -205,6 +205,33 @@ export const databaseSchema = z.object({
       requiredUserIds: z.array(key).min(1),
     }),
   ),
+  // Added by the rewards-currency experiment; older payloads have none.
+  acornEntries: rows(
+    z.object({
+      id: key,
+      homebaseId: key,
+      userId: key,
+      amount: z.int().refine((value) => value !== 0, "Amount cannot be zero."),
+      kind: z.enum(["check-in", "together", "purchase", "refund"]),
+      milestoneId: key.nullable(),
+      decorationId: key.nullable(),
+      note: z.string().max(500),
+      createdAt: date,
+    }),
+  ).default([]),
+  decorations: rows(
+    z.object({
+      id: key,
+      homebaseId: key,
+      itemId: key,
+      price: z.int().nonnegative(),
+      purchasedByUserId: key,
+      x: z.int(),
+      y: z.int(),
+      externalKey: key.nullable(),
+      createdAt: date,
+    }),
+  ).default([]),
   logs: rows(
     z.object({
       id: key,
@@ -584,6 +611,39 @@ export function parseDatabase(input: unknown): Database {
     db.contributions.map((c) => `${c.logId}:${c.participationId}`),
     "log contribution",
   );
+  for (const d of db.decorations) {
+    fk(db.connections, d.homebaseId);
+    fk(db.rewardItems, d.itemId);
+    fk(db.users, d.purchasedByUserId);
+  }
+  for (const a of db.acornEntries) {
+    fk(db.connections, a.homebaseId);
+    fk(db.users, a.userId);
+    fk(db.milestones, a.milestoneId);
+    fk(db.decorations, a.decorationId);
+    const positive = a.kind === "check-in" || a.kind === "together" || a.kind === "refund";
+    if (positive !== a.amount > 0)
+      throw new Error("Acorn entry amount has the wrong sign for its kind.");
+  }
+  unique(
+    db.acornEntries
+      .filter((a) => a.kind === "check-in" && a.milestoneId)
+      .map((a) => `${a.milestoneId}:${a.userId}`),
+    "check-in acorns",
+  );
+  unique(
+    db.acornEntries
+      .filter((a) => a.kind === "together" && a.milestoneId)
+      .map((a) => a.milestoneId!),
+    "together bonus",
+  );
+  for (const base of db.connections)
+    if (
+      db.acornEntries
+        .filter((a) => a.homebaseId === base.id)
+        .reduce((sum, a) => sum + a.amount, 0) < 0
+    )
+      throw new Error("A home base cannot owe acorns.");
   for (const e of db.events) {
     fk(db.users, e.actorUserId);
     fk(

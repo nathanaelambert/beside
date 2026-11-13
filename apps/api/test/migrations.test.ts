@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { createSeed } from "@beside/domain/seed";
@@ -24,7 +24,10 @@ it(
         ),
       );
       const seed = createSeed();
+      // Collections introduced after v2 start empty on upgrade.
+      const later = new Set(["acornEntries", "decorations"]);
       for (const [key, table, currentColumns] of tables) {
+        if (later.has(key)) continue;
         const columns: string[] = [...currentColumns];
         if (key === "connections" || key === "activities")
           columns.push("personalOwnerId");
@@ -72,9 +75,17 @@ it(
           "utf8",
         ),
       );
+      // Fire deferred foreign-key checks before later migrations alter tables.
+      await client.query("SET CONSTRAINTS ALL IMMEDIATE");
+      const directory = new URL("../src/db/migrations/", import.meta.url);
+      for (const name of (await readdir(directory)).sort())
+        if (/^\d+_.*\.sql$/.test(name) && name >= "003")
+          await client.query(await readFile(new URL(name, directory), "utf8"));
       const upgraded = parseDatabase(await loadDatabase(client));
+      assert.deepEqual(upgraded.acornEntries, []);
+      assert.deepEqual(upgraded.decorations, []);
       for (const key of Object.keys(seed) as (keyof typeof seed)[]) {
-        if (key !== "logShares")
+        if (key !== "logShares" && !later.has(key))
           assert.deepEqual(upgraded[key], seed[key], `Preserve ${key}`);
       }
       assert.deepEqual(

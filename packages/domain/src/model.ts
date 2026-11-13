@@ -11,6 +11,12 @@ import type {
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
 import { logInputSchema, milestoneInputSchema } from "./validation.ts";
+import {
+  buyDecoration,
+  detachAcorns,
+  earnAcorns,
+  returnDecoration,
+} from "./acorns.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const requireValue = <T>(value: T | undefined | null, message: string): T => {
@@ -314,6 +320,7 @@ function removeGraph(
     (milestone) => !milestoneIds.has(milestone.id),
   );
   db.rewards = db.rewards.filter((reward) => !rewardIds.has(reward.id));
+  detachAcorns(db, milestoneIds, homebaseIds);
   db.participations = db.participations.filter(
     (person) => !people.has(person.id),
   );
@@ -1047,7 +1054,94 @@ export function execute(
             log.origin,
           );
         awardReward(db, milestone, command.actorId, now, log.origin);
+        const acorns = earnAcorns(
+          db,
+          homebase.id,
+          milestone,
+          command.actorId,
+          now,
+        );
+        if (acorns.together)
+          emit(
+            db,
+            command.actorId,
+            "acorns.together",
+            "milestone",
+            milestone.id,
+            `Everyone made it to “${milestone.name}”: ${acorns.together} bonus acorns for ${homebase.name}.`,
+            members(db, homebase.id),
+            homebase.id,
+            "progress",
+            log.origin,
+          );
       }
+      break;
+    }
+    case "buyDecoration": {
+      const base = requireValue(
+        db.connections.find((row) => row.id === command.homebaseId),
+        "Home base is missing.",
+      );
+      const people = members(db, base.id);
+      if (!people.includes(command.actorId))
+        throw new Error("Home base is not accessible.");
+      const externalKey = command.externalKey?.trim() || null;
+      const previous =
+        externalKey &&
+        db.decorations.find(
+          (row) =>
+            row.purchasedByUserId === command.actorId &&
+            row.externalKey === externalKey,
+        );
+      if (previous)
+        return { db: database, entityId: previous.id, duplicate: true };
+      const decoration = buyDecoration(
+        db,
+        {
+          actorId: command.actorId,
+          homebaseId: base.id,
+          itemId: command.itemId,
+          x: command.x,
+          y: command.y,
+          externalKey,
+        },
+        now,
+      );
+      entityId = decoration.id;
+      emit(
+        db,
+        command.actorId,
+        "decoration.purchased",
+        "homebase",
+        base.id,
+        `${db.users.find((u) => u.id === command.actorId)?.name} bought ${db.rewardItems.find((i) => i.id === decoration.itemId)?.name} for ${decoration.price} acorns.`,
+        people,
+        base.id,
+        "activity",
+      );
+      break;
+    }
+    case "returnDecoration": {
+      const decoration = requireValue(
+        db.decorations.find((row) => row.id === command.decorationId),
+        "Decoration is missing.",
+      );
+      const people = members(db, decoration.homebaseId);
+      if (!people.includes(command.actorId))
+        throw new Error("Decoration is not accessible.");
+      returnDecoration(db, decoration, command.actorId, now);
+      entityId = decoration.homebaseId;
+      emit(
+        db,
+        command.actorId,
+        "decoration.returned",
+        "homebase",
+        decoration.homebaseId,
+        `${db.users.find((u) => u.id === command.actorId)?.name} returned ${db.rewardItems.find((i) => i.id === decoration.itemId)?.name} for ${decoration.price} acorns.`,
+        people,
+        decoration.homebaseId,
+        "activity",
+      );
       break;
     }
     case "distributeLog": {

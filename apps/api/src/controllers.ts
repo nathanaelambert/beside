@@ -24,6 +24,13 @@ import {
 } from "@nestjs/swagger";
 import type { Request } from "express";
 import * as input from "@beside/domain/api";
+import {
+  currency,
+  earning,
+  rarityOrder,
+  rarityTiers,
+  shopListings,
+} from "@beside/domain/shop";
 import { AuthGuard, AuthService, type AuthenticatedRequest } from "./auth.ts";
 import { DatabaseService } from "./db/database.service.ts";
 import { DomainService } from "./domain.service.ts";
@@ -383,6 +390,52 @@ export class DomainController {
         ...input.createLogSchema.parse(body),
         authorUserId: request.actor.id,
       },
+    });
+  }
+  @Get("shop")
+  @ApiOkResponse({ schema: ref("Shop") })
+  @ApiOperation({
+    summary: "Acorn prices, rarity tiers and earning rules",
+    description:
+      "Experiment: each home base shares one acorn pool. Balances and history are in State.acornEntries; placed purchases are in State.decorations.",
+  })
+  shop() {
+    return {
+      currency,
+      earning,
+      tiers: rarityOrder.map((id) => rarityTiers[id]),
+      listings: shopListings,
+    };
+  }
+  @Post("decorations")
+  @ApiBody({ schema: ref("BuyDecoration") })
+  @ApiCreatedResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Buy a catalog item with the home base's acorns and place it",
+    description:
+      "Any member can spend the shared pool. Rejected without charging when the base cannot afford the price, already owns a legendary item, or the spot is outside the meadow or taken. Reuse externalKey to retry without paying twice.",
+  })
+  buyDecoration(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.domain.command({
+      type: "buyDecoration",
+      actorId: request.actor.id,
+      ...input.buyDecorationSchema.parse(body),
+    });
+  }
+  @Delete("decorations/:decorationId")
+  @ApiParam({ name: "decorationId", type: String })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Return a decoration to the shop for a full refund",
+  })
+  returnDecoration(
+    @Req() request: AuthenticatedRequest,
+    @Param("decorationId") decorationId: string,
+  ) {
+    return this.domain.command({
+      type: "returnDecoration",
+      actorId: request.actor.id,
+      decorationId,
     });
   }
   @Post("logs/:logId/shares")

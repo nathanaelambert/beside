@@ -9,6 +9,7 @@ export type {
 import type {
   ApiHomebase,
   ApiState,
+  BuyDecorationInput,
   CreateActivityInput,
   CreateLogInput,
   CreateMilestoneInput,
@@ -17,6 +18,7 @@ import type {
   MutationResult,
   RegisterInput,
   Session,
+  Shop,
   UpdateActivityInput,
   UpdateMilestoneInput,
 } from "@beside/domain/api";
@@ -205,6 +207,18 @@ export class BesideClient {
   }
   recordLog(input: CreateLogInput) {
     return this.request<MutationResult>("/logs", "POST", input);
+  }
+  shop() {
+    return this.request<Shop>("/shop");
+  }
+  buyDecoration(input: BuyDecorationInput) {
+    return this.request<MutationResult>("/decorations", "POST", input);
+  }
+  returnDecoration(decorationId: string) {
+    return this.request<MutationResult>(
+      `/decorations/${encodeURIComponent(decorationId)}`,
+      "DELETE",
+    );
   }
   shareLog(logId: string, connectionIds: string[]) {
     return this.request<MutationResult>(

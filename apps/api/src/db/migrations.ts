@@ -1,1 +1,1 @@
-export const latestMigration = "004_milestone_schedules.sql";
+export const latestMigration = "007_acorns.sql";

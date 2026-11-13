@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rarityOrder } from "./shop.ts";
 import {
   databaseSchema,
   logInputSchema,
@@ -68,6 +69,46 @@ export const createLogSchema = logInputSchema
 export const shareLogSchema = z.strictObject({
   connectionIds: z.array(id).max(100),
 });
+export const buyDecorationSchema = z.strictObject({
+  homebaseId: id,
+  itemId: id,
+  x: z.int().describe("Bottom-centre anchor in meadow pixels, multiple of 8."),
+  y: z.int().describe("Bottom-centre anchor in meadow pixels, multiple of 8."),
+  externalKey: id
+    .optional()
+    .describe("Reuse when retrying so one purchase is never charged twice."),
+});
+const rarity = z.enum(rarityOrder as [string, ...string[]]);
+export const shopSchema = z.object({
+  currency: z.object({
+    id: z.string(),
+    singular: z.string(),
+    plural: z.string(),
+  }),
+  earning: z.object({
+    checkIn: z.int().describe("Acorns per successful achievement check-in."),
+    togetherPerPerson: z
+      .int()
+      .describe("Bonus per roster member once everyone has checked in."),
+  }),
+  tiers: z.array(
+    z.object({
+      id: rarity,
+      name: z.string(),
+      price: z.int(),
+      limitPerHomebase: z.int().nullable(),
+      color: z.string(),
+    }),
+  ),
+  listings: z.array(
+    z.object({
+      itemId: id,
+      rarity,
+      price: z.int(),
+      limitPerHomebase: z.int().nullable(),
+    }),
+  ),
+});
 export const publicUserSchema = databaseSchema.shape.users.element.omit({
   email: true,
 });
@@ -110,3 +151,5 @@ export type CreateMilestoneInput = z.input<typeof createMilestoneSchema>;
 export type UpdateActivityInput = z.input<typeof updateActivitySchema>;
 export type UpdateMilestoneInput = z.input<typeof updateMilestoneSchema>;
 export type CreateLogInput = z.input<typeof createLogSchema>;
+export type BuyDecorationInput = z.input<typeof buyDecorationSchema>;
+export type Shop = z.infer<typeof shopSchema>;
