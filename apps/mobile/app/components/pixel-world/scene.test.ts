@@ -2,7 +2,7 @@ import { checkStarterOakPlacement, snapMeadowPoint } from "@beside/api-client/ga
 import { rewardItems } from "@beside/rewards"
 
 import { avatarAt, footprint, hitTest, initialItems, placementAt, type WorldItem } from "./scene"
-import { oakAt } from "./starterOak"
+import { oakAt, starterOakGuidePoints, starterOakTap } from "./starterOak"
 import { BLANKET, DOCK, Ground, groundAt } from "./terrain"
 
 describe("pixel world interactions", () => {
@@ -58,5 +58,14 @@ describe("pixel world interactions", () => {
       expect(box.bottom).toBeGreaterThanOrEqual(28)
       expect(box.right).toBeGreaterThan(box.left)
     }
+  })
+
+  it("only marks grid spots that can be tapped and planted on clear lawn", () => {
+    const points = starterOakGuidePoints()
+    expect(points).toContainEqual({ x: 104, y: 104 })
+    expect(points).not.toContainEqual({ x: 224, y: 144 })
+    expect(points).not.toContainEqual({ x: 144, y: 104 })
+    expect(points.every(({ x, y }) => starterOakTap(x, y).rejection === null)).toBe(true)
+    expect(starterOakTap(220, 145).rejection).toBe("terrain")
   })
 })

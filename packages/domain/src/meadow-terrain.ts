@@ -41,14 +41,14 @@ const PATH_SEGMENTS: [number, number][][] = [
 ];
 
 const C = {
-  grass: ["#7e9d5a", "#8aa963", "#95b46b", "#a3c177", "#b4ce88"],
+  grass: ["#729054", "#839f5d", "#94af67", "#a9c17a", "#c0d28e"],
   tuftDark: "#6c8c4e",
   tuftLight: "#c2d896",
   woods: ["#1f3427", "#2b4632", "#375a3b", "#476f45", "#5b8550", "#7aa25f"],
   woodsShadow: "#6a8a50",
   dirt: ["#9f7f55", "#b8966a", "#cdae7f", "#dcc193", "#eadab0"],
-  shore: ["#8a7a56", "#b4a272", "#d0bf8f", "#e2d4a6"],
-  water: ["#3f727c", "#4e8890", "#5e9c9f", "#73b0ad", "#8fc4bb", "#c4e3d6"],
+  shore: ["#827251", "#ad996a", "#c7b282", "#dec997"],
+  water: ["#355f6e", "#427682", "#538b91", "#68a5a5", "#8bc0b8", "#c4e3d6"],
   lily: ["#3f6e41", "#5c9150", "#7fb262"],
   reed: ["#4c6b3c", "#6b8d4b", "#7a5838", "#9a7046"],
   plank: ["#3a2820", "#5a3d2c", "#7c573a", "#a27a4e", "#c8a06c", "#dbb985"],

@@ -55,6 +55,15 @@ assets, backend calls, purchases, or persistence; the initial arrangement and
 memories are mock data. This is a visual/interaction spike, not a world engine or
 a performance benchmark.
 
+### Shared Home Base garden
+
+In the signed-in Home Base, **Plant a tree** marks valid lawn spots before the
+first tap. Tap a marker to preview the oak, tap another to move it, or use
+**Suggest spot** without interacting with the canvas. The pond and occupied
+areas stay unmarked. **Plant oak** saves one tree per Home Base; a brief ring
+and the confirmation label appear on success. The ring is skipped with Reduce
+Motion, and other sessions show the saved tree when they load the garden.
+
 For the web version, run from the repository root:
 
 ```sh
