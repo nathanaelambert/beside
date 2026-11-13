@@ -17,10 +17,11 @@ export class DomainService {
     // expired windows immediately, even between scheduled invocations.
     return this.database.transaction(true, async (client) => {
       const before = await loadDatabase(client);
-      const settled = settleExpiredMilestones(before, new Date().toISOString());
+      const serverTime = new Date().toISOString();
+      const settled = settleExpiredMilestones(before, serverTime);
       if (settled.failuresRecorded)
         await persistChanges(client, before, settled.db);
-      return stateForUser(settled.db, userId);
+      return { ...stateForUser(settled.db, userId), serverTime };
     });
   }
   command(command: Command) {

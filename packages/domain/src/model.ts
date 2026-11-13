@@ -907,7 +907,8 @@ export function execute(
       break;
     }
     case "recordLog": {
-      const input: LogInput = logInputSchema.parse(command.input);
+      const { occurredAt = now, ...fields } = command.input;
+      const input: LogInput = logInputSchema.parse({ ...fields, occurredAt });
       input.externalKey = input.externalKey?.trim() || null;
       if (input.authorUserId !== command.actorId)
         throw new Error("A trigger must act on behalf of the selected author.");

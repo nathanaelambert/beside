@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react"
-import { ActivityIndicator, Pressable, RefreshControl, View, ViewStyle } from "react-native"
+import { ActivityIndicator, RefreshControl, View, ViewStyle } from "react-native"
 import type { ApiState, MilestoneSchedule } from "@beside/api-client"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -15,15 +15,14 @@ import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { attendanceMembers } from "@/services/api/attendance"
+import {
+  attendanceMembers,
+  attendanceMilestones,
+  estimateServerNow,
+} from "@/services/api/attendance"
 import { besideApi } from "@/services/api/beside"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
-import {
-  isWindowOpen,
-  occurrenceLabels,
-  quantityLabel,
-  scheduleSummary,
-} from "@/utils/milestoneSchedule"
+import { occurrenceLabels, quantityLabel, scheduleSummary } from "@/utils/milestoneSchedule"
 
 export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<"ActivityDetail">) {
   const { user } = useAuth()
@@ -33,8 +32,10 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
   const [submitting, setSubmitting] = useState<string>()
-  const [logError, setLogError] = useState<{ milestoneId: string; message: string }>()
+  const [logError, setLogError] = useState("")
   const [confirmed, setConfirmed] = useState<Record<string, string>>({})
+  const [receivedAt, setReceivedAt] = useState(0)
+  const [tick, setTick] = useState(() => performance.now())
   const submittingRef = useRef(false)
   const activityId = route.params.activityId
   useFocusEffect(
@@ -43,9 +44,12 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       let active = true
       setLoading(true)
       setError("")
-      Promise.all([besideApi.state(), besideApi.schedules(activityId)])
-        .then(([state, rules]) => {
+      const snapshot = besideApi.state().then((state) => ({ state, received: performance.now() }))
+      Promise.all([snapshot, besideApi.schedules(activityId)])
+        .then(([{ state, received }, rules]) => {
           if (!active) return
+          setReceivedAt(received)
+          setTick(performance.now())
           setData(state)
           setSchedules(rules)
         })
@@ -60,6 +64,12 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       }
     }, [activityId, refresh]),
   )
+  useFocusEffect(
+    useCallback(() => {
+      const timer = setInterval(() => setTick(performance.now()), 1000)
+      return () => clearInterval(timer)
+    }, []),
+  )
   const activity = data?.activities.find((a) => a.id === activityId)
   const members =
     data?.memberships
@@ -68,32 +78,29 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       .filter((member) => member !== undefined) ?? []
   const memberAvatars = avatarsForMembers(members)
   const timeZone = schedules[0]?.configuration.timeZone ?? "America/Toronto"
-  const milestones =
-    data?.milestones
-      .filter(
-        (m) =>
-          m.activityId === activityId &&
-          m.kind === "achievement" &&
-          (!m.endAt || Date.parse(m.endAt) >= Date.now()),
-      )
-      .sort((a, b) => (a.startAt ?? "").localeCompare(b.startAt ?? "")) ?? []
-  const currentOccurrence = milestones.find((m) => isWindowOpen(m.startAt, m.endAt))
+  const snapshotTime = Date.parse(data?.serverTime ?? "")
+  const now = Number.isFinite(snapshotTime)
+    ? estimateServerNow(snapshotTime, receivedAt, tick)
+    : Date.now()
+  const {
+    open: [currentOccurrence, ...otherOpen],
+    upcoming,
+  } = attendanceMilestones(data?.milestones ?? [], activityId, now)
   const currentAttendance = attendanceMembers(data?.logs ?? [], currentOccurrence?.id)
-  if (currentOccurrence && confirmed[currentOccurrence.id])
-    currentAttendance.add(confirmed[currentOccurrence.id])
+  const confirmedAttendee = currentOccurrence && confirmed[currentOccurrence.id]
+  if (confirmedAttendee) currentAttendance.add(confirmedAttendee)
 
   async function logAttendance(milestoneId: string) {
     if (!user || submittingRef.current) return
     submittingRef.current = true
     setSubmitting(milestoneId)
-    setLogError(undefined)
+    setLogError("")
     try {
       await besideApi.recordLog({
         milestoneId,
         isSuccess: true,
         title: "I was there",
         durationMinutes: 0,
-        occurredAt: new Date().toISOString(),
         origin: "manual",
         externalKey: `attendance:${milestoneId}`,
       })
@@ -101,15 +108,64 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       setConfirmed((previous) => ({ ...previous, [milestoneId]: user.id }))
       setRefresh((value) => value + 1)
     } catch (e) {
-      setLogError({
-        milestoneId,
-        message:
-          e instanceof Error ? e.message : "Could not save your attendance. Please try again.",
-      })
+      const reason = e instanceof Error ? e.message : ""
+      const closed = reason === "This milestone's logging window has closed."
+      const notStarted = reason === "This milestone has not started yet."
+      if (closed || notStarted) setRefresh((value) => value + 1)
+      setLogError(
+        closed
+          ? "This session has ended."
+          : notStarted
+            ? "This session hasn’t started yet."
+            : reason || "Could not save your attendance. Please try again.",
+      )
     } finally {
       submittingRef.current = false
       setSubmitting(undefined)
     }
+  }
+
+  function renderMilestone(milestone: ApiState["milestones"][number], open = false) {
+    const { id, name, startAt, endAt, quantity } = milestone
+    const primary = id === currentOccurrence?.id
+    const { date, time } = occurrenceLabels(startAt, endAt, timeZone)
+    const done =
+      open &&
+      user &&
+      (attendanceMembers(data?.logs ?? [], id).has(user.id) || confirmed[id] === user.id)
+    const saving = submitting === id
+    return (
+      <View
+        key={id}
+        style={[$section, primary && $active]}
+        testID={primary ? "activity-active-milestone" : undefined}
+      >
+        <View style={$occurrenceHeading}>
+          <Text text={name} weight="semiBold" style={activityWorldStyles.sectionTitle} />
+          {open && <Text text="Open now" style={activityWorldStyles.muted} />}
+        </View>
+        <Text text={time ? `${date} · ${time}` : date} style={activityWorldStyles.muted} />
+        {quantity > 1 && activity && (
+          <Text text={quantityLabel(quantity, activity.unit)} style={activityWorldStyles.muted} />
+        )}
+        {done ? (
+          <View testID="milestone-done" accessibilityLiveRegion="polite">
+            <Text
+              text="✓ Attendance recorded"
+              style={{ ...activityWorldStyles.body, color: world.leaf }}
+            />
+          </View>
+        ) : open && user ? (
+          <Button
+            text={saving ? "Saving attendance…" : "I was there"}
+            testID="milestone-log-success"
+            preset="filled"
+            disabled={!!submitting}
+            onPress={() => void logAttendance(id)}
+          />
+        ) : null}
+      </View>
+    )
   }
   return (
     <View style={activityWorldStyles.root}>
@@ -151,6 +207,21 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
               style={activityWorldStyles.title}
               testID="activity-detail-name"
             />
+            {currentOccurrence && renderMilestone(currentOccurrence, true)}
+            {otherOpen.length > 0 && (
+              <View style={$milestoneList}>
+                <Text text="ALSO OPEN" style={worldEyebrow} />
+                {otherOpen.map((milestone) => renderMilestone(milestone, true))}
+              </View>
+            )}
+            {!!logError && (
+              <Text
+                text={logError}
+                testID="milestone-log-error"
+                accessibilityRole="alert"
+                style={activityWorldStyles.error}
+              />
+            )}
             {!!activity.description && (
               <Text text={activity.description} style={activityWorldStyles.body} />
             )}
@@ -184,95 +255,13 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 ))}
               </View>
             </View>
-            <Text text="UPCOMING MILESTONES" style={worldEyebrow} />
-            {milestones.map((milestone, index) => {
-              const labels = occurrenceLabels(milestone.startAt, milestone.endAt, timeZone)
-              const done =
-                !!user &&
-                (attendanceMembers(data?.logs ?? [], milestone.id).has(user.id) ||
-                  confirmed[milestone.id] === user.id)
-              return (
-                <View
-                  key={milestone.id}
-                  style={$section}
-                  testID={index === 0 ? "activity-next-occurrence" : undefined}
-                >
-                  <View style={$occurrenceHeading}>
-                    <Text
-                      text={labels.date}
-                      weight="semiBold"
-                      style={activityWorldStyles.sectionTitle}
-                    />
-                    {isWindowOpen(milestone.startAt, milestone.endAt) && (
-                      <View testID="occurrence-open-now" style={$openChip}>
-                        <View style={$leafDot} />
-                        <Text text="Open now" style={activityWorldStyles.muted} />
-                      </View>
-                    )}
-                  </View>
-                  {!!labels.time && <Text text={labels.time} style={activityWorldStyles.muted} />}
-                  {milestone.quantity > 1 && (
-                    <Text
-                      text={quantityLabel(milestone.quantity, activity.unit)}
-                      style={activityWorldStyles.muted}
-                    />
-                  )}
-                  {done ? (
-                    <View
-                      testID="milestone-done"
-                      style={$doneChip}
-                      accessibilityLiveRegion="polite"
-                    >
-                      <Text
-                        text="✓ Done"
-                        weight="medium"
-                        style={{ ...activityWorldStyles.body, color: world.leaf }}
-                      />
-                    </View>
-                  ) : user && isWindowOpen(milestone.startAt, milestone.endAt) ? (
-                    <Pressable
-                      testID="milestone-log-success"
-                      accessibilityRole="button"
-                      accessibilityLabel="I was there"
-                      accessibilityState={{
-                        busy: submitting === milestone.id,
-                        disabled: !!submitting,
-                      }}
-                      disabled={!!submitting}
-                      onPress={() => void logAttendance(milestone.id)}
-                      style={({ pressed }) => [$logButton, { opacity: pressed ? 0.75 : 1 }]}
-                    >
-                      {submitting === milestone.id ? (
-                        <ActivityIndicator
-                          color={world.onForest}
-                          accessibilityLabel="Saving attendance"
-                        />
-                      ) : (
-                        <Text
-                          text="I was there"
-                          weight="medium"
-                          style={{ ...activityWorldStyles.body, color: world.onForest }}
-                        />
-                      )}
-                    </Pressable>
-                  ) : null}
-                  {logError?.milestoneId === milestone.id && (
-                    <Text
-                      text={logError.message}
-                      testID="milestone-log-error"
-                      accessibilityRole="alert"
-                      style={activityWorldStyles.error}
-                    />
-                  )}
-                </View>
-              )
-            })}
-            {!milestones.length && (
-              <Text
-                text="No upcoming milestones yet. Recurring milestones appear as their dates approach."
-                style={activityWorldStyles.muted}
-              />
-            )}
+            <View style={$milestoneList}>
+              <Text text="UPCOMING MILESTONES" style={worldEyebrow} />
+              {upcoming.map((milestone) => renderMilestone(milestone))}
+              {!upcoming.length && (
+                <Text text="No upcoming milestones." style={activityWorldStyles.muted} />
+              )}
+            </View>
             {!!schedules.length && (
               <Text
                 text="Occurrences are generated up to 35 days ahead. Pull to refresh for the latest milestones."
@@ -288,40 +277,20 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   )
 }
 
+const $milestoneList: ViewStyle = { gap: 12 }
 const $section: ViewStyle = { borderTopWidth: 1, borderColor: world.line, paddingTop: 16, gap: 8 }
-const $logButton: ViewStyle = {
-  backgroundColor: world.forest,
+const $active: ViewStyle = {
+  backgroundColor: world.panel,
+  borderWidth: 1,
   borderRadius: worldShape.radius,
-  minHeight: worldShape.control,
-  alignItems: "center",
-  justifyContent: "center",
-  paddingHorizontal: 16,
+  padding: 16,
 }
-const $doneChip: ViewStyle = {
-  alignSelf: "flex-start",
-  backgroundColor: world.meadow,
-  borderRadius: worldShape.radius,
-  paddingHorizontal: 12,
-  paddingVertical: 6,
-}
-const $membersSection: ViewStyle = { gap: 12 }
-const $members: ViewStyle = { flexDirection: "row", flexWrap: "wrap", gap: 16 }
-const $member: ViewStyle = { width: 64, alignItems: "center", gap: 6 }
 const $occurrenceHeading: ViewStyle = {
   flexDirection: "row",
   alignItems: "center",
   flexWrap: "wrap",
   gap: 8,
 }
-const $leafDot: ViewStyle = { width: 4, height: 4, borderRadius: 2, backgroundColor: world.leaf }
-const $openChip: ViewStyle = {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 6,
-  backgroundColor: world.panel,
-  borderColor: world.line,
-  borderWidth: 1,
-  borderRadius: worldShape.radius,
-  paddingHorizontal: 8,
-  paddingVertical: 3,
-}
+const $membersSection: ViewStyle = { gap: 12 }
+const $members: ViewStyle = { flexDirection: "row", flexWrap: "wrap", gap: 16 }
+const $member: ViewStyle = { width: 64, alignItems: "center", gap: 6 }
