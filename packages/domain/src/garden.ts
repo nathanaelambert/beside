@@ -38,8 +38,23 @@ export const initialMeadowItems = [
   { key: "tulip-south", itemId: "pink-tulip", x: 112, y: 202 },
 ];
 
-/** Keep the shared gathering area clear regardless of the current avatar count. */
-export function checkStarterOakPlacement({ x, y }: MeadowPoint) {
+export type PlacementRejection = "off-grid" | "terrain" | "occupied";
+
+/** Two decorations closer than this would overlap on screen. */
+export function overlapsMeadowItem(a: MeadowPoint, b: MeadowPoint) {
+  return Math.abs(a.x - b.x) < 22 && Math.abs(a.y - b.y) < 18;
+}
+
+/**
+ * The one placement rule for anything standing in the meadow: the starter oak and
+ * every earned reward. `occupied` lists decorations already saved for this home base
+ * (the oak and placed rewards); the original scenery is always included.
+ * Keep the shared gathering area clear regardless of the current avatar count.
+ */
+export function checkMeadowPlacement(
+  { x, y }: MeadowPoint,
+  occupied: readonly MeadowPoint[] = [],
+): PlacementRejection | null {
   if (
     !Number.isInteger(x) ||
     !Number.isInteger(y) ||
@@ -64,8 +79,8 @@ export function checkStarterOakPlacement({ x, y }: MeadowPoint) {
   )
     return "occupied";
   if (
-    initialMeadowItems.some(
-      (item) => Math.abs(item.x - x) < 22 && Math.abs(item.y - y) < 18,
+    [...initialMeadowItems, ...occupied].some((item) =>
+      overlapsMeadowItem(item, { x, y }),
     )
   )
     return "occupied";
@@ -73,10 +88,24 @@ export function checkStarterOakPlacement({ x, y }: MeadowPoint) {
   return null;
 }
 
-export function starterOakPlacements(): MeadowPoint[] {
+export function checkStarterOakPlacement(
+  point: MeadowPoint,
+  occupied: readonly MeadowPoint[] = [],
+) {
+  return checkMeadowPlacement(point, occupied);
+}
+
+/** Every grid point where a decoration could stand, given what is already placed. */
+export function meadowPlacements(
+  occupied: readonly MeadowPoint[] = [],
+): MeadowPoint[] {
   const points: MeadowPoint[] = [];
   for (let y = 0; y < WORLD_HEIGHT; y += meadowGridSize)
     for (let x = 0; x < WORLD_WIDTH; x += meadowGridSize)
-      if (!checkStarterOakPlacement({ x, y })) points.push({ x, y });
+      if (!checkMeadowPlacement({ x, y }, occupied)) points.push({ x, y });
   return points;
+}
+
+export function starterOakPlacements(): MeadowPoint[] {
+  return meadowPlacements();
 }

@@ -20,6 +20,8 @@ export const schemas = {
   Homebase: api.homebaseSchema,
   HomebaseGarden: api.homebaseGardenSchema,
   PlantStarterOak: api.plantStarterOakSchema,
+  PlaceReward: api.placeRewardSchema,
+  RewardAgreement: api.rewardAgreementSchema,
   CreateSubject: api.createSubjectSchema,
   CreateActivity: api.createActivitySchema,
   LinkSubject: api.linkSubjectSchema,
