@@ -1,5 +1,6 @@
 import { memo, useEffect } from "react"
 import { StyleSheet } from "react-native"
+import type { MeadowPoint } from "@beside/api-client/garden"
 import type { PixelArt } from "@beside/rewards"
 import {
   AlphaType,
@@ -125,12 +126,14 @@ function bracketPath({ x, y }: WorldItem) {
   )
 }
 
-let plantingGuidePath: string | undefined
-function getPlantingGuidePath() {
-  plantingGuidePath ??= starterOakGuidePoints()
-    .map(({ x, y }) => `M${x - 1} ${y - 1}h2v2h-2z`)
-    .join(" ")
-  return plantingGuidePath
+const guidePaths = new WeakMap<readonly MeadowPoint[], string>()
+function getPlantingGuidePath(points: readonly MeadowPoint[]) {
+  let path = guidePaths.get(points)
+  if (path === undefined) {
+    path = points.map(({ x, y }) => `M${x - 1} ${y - 1}h2v2h-2z`).join(" ")
+    guidePaths.set(points, path)
+  }
+  return path
 }
 
 const plantingPulsePath = "M-14 -1h3v-2h7v-1h8v1h7v2h3v2h-3v2h-7v1h-8v-1h-7v-2h-3z"
@@ -268,6 +271,8 @@ export interface WorldCanvasProps {
   selectedKey?: string
   preview?: WorldItem
   showPlantingGuide?: boolean
+  /** Marked spots for the guide; defaults to the starter oak's. */
+  guidePoints?: readonly MeadowPoint[]
   justPlanted?: WorldItem
   resetCamera: number
   onTap: (x: number, y: number, scale: number) => void
@@ -284,6 +289,7 @@ export function WorldCanvas({
   selectedKey,
   preview,
   showPlantingGuide,
+  guidePoints,
   justPlanted,
   resetCamera,
   onTap,
@@ -408,12 +414,15 @@ export function WorldCanvas({
             {showPlantingGuide && (
               <Group opacity={0.85}>
                 <Path
-                  path={getPlantingGuidePath()}
+                  path={getPlantingGuidePath(guidePoints ?? starterOakGuidePoints())}
                   color="#344b3d"
                   style="stroke"
                   strokeWidth={1}
                 />
-                <Path path={getPlantingGuidePath()} color="#fff4cf" />
+                <Path
+                  path={getPlantingGuidePath(guidePoints ?? starterOakGuidePoints())}
+                  color="#fff4cf"
+                />
               </Group>
             )}
             {justPlanted && (

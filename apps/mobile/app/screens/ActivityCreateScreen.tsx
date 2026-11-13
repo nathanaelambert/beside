@@ -10,6 +10,7 @@ import {
   WorldTextField as TextField,
 } from "@/components/ActivityWorld"
 import { FormChoice, MilestoneScheduleFields } from "@/components/MilestoneScheduleFields"
+import { RewardPicker } from "@/components/RewardPicker"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
@@ -20,6 +21,7 @@ import {
   scheduleFormToInput,
   scheduleSummary,
 } from "@/utils/milestoneSchedule"
+import { cadenceFromForm, firstName, meadowCounts } from "@/utils/rewardChoice"
 
 export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<"ActivityCreate">) {
   const [data, setData] = useState<ApiState>()
@@ -29,14 +31,22 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
   const [description, setDescription] = useState("")
   const [templateId, setTemplateId] = useState("")
   const [target, setTarget] = useState("1")
-  const [step, setStep] = useState<"activity" | "milestone">("activity")
+  const [step, setStep] = useState<"activity" | "milestone" | "reward">("activity")
   const [form, setForm] = useState(initialScheduleForm)
+  const [itemId, setItemId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [createdActivityId, setCreatedActivityId] = useState<string>()
   const savingRef = useRef(false)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const template = data?.activityTemplates.find((t) => t.id === templateId)
   const homebase = data?.connections.find((c) => c.id === route.params.connectionId)
+  // Creating an activity joins every member, and a planned reward waits on all of them.
+  const rosterNames =
+    data?.memberships
+      .filter((m) => m.connectionId === route.params.connectionId)
+      .map((m) => data.users.find((u) => u.id === m.userId)?.name)
+      .filter((name): name is string => !!name)
+      .map(firstName) ?? []
 
   useEffect(() => {
     let active = true
@@ -83,12 +93,23 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
     setStep("milestone")
   }
 
+  function chooseReward() {
+    try {
+      scheduleFormToInput(form)
+    } catch (e) {
+      setError((e as Error).message)
+      return
+    }
+    setError("")
+    setStep("reward")
+  }
+
   async function save() {
     if (savingRef.current) return
     setError("")
     let input
     try {
-      input = scheduleFormToInput(form)
+      input = { ...scheduleFormToInput(form), itemId }
     } catch (e) {
       setError((e as Error).message)
       return
@@ -129,12 +150,15 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
   return (
     <View style={activityWorldStyles.root}>
       <ActivityWorldHeader
-        text={step === "milestone" && !createdActivityId ? "Back" : "Close"}
+        text={step === "reward" || (step === "milestone" && !createdActivityId) ? "Back" : "Close"}
         onPress={
           saving
             ? undefined
             : () => {
-                if (createdActivityId)
+                if (step === "reward") {
+                  setStep("milestone")
+                  setError("")
+                } else if (createdActivityId)
                   navigation.replace("ActivityDetail", { activityId: createdActivityId })
                 else if (step === "milestone") {
                   setStep("activity")
@@ -211,7 +235,7 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
               onPress={next}
             />
           </>
-        ) : (
+        ) : step === "milestone" ? (
           <>
             <Text
               text={`${homebase?.name ?? "Home base"} · MILESTONE`.toUpperCase()}
@@ -234,6 +258,48 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
               timeZone={form.timeZone}
               testID="schedule-summary"
             />
+            {!!error && (
+              <Text
+                text={error}
+                testID="activity-save-error"
+                accessibilityRole="alert"
+                style={activityWorldStyles.error}
+              />
+            )}
+            <Button
+              text="Next: choose a reward"
+              testID="milestone-next"
+              preset="reversed"
+              onPress={chooseReward}
+            />
+          </>
+        ) : (
+          <>
+            <Text
+              text={`${homebase?.name ?? "Home base"} · REWARD`.toUpperCase()}
+              style={worldEyebrow}
+            />
+            <Text text="Choose a reward" weight="semiBold" style={activityWorldStyles.title} />
+            <Text
+              text={`${form.name.trim()} · ${summary}`}
+              style={activityWorldStyles.body}
+              testID="reward-step-milestone"
+            />
+            <View pointerEvents={saving ? "none" : "auto"} accessibilityElementsHidden={saving}>
+              <RewardPicker
+                items={data.rewardItems}
+                value={itemId}
+                onChange={setItemId}
+                cadence={cadenceFromForm(form)}
+                counts={meadowCounts(data, route.params.connectionId)}
+                rosterNames={rosterNames}
+                proposerNote={
+                  rosterNames.length > 1
+                    ? "You’re proposing it. Until the first check-in, anyone can agree or suggest another."
+                    : undefined
+                }
+              />
+            </View>
             {!!error && (
               <Text
                 text={error}
