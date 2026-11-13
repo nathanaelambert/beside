@@ -1,7 +1,8 @@
+import { initialMeadowItems, snapMeadowPoint } from "@beside/api-client/garden"
 import { rewardItems, type PixelArt } from "@beside/rewards"
 
 import { avatars, type Avatar } from "./avatars"
-import { Ground, groundAt } from "./terrain"
+import { Ground, groundAt, type PicnicLayout } from "./terrain"
 
 export { WORLD_HEIGHT, WORLD_WIDTH } from "./terrain"
 export const catalogue = new Map(rewardItems.map((item) => [item.id, item]))
@@ -14,22 +15,7 @@ export interface WorldItem {
   y: number
 }
 
-export const initialItems: WorldItem[] = [
-  { key: "oak-west", itemId: "oak-tree", x: 62, y: 86 },
-  { key: "oak-north", itemId: "oak-tree", x: 100, y: 64 },
-  { key: "pine-north", itemId: "pine-tree", x: 176, y: 66 },
-  { key: "pine-east", itemId: "pine-tree", x: 220, y: 94 },
-  { key: "oak-east", itemId: "oak-tree", x: 252, y: 108 },
-  { key: "pine-west", itemId: "pine-tree", x: 44, y: 140 },
-  { key: "tulip-west", itemId: "pink-tulip", x: 82, y: 146 },
-  { key: "sunflower-west", itemId: "sunflower", x: 68, y: 174 },
-  { key: "owl", itemId: "owl-statue", x: 142, y: 107 },
-  { key: "pennant", itemId: "rose-pennant", x: 114, y: 132 },
-  { key: "star", itemId: "star-statue", x: 180, y: 190 },
-  { key: "banner", itemId: "blue-banner", x: 222, y: 204 },
-  { key: "oak-south", itemId: "oak-tree", x: 82, y: 214 },
-  { key: "tulip-south", itemId: "pink-tulip", x: 112, y: 202 },
-]
+export const initialItems: WorldItem[] = initialMeadowItems
 
 export function hitTest(items: WorldItem[], x: number, y: number, scale: number) {
   // At least a 44pt target, with the frontmost sprite winning overlapping hits.
@@ -49,13 +35,19 @@ export function avatarAt(x: number, y: number, scale: number, roster: Avatar[] =
     .find((a) => Math.abs(x - a.x) <= 7 + padding / 2 && y >= a.y - 20 - padding && y <= a.y + 2)
 }
 
-export function placementAt(x: number, y: number, items: WorldItem[]) {
-  const position = { x: Math.round(x / 8) * 8, y: Math.round(y / 8) * 8 }
+export function placementAt(
+  x: number,
+  y: number,
+  items: WorldItem[],
+  roster: Avatar[] = avatars,
+  picnic: PicnicLayout = "pair",
+) {
+  const position = snapMeadowPoint(x, y)
   // The whole base must rest on open lawn: not woods, path, water, shore, dock, or blanket.
   for (let dx = -8; dx <= 8; dx += 4)
     for (let dy = -4; dy <= 0; dy += 2)
-      if (groundAt(position.x + dx, position.y - 3 + dy) !== Ground.Lawn) return null
-  const occupied = [...items, ...avatars].some(
+      if (groundAt(position.x + dx, position.y - 3 + dy, picnic) !== Ground.Lawn) return null
+  const occupied = [...items, ...roster].some(
     (item) => Math.abs(item.x - position.x) < 22 && Math.abs(item.y - position.y) < 18,
   )
   return occupied ? null : position

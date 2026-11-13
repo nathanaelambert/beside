@@ -7,6 +7,63 @@ import { createPool, loadDatabase } from "../src/db/storage.ts";
 import { sqlName, tables } from "../src/db/tables.ts";
 
 it(
+  "preserves both original oak anchors when migrating to world coordinates",
+  { skip: !process.env.TEST_DATABASE_URL },
+  async () => {
+    const pool = createPool(process.env.TEST_DATABASE_URL!);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "CREATE TEMP TABLE homebase (id text PRIMARY KEY) ON COMMIT DROP",
+      );
+      await client.query("SET LOCAL search_path TO pg_temp");
+      // Temp parent and child must share the same table lifetime.
+      const oldMigration = await readFile(
+        new URL(
+          "../src/db/migrations/005_homebase_starter_oak.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      await client.query(
+        oldMigration.replace("CREATE TABLE", "CREATE TEMP TABLE"),
+      );
+      await client.query(
+        "INSERT INTO homebase VALUES ('west'), ('east'), ('new')",
+      );
+      await client.query(
+        "INSERT INTO homebase_starter_oak VALUES ('west', 'northwest-lawn'), ('east', 'northeast-lawn')",
+      );
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/006_homebase_oak_coordinates.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      await client.query(
+        "INSERT INTO homebase_starter_oak (homebase_id, x, y) VALUES ('new', 104, 104)",
+      );
+      const { rows } = await client.query(
+        "SELECT homebase_id, x, y FROM homebase_starter_oak ORDER BY homebase_id",
+      );
+      assert.deepEqual(rows, [
+        { homebase_id: "east", x: 176, y: 104 },
+        { homebase_id: "new", x: 104, y: 104 },
+        { homebase_id: "west", x: 112, y: 104 },
+      ]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+      await pool.end();
+    }
+  },
+);
+
+it(
   "upgrades populated v2 PostgreSQL data without losing progress, rewards or existing invitation codes",
   { skip: !process.env.TEST_DATABASE_URL },
   async () => {
