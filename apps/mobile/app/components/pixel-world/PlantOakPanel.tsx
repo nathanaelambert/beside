@@ -63,7 +63,11 @@ export function PlantOakPanel({
             accessibilityRole="header"
           />
           <Text
-            text={hasPreview ? "Preview · Tap the lawn to move it" : "Tap an open patch of lawn"}
+            text={
+              hasPreview
+                ? "Preview · Tap another marked spot to move it"
+                : "Tap a marked spot to preview the oak"
+            }
             style={styles.detail}
             accessibilityLiveRegion="polite"
           />

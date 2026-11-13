@@ -1,21 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, View } from "react-native"
 import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
-import {
-  checkStarterOakPlacement,
-  Ground,
-  groundAt,
-  snapMeadowPoint,
-  starterOakPlacements,
-  type MeadowPoint,
-} from "@beside/api-client/garden"
+import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
 import { avatarAt, initialItems } from "@/components/pixel-world/scene"
-import { oakAt } from "@/components/pixel-world/starterOak"
+import { oakAt, starterOakGuidePoints, starterOakTap } from "@/components/pixel-world/starterOak"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { RewardSprite } from "@/components/RewardSprite"
@@ -44,6 +37,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [planting, setPlanting] = useState<{ homebaseId: string; position?: MeadowPoint }>()
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
+  const [plantedIn, setPlantedIn] = useState<string>()
   const plantingLock = useRef(false)
 
   useFocusEffect(
@@ -53,6 +47,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setBusy(true)
       setError("")
       setPlanting(undefined)
+      setPlantedIn(undefined)
       setGardenError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
         .then(async ([bases, state]) => {
@@ -113,9 +108,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setSelectedKey(avatarAt(x, y, scale, avatars)?.key)
       return
     }
-    const point = snapMeadowPoint(x, y)
-    const rejection =
-      groundAt(x, y, "group") === Ground.Lawn ? checkStarterOakPlacement(point) : "terrain"
+    const { point, rejection } = starterOakTap(x, y)
     setPlanting({ homebaseId: homebase.id, position: rejection ? undefined : point })
     setGardenError(
       rejection === "occupied"
@@ -129,7 +122,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   function suggestSpot() {
     if (!homebase || !editing || plantingLock.current) return
     // Offer a keyboard/screen-reader path without requiring a canvas gesture.
-    const points = starterOakPlacements().sort(
+    const points = [...starterOakGuidePoints()].sort(
       (a, b) =>
         Math.hypot(a.x - homeFraming.centerX, a.y - 92) -
         Math.hypot(b.x - homeFraming.centerX, b.y - 92),
@@ -152,6 +145,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setData((current) =>
         current?.homebase?.id === homebase.id ? { ...current, garden } : current,
       )
+      setPlantedIn(homebase.id)
       setPlanting(undefined)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -218,15 +212,24 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
               avatars={avatars}
               selectedKey={selectedKey}
               preview={position ? oakAt(position, "preview") : undefined}
+              showPlantingGuide={editing}
+              justPlanted={oak && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined}
               framing={size.width < 600 ? compactHomeFraming : homeFraming}
               picnic="group"
               resetCamera={cameraReset}
               onTap={tapWorld}
               accessibilityLabel={`${homebase.name}. ${editing ? "Tap an open patch of lawn to preview the oak." : "Drag to explore. Tap a friend to see their name."}`}
             />
-            <View pointerEvents="none" style={styles.worldLabel}>
-              <View style={styles.dot} />
-              <Text text="The meadow" style={styles.labelText} />
+            <View
+              pointerEvents="none"
+              style={styles.worldLabel}
+              testID={editing ? "oak-placement-guide" : undefined}
+            >
+              <View style={[styles.dot, editing && styles.guideDot]} />
+              <Text
+                text={editing ? "Marked spots are plantable" : "The meadow"}
+                style={styles.labelText}
+              />
             </View>
             {!editing && (
               <Pressable
@@ -260,8 +263,8 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         {oak && (
           <Text
             testID="homebase-starter-oak"
-            text="Meadow oak planted in your shared garden."
-            style={styles.description}
+            text="Planted in your shared garden"
+            style={styles.plantedLabel}
             accessibilityLiveRegion="polite"
           />
         )}
@@ -371,6 +374,13 @@ const styles = StyleSheet.create({
   dock: { backgroundColor: world.paper, gap: 16, padding: 20, paddingBottom: 12 },
   dot: { backgroundColor: world.leaf, height: 5, width: 5 },
   error: { color: world.error, fontSize: 13, lineHeight: 20 },
+  guideDot: {
+    backgroundColor: world.onForest,
+    borderColor: world.forest,
+    borderWidth: 1,
+    height: 8,
+    width: 8,
+  },
   header: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 8 },
   headingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   labelText: { color: world.text, fontSize: 11, lineHeight: 16 },
@@ -384,6 +394,18 @@ const styles = StyleSheet.create({
   },
   logout: { justifyContent: "center", minHeight: 40, paddingLeft: 16 },
   notice: { gap: 8 },
+  plantedLabel: {
+    alignSelf: "flex-start",
+    backgroundColor: world.meadow,
+    borderColor: world.meadowBorder,
+    borderRadius: worldShape.smallRadius,
+    borderWidth: worldShape.border,
+    color: world.ink,
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   pressed: { opacity: 0.75 },
   primary: {
     alignItems: "center",

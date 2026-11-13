@@ -35,6 +35,7 @@ it("shows both pages of decorations without making preview items plantable", () 
     </SafeAreaProvider>,
   )
   expect(screen.getByText("Meadow oak")).toBeTruthy()
+  expect(screen.getByText("Preview · Tap another marked spot to move it")).toBeTruthy()
   expect(screen.getByText("Free")).toBeTruthy()
   expect(screen.getAllByText("Preview")).toHaveLength(3)
   fireEvent.press(screen.getByRole("button", { name: "Next decorations" }))
@@ -67,6 +68,7 @@ it("does not confirm a planting until there is a valid preview", () => {
       </ThemeProvider>
     </SafeAreaProvider>,
   )
+  expect(screen.getByText("Tap a marked spot to preview the oak")).toBeTruthy()
   fireEvent.press(screen.getByRole("button", { name: "Plant oak" }))
   expect(onPlant).not.toHaveBeenCalled()
   fireEvent.press(screen.getByRole("button", { name: "Suggest spot" }))

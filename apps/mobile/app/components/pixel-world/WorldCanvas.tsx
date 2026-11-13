@@ -21,12 +21,14 @@ import {
   useDerivedValue,
   useReducedMotion,
   useSharedValue,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated"
 
 import { AVATAR_HEIGHT, AVATAR_WIDTH, avatars as defaultAvatars, type Avatar } from "./avatars"
 import { cameraFrame, type WorldFraming } from "./camera"
 import { catalogue, footprint, WORLD_HEIGHT, WORLD_WIDTH, type WorldItem } from "./scene"
+import { starterOakGuidePoints } from "./starterOak"
 import { getTerrain, getWoodsTile, WOODS_TILE, type PicnicLayout } from "./terrain"
 
 // Everything is a bitmap at one texel per world pixel, scaled by an integer with nearest
@@ -97,6 +99,11 @@ function shadowPath(width: number) {
   if (!shadows.has(width)) shadows.set(width, ellipsePath(width + 4, 4))
   return shadows.get(width)!
 }
+const softShadows = new Map<number, string>()
+function softShadowPath(width: number) {
+  if (!softShadows.has(width)) softShadows.set(width, ellipsePath(width + 10, 8))
+  return softShadows.get(width)!
+}
 const spriteFootprints = new Map(
   [...catalogue].map(([id, item]) => [id, footprint(item.artifact)] as const),
 )
@@ -118,6 +125,38 @@ function bracketPath({ x, y }: WorldItem) {
   )
 }
 
+let plantingGuidePath: string | undefined
+function getPlantingGuidePath() {
+  plantingGuidePath ??= starterOakGuidePoints()
+    .map(({ x, y }) => `M${x - 1} ${y - 1}h2v2h-2z`)
+    .join(" ")
+  return plantingGuidePath
+}
+
+const plantingPulsePath = "M-14 -1h3v-2h7v-1h8v1h7v2h3v2h-3v2h-7v1h-8v-1h-7v-2h-3z"
+
+function PlantingPulse({ x, y }: { x: number; y: number }) {
+  const reduceMotion = useReducedMotion()
+  const opacity = useSharedValue(0)
+  useEffect(() => {
+    if (!reduceMotion) {
+      opacity.value = 1
+      opacity.value = withTiming(0, { duration: 760 })
+    }
+  }, [opacity, reduceMotion])
+  return (
+    <Group transform={[{ translateX: x }, { translateY: y - 1 }]} opacity={opacity}>
+      <Path
+        path={plantingPulsePath}
+        color="#fff4cf"
+        style="stroke"
+        strokeWidth={1}
+        antiAlias={false}
+      />
+    </Group>
+  )
+}
+
 const glints = [
   [216, 133, 0],
   [236, 144, 3],
@@ -128,7 +167,8 @@ const glints = [
 const Shadow = memo(function Shadow({ x, y, width }: { x: number; y: number; width: number }) {
   return (
     <Group transform={[{ translateX: x }, { translateY: y }]}>
-      <Path path={shadowPath(width)} color="rgba(30, 52, 34, 0.3)" antiAlias={false} />
+      <Path path={softShadowPath(width)} color="rgba(30, 52, 34, 0.12)" antiAlias={false} />
+      <Path path={shadowPath(width)} color="rgba(30, 52, 34, 0.24)" antiAlias={false} />
     </Group>
   )
 })
@@ -227,6 +267,8 @@ export interface WorldCanvasProps {
   accessibilityLabel?: string
   selectedKey?: string
   preview?: WorldItem
+  showPlantingGuide?: boolean
+  justPlanted?: WorldItem
   resetCamera: number
   onTap: (x: number, y: number, scale: number) => void
 }
@@ -241,6 +283,8 @@ export function WorldCanvas({
   accessibilityLabel = "Pixel meadow ringed by woods, with a pond and dock, two friends on a picnic blanket, and catalogue decorations. Drag to explore; tap an item to inspect it.",
   selectedKey,
   preview,
+  showPlantingGuide,
+  justPlanted,
   resetCamera,
   onTap,
 }: WorldCanvasProps) {
@@ -361,6 +405,20 @@ export function WorldCanvas({
             {glints.map(([x, y, phase]) => (
               <Glint key={`${x}-${y}`} x={x} y={y} phase={phase} tick={tick} />
             ))}
+            {showPlantingGuide && (
+              <Group opacity={0.85}>
+                <Path
+                  path={getPlantingGuidePath()}
+                  color="#344b3d"
+                  style="stroke"
+                  strokeWidth={1}
+                />
+                <Path path={getPlantingGuidePath()} color="#fff4cf" />
+              </Group>
+            )}
+            {justPlanted && (
+              <PlantingPulse key={justPlanted.key} x={justPlanted.x} y={justPlanted.y} />
+            )}
             {drawables.map(({ key, node }) => (
               <Group key={key}>{node}</Group>
             ))}
