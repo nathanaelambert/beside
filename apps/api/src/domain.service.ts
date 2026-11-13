@@ -1,7 +1,13 @@
-import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { execute } from "@beside/domain/model";
 import { settleExpiredMilestones } from "@beside/domain/expiry";
 import { stateForUser } from "@beside/domain/view";
+import { homebaseRewards } from "@beside/domain/precursors";
 import type { Command } from "@beside/domain/types";
 import { DatabaseService } from "./db/database.service.ts";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
@@ -37,6 +43,19 @@ export class DomainService {
       }
       if (!result.duplicate) await persistChanges(client, before, result.db);
       return { entityId: result.entityId, duplicate: result.duplicate };
+    });
+  }
+  // Read-only: closed, unearned rewards stop counting without being settled.
+  rewards(userId: string, homebaseId: string) {
+    return this.database.transaction(false, async (client) => {
+      const db = await loadDatabase(client);
+      if (
+        !db.memberships.some(
+          (m) => m.connectionId === homebaseId && m.userId === userId,
+        )
+      )
+        throw new NotFoundException("Home base not found.");
+      return homebaseRewards(db, homebaseId, new Date().toISOString());
     });
   }
   homebases(userId: string) {

@@ -299,6 +299,28 @@ export class DomainController {
   async rewards(@Req() request: AuthenticatedRequest) {
     return (await this.domain.state(request.actor.id)).rewards;
   }
+  @Get("garden")
+  @ApiOkResponse({ schema: list("GardenObject") })
+  @ApiOperation({
+    summary:
+      "Objects standing in your home bases' gardens, with their current stage",
+  })
+  async garden(@Req() request: AuthenticatedRequest) {
+    return (await this.domain.state(request.actor.id)).gardenObjects;
+  }
+  @Get("homebases/:homebaseId/rewards")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiOkResponse({ schema: ref("HomebaseRewards") })
+  @ApiOperation({
+    summary:
+      "Reward catalog for one home base: available, queued and locked items with their precursors, and build progress",
+  })
+  homebaseRewards(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+  ) {
+    return this.domain.rewards(request.actor.id, homebaseId);
+  }
   @Get("events")
   @ApiOkResponse({ schema: list("Event") })
   async events(@Req() request: AuthenticatedRequest) {

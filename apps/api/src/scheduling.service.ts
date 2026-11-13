@@ -15,6 +15,12 @@ import {
   type MilestoneSchedule,
   type ScheduleInput,
 } from "@beside/domain/schedules";
+import {
+  itemName,
+  lockedMessage,
+  precursorOf,
+  rewardStatus,
+} from "@beside/domain/precursors";
 import type { Database } from "@beside/domain/types";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "./db/database.service.ts";
@@ -79,6 +85,26 @@ export class SchedulingService {
         !before.rewardItems.some((item) => item.id === configuration.itemId)
       )
         throw new BadRequestException("Reward item is missing.");
+      if (configuration.itemId && precursorOf(configuration.itemId)) {
+        // An upgrade consumes one specific precursor, so it is a one-off reward.
+        if (configuration.count !== 1)
+          throw new BadRequestException(
+            `${itemName(before, configuration.itemId)} upgrades something already in your garden, so it can only be the reward of a one-off milestone.`,
+          );
+        const homebaseId = before.activities.find(
+          (a) => a.id === activityId,
+        )!.connectionId;
+        const status = rewardStatus(
+          before,
+          homebaseId,
+          configuration.itemId,
+          now,
+        );
+        if (status.kind === "locked")
+          throw new BadRequestException(
+            lockedMessage(before, configuration.itemId, status.precursorId),
+          );
+      }
       const schedule: MilestoneSchedule = {
         id: id("schedule"),
         activityId,
@@ -201,6 +227,17 @@ export class SchedulingService {
             active.find((p) => p.userId === schedule.creatorUserId) ??
             active[0];
           if (!actor) break; // Resume if participation becomes active again.
+          // Generation must never fail on a lock: if the precursor disappeared
+          // since planning, the occurrence is still planned, without a reward.
+          const homebaseId = db.activities.find(
+            (a) => a.id === schedule.activityId,
+          )?.connectionId;
+          const itemId =
+            s.itemId &&
+            homebaseId &&
+            rewardStatus(db, homebaseId, s.itemId, now).kind === "locked"
+              ? null
+              : s.itemId;
           const result = execute(
             db,
             {
@@ -210,7 +247,7 @@ export class SchedulingService {
               parentId: null,
               name: s.name,
               quantity: s.quantity,
-              itemId: s.itemId,
+              itemId,
               policy: "paced",
               ...window,
             },

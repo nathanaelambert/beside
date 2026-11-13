@@ -44,6 +44,21 @@ export interface Reward {
   obtainedAt: string | null;
   // Snapshot the people whose cooperation this reward requires.
   requiredUserIds: string[];
+  // The garden object this reward placed or upgraded. Null until obtained, and
+  // while an obtained upgrade waits for its precursor to exist in the garden.
+  gardenObjectId: string | null;
+}
+// One thing standing in a home base's garden. Upgrades change `itemId` in place,
+// so a cottage keeps the identity and plot of the foundation it grew from.
+export interface GardenObject {
+  id: string;
+  homebaseId: string;
+  itemId: string;
+  // Bottom-centre anchor in meadow pixels; null when every plot is taken.
+  x: number | null;
+  y: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface Membership {
   id: string;
@@ -170,6 +185,7 @@ export interface Database {
   rewardItems: RewardItem[];
   milestones: Milestone[];
   rewards: Reward[];
+  gardenObjects: GardenObject[];
 }
 export interface LogInput {
   authorUserId: string;

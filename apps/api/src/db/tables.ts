@@ -7,6 +7,11 @@ export const tables = [
   ["connections", "homebase", ["id", "name"]],
   ["memberships", "homebase_member", ["id", "connectionId", "userId"]],
   [
+    "gardenObjects",
+    "garden_object",
+    ["id", "homebaseId", "itemId", "x", "y", "createdAt", "updatedAt"],
+  ],
+  [
     "subjectTemplates",
     "subject_template",
     ["id", "name", "category", "fields", "unit"],
@@ -46,7 +51,14 @@ export const tables = [
   [
     "rewards",
     "reward",
-    ["id", "homebaseId", "itemId", "obtainedAt", "requiredUserIds"],
+    [
+      "id",
+      "homebaseId",
+      "itemId",
+      "obtainedAt",
+      "requiredUserIds",
+      "gardenObjectId",
+    ],
   ],
   [
     "milestones",

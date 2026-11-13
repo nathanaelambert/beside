@@ -3,18 +3,24 @@ import assert from "node:assert/strict";
 import { createSeed } from "./seed.ts";
 import { parseDatabase } from "./validation.ts";
 
-test("the catalog contains eight distinct, valid sprites across the four requested categories", () => {
+test("the catalog contains thirteen distinct, valid sprites: the eight originals plus five precursor items", () => {
   const db = parseDatabase(createSeed());
-  assert.equal(db.rewardItems.length, 8);
-  for (const category of ["Trees", "Flowers", "Statues", "Flagpoles"])
+  assert.equal(db.rewardItems.length, 13);
+  for (const [category, count] of [
+    ["Trees", 3], // Meadow oak, Alpine pine and the Christmas tree upgrade.
+    ["Flowers", 2],
+    ["Statues", 2],
+    ["Flagpoles", 2],
+    ["Cottage", 4], // Foundation, walls, roof, finished cottage.
+  ] as const)
     assert.equal(
       db.rewardItems.filter((item) => item.category === category).length,
-      2,
+      count,
     );
   assert.equal(
     new Set(db.rewardItems.map((item) => JSON.stringify(item.artifact.pixels)))
       .size,
-    8,
+    13,
   );
   for (const item of db.rewardItems) {
     assert.equal(item.artifact.pixels.length, 32);

@@ -98,7 +98,47 @@ export const errorSchema = z.object({
     .array(z.object({ path: z.string(), message: z.string() }))
     .optional(),
 });
+const count = z.number().int().nonnegative();
+// What each catalog item needs in one home base's garden right now.
+export const rewardStatusSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("place") }),
+  z.object({
+    kind: z.literal("ready"),
+    precursorId: id,
+    targetObjectId: id,
+  }),
+  z.object({ kind: z.literal("queued"), precursorId: id }),
+  z.object({
+    kind: z.literal("locked"),
+    precursorId: id,
+    chain: z.array(id),
+  }),
+]);
+export const homebaseRewardsSchema = z.object({
+  homebaseId: id,
+  items: z.array(
+    z.object({
+      itemId: id,
+      name: z.string(),
+      category: z.string(),
+      status: rewardStatusSchema,
+      inGarden: count,
+      planned: count,
+      waiting: count,
+    }),
+  ),
+  builds: z.array(
+    z.object({
+      id,
+      name: z.string(),
+      stages: z.array(id),
+      reached: count,
+    }),
+  ),
+});
 export type ApiState = z.infer<typeof stateSchema>;
+export type HomebaseRewards = z.infer<typeof homebaseRewardsSchema>;
+export type RewardStatusView = z.infer<typeof rewardStatusSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type MutationResult = z.infer<typeof mutationSchema>;
 export type ApiHomebase = z.infer<typeof homebaseSchema>;

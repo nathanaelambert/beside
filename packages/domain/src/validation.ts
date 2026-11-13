@@ -203,8 +203,21 @@ export const databaseSchema = z.object({
       itemId: key,
       obtainedAt: date.nullable(),
       requiredUserIds: z.array(key).min(1),
+      // Older experiments predate the garden; nothing was applied there yet.
+      gardenObjectId: key.nullable().default(null),
     }),
   ),
+  gardenObjects: rows(
+    z.object({
+      id: key,
+      homebaseId: key,
+      itemId: key,
+      x: z.number().int().min(0).max(1000).nullable(),
+      y: z.number().int().min(0).max(1000).nullable(),
+      createdAt: date,
+      updatedAt: date,
+    }),
+  ).default([]),
   logs: rows(
     z.object({
       id: key,
@@ -393,6 +406,23 @@ export function parseDatabase(input: unknown): Database {
       )
         throw new Error("Reward requires someone outside the activity.");
     }
+  }
+  for (const object of db.gardenObjects) {
+    fk(db.connections, object.homebaseId);
+    fk(db.rewardItems, object.itemId);
+    if ((object.x === null) !== (object.y === null))
+      throw new Error("A garden object needs both coordinates or neither.");
+  }
+  for (const reward of db.rewards) {
+    fk(db.gardenObjects, reward.gardenObjectId);
+    if (!reward.gardenObjectId) continue;
+    if (!reward.obtainedAt)
+      throw new Error("Only an obtained reward can stand in the garden.");
+    if (
+      db.gardenObjects.find((o) => o.id === reward.gardenObjectId)!
+        .homebaseId !== reward.homebaseId
+    )
+      throw new Error("Reward stands in another home base's garden.");
   }
   for (const l of db.logs) {
     fk(db.users, l.authorUserId);

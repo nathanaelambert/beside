@@ -41,6 +41,7 @@ export function emptyDatabase(): Database {
     activitySubjects: [],
     participations: [],
     rewards: [],
+    gardenObjects: [],
     milestones: [],
     logs: [],
     logShares: [],

@@ -25,7 +25,11 @@ it(
       );
       const seed = createSeed();
       for (const [key, table, currentColumns] of tables) {
-        const columns: string[] = [...currentColumns];
+        // The garden arrived after v2: no objects, and no reward link column yet.
+        if (key === "gardenObjects") continue;
+        const columns: string[] = currentColumns.filter(
+          (column) => column !== "gardenObjectId",
+        );
         if (key === "connections" || key === "activities")
           columns.push("personalOwnerId");
         for (const row of seed[key]) {
@@ -72,6 +76,19 @@ it(
           "utf8",
         ),
       );
+      // Bring the v2 snapshot up to the current schema before reading it.
+      await client.query("SET CONSTRAINTS ALL IMMEDIATE");
+      for (const name of [
+        "003_crud_events.sql",
+        "004_milestone_schedules.sql",
+        "007_reward_precursors.sql",
+      ])
+        await client.query(
+          await readFile(
+            new URL(`../src/db/migrations/${name}`, import.meta.url),
+            "utf8",
+          ),
+        );
       const upgraded = parseDatabase(await loadDatabase(client));
       for (const key of Object.keys(seed) as (keyof typeof seed)[]) {
         if (key !== "logShares")

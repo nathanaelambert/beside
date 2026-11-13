@@ -9,6 +9,7 @@ export function createSeed(): Database {
     rewardItems: structuredClone(rewardItems),
     milestones: [],
     rewards: [],
+    gardenObjects: [],
     users: [
       {
         id: "mosaab",

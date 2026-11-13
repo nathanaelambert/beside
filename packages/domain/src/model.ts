@@ -11,6 +11,13 @@ import type {
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
 import { logInputSchema, milestoneInputSchema } from "./validation.ts";
+import {
+  itemName,
+  lockedMessage,
+  precursorOf,
+  rewardStatus,
+  settleGarden,
+} from "./precursors.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const requireValue = <T>(value: T | undefined | null, message: string): T => {
@@ -236,6 +243,50 @@ function awardReward(
     "progress",
     origin,
   );
+  // Earned items land in the shared garden: a new plot, or an upgrade in place.
+  const base = db.connections.find((b) => b.id === reward.homebaseId)?.name;
+  for (const change of settleGarden(db, reward.homebaseId, now))
+    emit(
+      db,
+      actorId,
+      change.kind === "placed" ? "garden.placed" : "garden.upgraded",
+      "reward",
+      change.reward.id,
+      change.kind === "placed"
+        ? `${itemName(db, change.object.itemId)} now stands in ${base}'s garden.`
+        : `${itemName(db, change.fromItemId!)} became ${itemName(db, change.object.itemId)} in ${base}'s garden.`,
+      members(db, reward.homebaseId),
+      reward.homebaseId,
+      "progress",
+      origin,
+    );
+  const precursorId = precursorOf(reward.itemId);
+  if (precursorId && !reward.gardenObjectId)
+    emit(
+      db,
+      actorId,
+      "garden.waiting",
+      "reward",
+      reward.id,
+      `${itemName(db, reward.itemId)} is earned and waits for a ${itemName(db, precursorId)} to build on.`,
+      members(db, reward.homebaseId),
+      reward.homebaseId,
+      "progress",
+      origin,
+    );
+}
+// Planning rule: an upgrade needs a free precursor in the garden, or one that
+// is already planned or earned. Without that path it is locked.
+function requirePrecursor(
+  db: Database,
+  homebaseId: string,
+  itemId: string,
+  now: string,
+  ignoreRewardId?: string,
+) {
+  const status = rewardStatus(db, homebaseId, itemId, now, ignoreRewardId);
+  if (status.kind === "locked")
+    throw new Error(lockedMessage(db, itemId, status.precursorId));
 }
 // All management actions use the same home-base membership boundary.
 function managedActivity(db: Database, actorId: string, activityId: string) {
@@ -325,6 +376,11 @@ function removeGraph(
   );
   db.memberships = db.memberships.filter(
     (member) => !homebaseIds.has(member.connectionId),
+  );
+  // Earned objects belong to the base, not the milestone: deleting a milestone
+  // keeps what already stands in the garden.
+  db.gardenObjects = db.gardenObjects.filter(
+    (object) => !homebaseIds.has(object.homebaseId),
   );
   db.connections = db.connections.filter((base) => !homebaseIds.has(base.id));
 }
@@ -528,6 +584,13 @@ export function execute(
             db.rewardItems.find((item) => item.id === input.itemId),
             "Reward item is missing.",
           );
+          requirePrecursor(
+            db,
+            activity.connectionId,
+            input.itemId,
+            now,
+            reward?.id,
+          );
           if (reward) reward.itemId = input.itemId;
           else {
             milestone.rewardId = id("reward");
@@ -536,6 +599,7 @@ export function execute(
               homebaseId: activity.connectionId,
               itemId: input.itemId,
               obtainedAt: null,
+              gardenObjectId: null,
               requiredUserIds: db.participations
                 .filter(
                   (person) =>
@@ -866,12 +930,14 @@ export function execute(
           db.rewardItems.find((item) => item.id === input.itemId),
           "Reward item is missing.",
         );
+        requirePrecursor(db, homebase.id, input.itemId, now);
         rewardId = id("reward");
         db.rewards.push({
           id: rewardId,
           homebaseId: homebase.id,
           itemId: input.itemId,
           obtainedAt: null,
+          gardenObjectId: null,
           requiredUserIds: db.participations
             .filter(
               (p) => p.activityId === activity.id && p.status === "active",

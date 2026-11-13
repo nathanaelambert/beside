@@ -1,9 +1,18 @@
 import type { RewardItem } from "./types.ts";
+import { precursorItems } from "./precursor-art.ts";
 export type { PixelArt, RewardItem } from "./types.ts";
+export {
+  buildPlans,
+  precursorChain,
+  precursorOf,
+  rewardRecipes,
+  type BuildPlan,
+  type RewardRecipe,
+} from "./recipes.ts";
 
 // Eight original 32 × 32 sprites, lit from the upper left with darker ramp outlines.
 // Bases sit on row 29 so world shadows line up. Transparent pixel data travels with exports.
-export const rewardItems: RewardItem[] = [
+const originalItems: RewardItem[] = [
   {
     id: "oak-tree",
     name: "Meadow oak",
@@ -475,3 +484,7 @@ export const rewardItems: RewardItem[] = [
     },
   },
 ];
+
+// Precursor items (a Christmas tree and four cottage stages) follow the originals.
+// Their rules live in recipes.ts.
+export const rewardItems: RewardItem[] = [...originalItems, ...precursorItems];

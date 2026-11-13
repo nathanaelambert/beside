@@ -48,6 +48,9 @@ export function stateForUser(db: Database, userId: string): ApiState {
     events,
     deliveries,
     rewards,
+    gardenObjects: db.gardenObjects.filter((object) =>
+      bases.has(object.homebaseId),
+    ),
     subjectTemplates: db.subjectTemplates,
     activityTemplates: db.activityTemplates,
     rewardItems: db.rewardItems,

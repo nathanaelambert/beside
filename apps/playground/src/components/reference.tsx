@@ -16,6 +16,15 @@ const definitions: Record<
     example:
       "Chapter 1 of Dune can be completed once by Mosaab and once by Nathaniel; logging Chapter 4 does not complete earlier chapters.",
   },
+  gardenObjects: {
+    name: "Garden object",
+    meaning:
+      "One earned item standing in a home base's garden, at its current stage.",
+    purpose:
+      "Give an earned reward a place in the world. An upgrade reward (a Christmas tree, the next cottage stage) changes an existing object in place instead of adding a new one.",
+    example:
+      "The home base earns a Meadow oak, then a Christmas tree: the same object at the same plot is now decorated.",
+  },
   rewards: {
     name: "Reward",
     meaning: "One catalog item earned for an entire home base.",
