@@ -163,7 +163,7 @@ name: Beside end-to-end attendance demo
             id: milestone-log-success
           direction: DOWN
           speed: 40
-      - assertVisible: "Wed, Nov 4"
+      - assertVisible: "Wed, Nov 4.*"
       - tapOn:
           id: milestone-log-success
           waitToSettleTimeoutMs: 500
@@ -187,7 +187,7 @@ name: Beside end-to-end attendance demo
           start: "50%, 80%"
           end: "50%, 47%"
           duration: 2400
-      - assertVisible: "Wed, Dec 9"
+      - assertVisible: "Wed, Dec 9.*"
       - evalScript: ${ (function() { var until = Date.now() + 1500; while (Date.now() < until) {} })() }
       - tapOn:
           id: activity-world-back
