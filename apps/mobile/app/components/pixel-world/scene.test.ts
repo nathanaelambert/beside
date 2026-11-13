@@ -1,6 +1,8 @@
+import { checkStarterOakPlacement, snapMeadowPoint } from "@beside/api-client/garden"
 import { rewardItems } from "@beside/rewards"
 
 import { avatarAt, footprint, hitTest, initialItems, placementAt, type WorldItem } from "./scene"
+import { oakAt } from "./starterOak"
 import { BLANKET, DOCK, Ground, groundAt } from "./terrain"
 
 describe("pixel world interactions", () => {
@@ -37,6 +39,17 @@ describe("pixel world interactions", () => {
     expect(avatarAt(145, 138, 2)?.key).toBe("you")
     expect(avatarAt(159, 138, 2)?.key).toBe("nathaniel")
     expect(avatarAt(100, 100, 2)).toBeUndefined()
+  })
+
+  it("snaps a new lawn position without changing the saved sprite anchor", () => {
+    const point = snapMeadowPoint(103, 101)
+    expect(point).toEqual({ x: 104, y: 104 })
+    expect(checkStarterOakPlacement(point)).toBeNull()
+    expect(oakAt(point)).toMatchObject({ itemId: "oak-tree", ...point })
+    expect(checkStarterOakPlacement({ x: 224, y: 144 })).toBe("terrain")
+    expect(checkStarterOakPlacement({ x: 144, y: 104 })).toBe("occupied")
+    expect(checkStarterOakPlacement({ x: 112, y: 104 })).toBeNull()
+    expect(checkStarterOakPlacement({ x: 176, y: 104 })).toBeNull()
   })
 
   it("measures every catalogue sprite's base for its ground shadow", () => {
