@@ -99,11 +99,6 @@ function shadowPath(width: number) {
   if (!shadows.has(width)) shadows.set(width, ellipsePath(width + 4, 4))
   return shadows.get(width)!
 }
-const softShadows = new Map<number, string>()
-function softShadowPath(width: number) {
-  if (!softShadows.has(width)) softShadows.set(width, ellipsePath(width + 10, 8))
-  return softShadows.get(width)!
-}
 const spriteFootprints = new Map(
   [...catalogue].map(([id, item]) => [id, footprint(item.artifact)] as const),
 )
@@ -167,8 +162,7 @@ const glints = [
 const Shadow = memo(function Shadow({ x, y, width }: { x: number; y: number; width: number }) {
   return (
     <Group transform={[{ translateX: x }, { translateY: y }]}>
-      <Path path={softShadowPath(width)} color="rgba(30, 52, 34, 0.12)" antiAlias={false} />
-      <Path path={shadowPath(width)} color="rgba(30, 52, 34, 0.24)" antiAlias={false} />
+      <Path path={shadowPath(width)} color="rgba(30, 52, 34, 0.3)" antiAlias={false} />
     </Group>
   )
 })

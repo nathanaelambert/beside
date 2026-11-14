@@ -77,7 +77,13 @@ export const participationSchema = z.strictObject({
 });
 // Keep schedule refinements from the shared domain validator.
 export const createMilestoneSchema = milestoneInputSchema.strict();
-export const createLogSchema = logInputSchema.omit({ authorUserId: true });
+export const createLogSchema = logInputSchema
+  .omit({ authorUserId: true })
+  .extend({
+    occurredAt: logInputSchema.shape.occurredAt
+      .optional()
+      .describe("Omit for an immediate check-in recorded at server time."),
+  });
 export const shareLogSchema = z.strictObject({
   connectionIds: z.array(id).max(100),
 });
@@ -99,6 +105,10 @@ export const homebaseSchema = databaseSchema.shape.connections.element.extend({
 });
 export const stateSchema = databaseSchema.extend({
   users: z.array(publicUserSchema),
+  serverTime: z.iso
+    .datetime()
+    .optional()
+    .describe("Server time for this state snapshot."),
 });
 export const errorSchema = z.object({
   statusCode: z.number(),

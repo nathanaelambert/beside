@@ -74,9 +74,9 @@ export function PlantOakPanel({
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={page === 0 ? "Next decorations" : "Previous decorations"}
+          accessibilityLabel="Next decorations"
           testID="browse-decorations"
-          disabled={saving}
+          disabled={saving || pageCount < 2}
           onPress={() => {
             setPage((current) => (current + 1) % pageCount)
             if (!reduceMotion) {
@@ -86,7 +86,7 @@ export function PlantOakPanel({
           }}
           style={({ pressed }) => [styles.browse, pressed && styles.pressed]}
         >
-          <Text text={page === 0 ? "Next ›" : "‹ Back"} weight="medium" style={styles.detail} />
+          <Text text="Next ›" weight="medium" style={styles.detail} />
         </Pressable>
       </View>
       <Animated.View style={[styles.items, pageStyle]} testID="garden-decoration-catalog">

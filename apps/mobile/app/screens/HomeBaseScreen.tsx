@@ -19,8 +19,9 @@ import { besideApi } from "@/services/api/beside"
 import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
-const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 110 }
-const compactHomeFraming = { ...homeFraming, scale: 3, centerY: 120 }
+const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
+const plantingFraming = { ...homeFraming, centerY: 110 }
+const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 
@@ -63,9 +64,14 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             const garden = await besideApi.homebaseGarden(homebase.id)
             if (active) setData({ homebase, state, garden })
           } catch (e) {
-            // A web build can be opened before the garden endpoint is deployed.
-            if (active && !(e instanceof ApiError && e.status === 404))
+            if (!active) return
+            if (e instanceof ApiError && e.status === 404) {
+              setData({ state })
+              setError("This home base is no longer available. Please try again.")
+            } else {
+              setData({ homebase, state })
               setError("We couldn’t load garden decorations. Please try again.")
+            }
           }
         })
         .catch(() => {
@@ -94,6 +100,11 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const canPlant = !!data?.garden && !oak && !busy
   const editing = !!planting && planting.homebaseId === homebase?.id && canPlant
   const position = editing ? planting?.position : undefined
+  const framing = editing
+    ? size.width < 600
+      ? compactPlantingFraming
+      : plantingFraming
+    : homeFraming
 
   function startPlanting() {
     if (!homebase || !canPlant || editing || plantingLock.current) return
@@ -124,8 +135,8 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
     // Offer a keyboard/screen-reader path without requiring a canvas gesture.
     const points = [...starterOakGuidePoints()].sort(
       (a, b) =>
-        Math.hypot(a.x - homeFraming.centerX, a.y - 92) -
-        Math.hypot(b.x - homeFraming.centerX, b.y - 92),
+        Math.hypot(a.x - framing.centerX, a.y - framing.centerY) -
+        Math.hypot(b.x - framing.centerX, b.y - framing.centerY),
     )
     const index = points.findIndex((point) => point.x === position?.x && point.y === position.y)
     const next = points[(index + 1) % points.length]
@@ -149,8 +160,26 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setPlanting(undefined)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
+        setPlanting(undefined)
         setGardenError("Someone already planted the shared oak.")
-        setAttempt((value) => value + 1)
+        setData((current) =>
+          current?.homebase?.id === homebase.id ? { ...current, garden: undefined } : current,
+        )
+        try {
+          const garden = await besideApi.homebaseGarden(homebase.id)
+          setData((current) =>
+            current?.homebase?.id === homebase.id ? { ...current, garden } : current,
+          )
+        } catch (refreshError) {
+          if (refreshError instanceof ApiError && refreshError.status === 404) {
+            setData((current) =>
+              current?.homebase?.id === homebase.id ? { state: current.state } : current,
+            )
+            setError("This home base is no longer available. Please try again.")
+          } else {
+            setError("We couldn’t load garden decorations. Please try again.")
+          }
+        }
       } else {
         setGardenError("We couldn’t plant the oak. Try again.")
       }
@@ -214,11 +243,11 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
               preview={position ? oakAt(position, "preview") : undefined}
               showPlantingGuide={editing}
               justPlanted={oak && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined}
-              framing={size.width < 600 ? compactHomeFraming : homeFraming}
+              framing={framing}
               picnic="group"
               resetCamera={cameraReset}
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${editing ? "Tap an open patch of lawn to preview the oak." : "Drag to explore. Tap a friend to see their name."}`}
+              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? "Tap an open patch of lawn to preview the oak, or use Suggest spot." : "Drag to explore. Tap a friend to see their name."}`}
             />
             <View
               pointerEvents="none"

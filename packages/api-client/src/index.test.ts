@@ -90,6 +90,18 @@ it("uses bearer authorization, preserves idempotency keys, and encodes identifie
     JSON.parse(String(requests[1]!.init?.body)).externalKey,
     "retry-key",
   );
+  await client.recordLog({
+    milestoneId: "m1",
+    isSuccess: true,
+    title: "I was there",
+    durationMinutes: 0,
+    origin: "manual",
+    externalKey: "attendance:m1",
+  });
+  assert.equal(
+    "occurredAt" in JSON.parse(String(requests[2]!.init?.body)),
+    false,
+  );
 });
 it("returns validation errors and supports an empty logout response", async () => {
   const client = new BesideClient("https://api.example.test", (async () =>

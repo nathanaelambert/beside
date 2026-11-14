@@ -252,7 +252,11 @@ export type Command =
       endAt: string | null;
       itemId: string | null;
     }
-  | { type: "recordLog"; actorId: string; input: LogInput }
+  | {
+      type: "recordLog";
+      actorId: string;
+      input: Omit<LogInput, "occurredAt"> & { occurredAt?: string };
+    }
   | {
       type: "distributeLog";
       actorId: string;
