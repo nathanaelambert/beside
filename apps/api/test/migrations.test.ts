@@ -7,6 +7,89 @@ import { createPool, loadDatabase } from "../src/db/storage.ts";
 import { sqlName, tables } from "../src/db/tables.ts";
 
 it(
+  "creates coordinate gardens with required grid positions and cascading homebase ownership",
+  { skip: !process.env.TEST_DATABASE_URL },
+  async () => {
+    const pool = createPool(process.env.TEST_DATABASE_URL!);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "CREATE TEMP TABLE homebase (id text PRIMARY KEY) ON COMMIT DROP",
+      );
+      await client.query("SET LOCAL search_path TO pg_temp");
+      // Temp parent and child must share the same table lifetime.
+      const migration = await readFile(
+        new URL(
+          "../src/db/migrations/005_homebase_starter_oak.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      await client.query(
+        migration.replace("CREATE TABLE", "CREATE TEMP TABLE"),
+      );
+      await client.query(
+        "INSERT INTO homebase VALUES ('west'), ('east'), ('new'), ('invalid')",
+      );
+      await client.query(
+        "INSERT INTO homebase_starter_oak (homebase_id, x, y) VALUES ('west', 112, 104), ('east', 176, 104)",
+      );
+      await client.query(
+        "INSERT INTO homebase_starter_oak (homebase_id, x, y) VALUES ('new', 104, 104)",
+      );
+      const { rows } = await client.query(
+        "SELECT homebase_id, x, y FROM homebase_starter_oak ORDER BY homebase_id",
+      );
+      assert.deepEqual(rows, [
+        { homebase_id: "east", x: 176, y: 104 },
+        { homebase_id: "new", x: 104, y: 104 },
+        { homebase_id: "west", x: 112, y: 104 },
+      ]);
+      const columns = await client.query(
+        "SELECT attname FROM pg_attribute WHERE attrelid = 'homebase_starter_oak'::regclass AND attnum > 0 AND NOT attisdropped ORDER BY attnum",
+      );
+      assert.deepEqual(
+        columns.rows.map((row) => row.attname),
+        ["homebase_id", "x", "y"],
+      );
+      for (const [homebaseId, x, y, code] of [
+        ["invalid", null, 104, "23502"],
+        ["invalid", 104, null, "23502"],
+        ["invalid", -8, 104, "23514"],
+        ["invalid", 288, 104, "23514"],
+        ["invalid", 104, 240, "23514"],
+        ["invalid", 105, 104, "23514"],
+        ["missing", 104, 104, "23503"],
+        ["west", 104, 104, "23505"],
+      ]) {
+        await client.query("SAVEPOINT invalid_oak");
+        await assert.rejects(
+          client.query(
+            "INSERT INTO homebase_starter_oak (homebase_id, x, y) VALUES ($1, $2, $3)",
+            [homebaseId, x, y],
+          ),
+          { code },
+        );
+        await client.query("ROLLBACK TO SAVEPOINT invalid_oak");
+      }
+      await client.query("DELETE FROM homebase WHERE id = 'west'");
+      const remaining = await client.query(
+        "SELECT homebase_id FROM homebase_starter_oak ORDER BY homebase_id",
+      );
+      assert.deepEqual(remaining.rows, [
+        { homebase_id: "east" },
+        { homebase_id: "new" },
+      ]);
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+      await pool.end();
+    }
+  },
+);
+
+it(
   "upgrades populated v2 PostgreSQL data without losing progress, rewards or existing invitation codes",
   { skip: !process.env.TEST_DATABASE_URL },
   async () => {

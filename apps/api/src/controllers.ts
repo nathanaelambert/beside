@@ -27,6 +27,7 @@ import * as input from "@beside/domain/api";
 import { AuthGuard, AuthService, type AuthenticatedRequest } from "./auth.ts";
 import { DatabaseService } from "./db/database.service.ts";
 import { DomainService } from "./domain.service.ts";
+import { GardenService } from "./garden.service.ts";
 import { list, ref } from "./openapi.ts";
 
 @ApiTags("Health")
@@ -99,7 +100,10 @@ export class AuthController {
 @UseGuards(AuthGuard)
 @Controller("api/v1")
 export class DomainController {
-  constructor(@Inject(DomainService) private readonly domain: DomainService) {}
+  constructor(
+    @Inject(DomainService) private readonly domain: DomainService,
+    @Inject(GardenService) private readonly garden: GardenService,
+  ) {}
   @Get("state")
   @ApiOkResponse({ schema: ref("State") })
   @ApiOperation({
@@ -114,6 +118,35 @@ export class DomainController {
   @ApiOkResponse({ schema: list("Homebase") })
   homebases(@Req() request: AuthenticatedRequest) {
     return this.domain.homebases(request.actor.id);
+  }
+  @Get("homebases/:homebaseId/garden")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiOkResponse({ schema: ref("HomebaseGarden") })
+  getGarden(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+  ) {
+    return this.garden.get(request.actor.id, homebaseId);
+  }
+  @Post("homebases/:homebaseId/garden/starter-oak")
+  @HttpCode(200)
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiBody({ schema: ref("PlantStarterOak") })
+  @ApiOkResponse({ schema: ref("HomebaseGarden") })
+  @ApiOperation({
+    summary:
+      "Plant the shared starter oak once; retrying the same position is safe",
+  })
+  plantStarterOak(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+    @Body() body: unknown,
+  ) {
+    return this.garden.plant(
+      request.actor.id,
+      homebaseId,
+      input.plantStarterOakSchema.parse(body),
+    );
   }
   @Post("homebases")
   @ApiBody({ schema: ref("CreateHomebase") })

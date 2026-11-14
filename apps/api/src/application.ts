@@ -24,6 +24,7 @@ import {
 } from "./scheduling.controller.ts";
 import { SchedulingService } from "./scheduling.service.ts";
 import { DomainService } from "./domain.service.ts";
+import { GardenService } from "./garden.service.ts";
 import { SwaggerAssetsController } from "./swagger-assets.controller.ts";
 import { openApiSchema, ref, schemas } from "./openapi.ts";
 
@@ -86,6 +87,7 @@ class ApiExceptionFilter implements ExceptionFilter {
   providers: [
     DatabaseService,
     DomainService,
+    GardenService,
     SchedulingService,
     AuthService,
     AuthGuard,
