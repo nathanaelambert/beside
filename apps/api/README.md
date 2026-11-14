@@ -130,6 +130,11 @@ OpenAPI document for request fields, response schemas, and HTTP status codes.
   targets, record milestone outcomes, and distribute logs to home bases.
 - Manage: `PATCH` and `DELETE` on `/homebases/:homebaseId`,
   `/activities/:activityId`, and `/milestones/:milestoneId`.
+- Rewards (equal-value experiment): `GET /homebases/:homebaseId/reward-agreements`,
+  `PUT /rewards/:rewardId/agreement`, and `PUT /homebases/:homebaseId/garden/rewards/:rewardId`
+  to place or move an earned reward. See
+  [the design note](../../docs/experiments/rewards-equal-value.md). For a local demo, run
+  `scripts/seed-equal-rewards-demo.ts` (it wipes the local database it is given).
 
 Every home-base member can edit and delete its records; there are no owner/admin
 roles in this first pass. The playground exposes inline Edit/Delete controls, with
