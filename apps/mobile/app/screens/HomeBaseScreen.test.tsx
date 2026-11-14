@@ -3,8 +3,8 @@ import { ApiError, type ApiHomebase, type ApiState } from "@beside/api-client"
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 
-import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { oakPlantingPulseMs } from "@/components/pixel-world/starterOak"
+import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { besideApi } from "@/services/api/beside"
 import { ThemeProvider } from "@/theme/context"
@@ -181,4 +181,49 @@ it("clears a stale meadow and offers retry for a garden 404", async () => {
   fireEvent.press(screen.getByText("Try again"))
   await screen.findByTestId("start-planting-oak")
   await waitFor(() => expect(screen.queryByText("Try again")).toBeNull())
+})
+
+it("waits for the garden so the first canvas already contains its saved oak", async () => {
+  let resolveGarden!: (garden: typeof plantedGarden) => void
+  const garden = new Promise<typeof plantedGarden>((resolve) => {
+    resolveGarden = resolve
+  })
+  jest.mocked(besideApi.homebaseGarden).mockReturnValue(garden)
+  const screen = openScreen(960)
+  await waitFor(() => expect(besideApi.homebaseGarden).toHaveBeenCalledWith(base.id))
+  expect(screen.getByText("Opening your meadow…")).toBeTruthy()
+  expect(WorldCanvas).not.toHaveBeenCalled()
+
+  await act(async () => resolveGarden(plantedGarden))
+  await screen.findByTestId("homebase-starter-oak")
+  expect(jest.mocked(WorldCanvas).mock.calls[0][0].items).toContainEqual({
+    ...plantedGarden.oak,
+    key: "starter-oak",
+  })
+})
+
+it("keeps the same reserved dock row when the planting button becomes a saved label", async () => {
+  const screen = openScreen(960)
+  const plant = await screen.findByTestId("start-planting-oak")
+  const status = screen.getByTestId("homebase-garden-status")
+  expect(status.props.style).toMatchObject({ minHeight: 48 })
+
+  fireEvent.press(plant)
+  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+  fireEvent.press(screen.getByTestId("confirm-starter-oak"))
+  await screen.findByTestId("homebase-starter-oak")
+
+  expect(besideApi.plantStarterOak).toHaveBeenCalledWith(base.id, expect.any(Object))
+  expect(screen.getByTestId("homebase-garden-status")).toBe(status)
+  expect(screen.queryByTestId("start-planting-oak")).toBeNull()
+})
+
+it("offers a retry if the initial garden request fails", async () => {
+  jest
+    .mocked(besideApi.homebaseGarden)
+    .mockRejectedValueOnce(new Error("Offline"))
+    .mockResolvedValueOnce(plantedGarden)
+  const screen = openScreen()
+  fireEvent.press(await screen.findByText("Try again"))
+  await screen.findByTestId("homebase-starter-oak")
 })

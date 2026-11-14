@@ -284,8 +284,9 @@ export function WorldCanvas({
 }: WorldCanvasProps) {
   // Opening the tray changes height, so derive zoom from width to keep pixels the same size.
   const { scale, x: initialX, y: initialY } = cameraFrame(width, height, framing)
-  const cameraX = useSharedValue(0)
-  const cameraY = useSharedValue(0)
+  // The first Skia picture must use the intended frame, before effects run.
+  const cameraX = useSharedValue(initialX)
+  const cameraY = useSharedValue(initialY)
   const startX = useSharedValue(0)
   const startY = useSharedValue(0)
   const tick = useSharedValue(0)

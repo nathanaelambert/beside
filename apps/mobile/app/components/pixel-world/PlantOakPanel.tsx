@@ -37,7 +37,6 @@ export function PlantOakPanel({
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
   const reveal = useSharedValue(reduceMotion ? 1 : 0)
-  const catalogueOpacity = useSharedValue(1)
   useEffect(() => {
     reveal.value = reduceMotion ? 1 : withTiming(1, { duration: 210 })
   }, [reduceMotion, reveal])
@@ -45,7 +44,6 @@ export function PlantOakPanel({
     opacity: reveal.value,
     transform: [{ translateY: (1 - reveal.value) * 12 }],
   }))
-  const pageStyle = useAnimatedStyle(() => ({ opacity: catalogueOpacity.value }))
   const first = page * itemsPerPage
   const items = rewardItems.slice(first, first + itemsPerPage)
 
@@ -77,19 +75,13 @@ export function PlantOakPanel({
           accessibilityLabel="Next decorations"
           testID="browse-decorations"
           disabled={saving || pageCount < 2}
-          onPress={() => {
-            setPage((current) => (current + 1) % pageCount)
-            if (!reduceMotion) {
-              catalogueOpacity.value = 0
-              catalogueOpacity.value = withTiming(1, { duration: 170 })
-            }
-          }}
+          onPress={() => setPage((current) => (current + 1) % pageCount)}
           style={({ pressed }) => [styles.browse, pressed && styles.pressed]}
         >
           <Text text="Next ›" weight="medium" style={styles.detail} />
         </Pressable>
       </View>
-      <Animated.View style={[styles.items, pageStyle]} testID="garden-decoration-catalog">
+      <View style={styles.items} testID="garden-decoration-catalog">
         {items.map((item) => {
           const available = item.id === starterOakItemId
           return (
@@ -104,7 +96,7 @@ export function PlantOakPanel({
             </View>
           )
         })}
-      </Animated.View>
+      </View>
       <View style={styles.row}>
         <Text
           text="Only the oak can be planted in this demo."

@@ -65,14 +65,13 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         .then(async ([bases, state]) => {
           if (!active) return
           const homebase = selectHomebase(bases, state.users, route.params?.connectionId)
-          setData((current) => ({
-            homebase,
-            state,
-            garden: current?.homebase?.id === homebase?.id ? current?.garden : undefined,
-          }))
-          if (!homebase) return
+          if (!homebase) {
+            setData({ homebase, state })
+            return
+          }
           try {
             const garden = await besideApi.homebaseGarden(homebase.id)
+            // Commit the scene together, so a saved oak is present on its first frame.
             if (active) setData({ homebase, state, garden })
           } catch (e) {
             if (!active) return
@@ -309,24 +308,28 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         {!editing && !!gardenError && (
           <Text text={gardenError} accessibilityRole="alert" style={styles.error} />
         )}
-        {oak && (
-          <Text
-            testID="homebase-starter-oak"
-            text="Planted in your shared garden"
-            style={styles.plantedLabel}
-            accessibilityLiveRegion="polite"
-          />
-        )}
-        {canPlant && (
-          <Pressable
-            testID="start-planting-oak"
-            accessibilityRole="button"
-            accessibilityState={{ expanded: editing }}
-            style={styles.secondary}
-            onPress={startPlanting}
-          >
-            <Text text="Plant a tree" weight="medium" style={styles.secondaryText} />
-          </Pressable>
+        {!!data?.garden && (
+          <View testID="homebase-garden-status" style={styles.gardenStatus}>
+            {oak && (
+              <Text
+                testID="homebase-starter-oak"
+                text="Planted in your shared garden"
+                style={styles.plantedLabel}
+                accessibilityLiveRegion="polite"
+              />
+            )}
+            {canPlant && (
+              <Pressable
+                testID="start-planting-oak"
+                accessibilityRole="button"
+                accessibilityState={{ expanded: editing }}
+                style={styles.secondary}
+                onPress={startPlanting}
+              >
+                <Text text="Plant a tree" weight="medium" style={styles.secondaryText} />
+              </Pressable>
+            )}
+          </View>
         )}
         {!!error && (
           <View style={styles.notice}>
@@ -423,6 +426,8 @@ const styles = StyleSheet.create({
   dock: { backgroundColor: world.paper, gap: 16, padding: 20, paddingBottom: 12 },
   dot: { backgroundColor: world.leaf, height: 5, width: 5 },
   error: { color: world.error, fontSize: 13, lineHeight: 20 },
+  // Keep the canvas height unchanged when the button becomes a smaller saved label.
+  gardenStatus: { justifyContent: "center", minHeight: worldShape.control },
   guideDot: {
     backgroundColor: world.onForest,
     borderColor: world.forest,
