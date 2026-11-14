@@ -6,7 +6,7 @@ import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { PixelArtSprite } from "@/components/BesideMark"
-import { bitmapToPixelArt } from "@/components/iso-world/bitmap"
+import { cottageArt } from "@/components/iso-world/cottageArt"
 import {
   homeActivities,
   homeRewards,
@@ -18,7 +18,6 @@ import { meadowToIso } from "@/components/iso-world/projection"
 import {
   buildHomeScene,
   catalogue,
-  houseSprite,
   itemDrawable,
   sortDrawables,
   type HitTarget,
@@ -35,12 +34,12 @@ import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
 /** The camera opens on the picnic blanket and the cottages beside it. */
-const homeFocus = { u: 8.4, v: 9.8 }
+const homeFocus = { u: 8.6, v: 9.3 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 
 export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeBase">) {
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const [data, setData] = useState<HomeData | null>(null)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(true)
@@ -240,13 +239,9 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
     }
   }
 
-  const houseArt = useMemo(
-    () =>
-      selectedHouse
-        ? bitmapToPixelArt(houseSprite(selectedHouse.roof, !!selectedHouse.activity.open).bitmap)
-        : undefined,
-    [selectedHouse],
-  )
+  const houseArt = selectedHouse
+    ? cottageArt(scene.houses.indexOf(selectedHouse), !!selectedHouse.activity.open)
+    : undefined
 
   return (
     <SafeAreaView
@@ -382,7 +377,12 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             ) : selectedItem ? (
               <RewardSprite item={selectedItem} scale={1.5} />
             ) : (
-              <Text text={`${activities.length}`} weight="semiBold" style={styles.countBadge} />
+              (avatars.find((a) => a.key === user?.id) ?? avatars[0]) && (
+                <PixelArtSprite
+                  art={(avatars.find((a) => a.key === user?.id) ?? avatars[0])!.frames.idle}
+                  scale={2.5}
+                />
+              )
             )}
           </View>
           <View style={styles.detailText}>
@@ -522,7 +522,6 @@ const styles = StyleSheet.create({
   },
   chipText: { color: world.ink, fontSize: 20, lineHeight: 24 },
   count: { color: world.muted, fontSize: 11, lineHeight: 16 },
-  countBadge: { color: world.forest, fontSize: 22, lineHeight: 28 },
   description: { color: world.muted, fontSize: 12, lineHeight: 18 },
   detail: { alignItems: "center", flexDirection: "row", gap: 12, minHeight: 72 },
   detailText: { flex: 1, gap: 3 },

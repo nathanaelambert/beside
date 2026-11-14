@@ -12,7 +12,7 @@ import {
   type MapFrame,
 } from "./projection"
 import { bush, house, rock, roofColorOrder, type RoofColor, type Sprite } from "./props"
-import { meadowTileMap, tileAt, type TileMap } from "./tilemap"
+import { meadowTileMap, tileAt, tileMapFromRows, type TileMap } from "./tilemap"
 import { AVATAR_HEIGHT, AVATAR_WIDTH, type Avatar } from "../pixel-world/avatars"
 
 export const catalogue = new Map(rewardItems.map((item) => [item.id, item]))
@@ -263,18 +263,34 @@ export function sortDrawables(drawables: Drawable[]) {
   return [...drawables].sort((a, b) => a.depth - b.depth || a.baseX - b.baseX)
 }
 
+function opaqueAt(d: Drawable, x: number, y: number) {
+  const px = Math.floor(x - d.x)
+  const py = Math.floor(y - d.y)
+  if (px < 0 || py < 0 || px >= d.width || py >= d.height) return false
+  const { source } = d
+  if (source.type === "bitmap")
+    return source.bitmap.rgba[(py * source.bitmap.width + px) * 4 + 3] !== 0
+  const art = source.type === "art" ? source.art : source.avatar.frames.idle
+  return (art.pixels[py]?.[px] ?? ".") !== "."
+}
+
 /**
- * Front-most hit target under a map-frame point. Small sprites get padded boxes so every
- * target is at least `minSize` art pixels (44pt at the current zoom).
+ * Front-most hit target under a map-frame point. A tap on visible pixels always wins, so a
+ * cottage's transparent corners never steal a friend standing beside it. Otherwise small
+ * sprites get padded boxes so every target is at least `minSize` art pixels (44pt).
  */
 export function hitTest(drawables: Drawable[], x: number, y: number, minSize: number) {
   const candidates = drawables.filter((d) => d.hit).sort((a, b) => b.depth - a.depth)
-  for (const d of candidates) {
-    const padX = Math.max(0, (minSize - d.width) / 2)
-    const top = Math.min(d.top, d.baseY - minSize)
-    if (x >= d.x - padX && x <= d.x + d.width + padX && y >= top && y <= d.baseY + 3) return d.hit
-  }
-  return undefined
+  const exact = candidates.find((d) => opaqueAt(d, x, y))
+  if (exact) return exact.hit
+  // Padded boxes, nearest anchor first, for anything smaller than a fingertip.
+  return candidates
+    .filter((d) => {
+      const padX = Math.max(0, (minSize - d.width) / 2)
+      const top = Math.min(d.top, d.baseY - minSize)
+      return x >= d.x - padX && x <= d.x + d.width + padX && y >= top && y <= d.baseY + 3
+    })
+    .sort((a, b) => Math.abs(a.baseX - x) - Math.abs(b.baseX - x))[0]?.hit
 }
 
 // --- The home base island --------------------------------------------------------------------
@@ -377,4 +393,45 @@ export function buildHomeScene({ avatars, items, rewards = [], activities = [] }
 export function frameToMeadow(frame: MapFrame, x: number, y: number) {
   const { u, v } = screenToIso(frame, x, y)
   return { x: u * 16, y: v * 16 }
+}
+
+// --- An activity's own plot (activity screen header) -----------------------------------------
+
+const plotMap = tileMapFromRows(["ffggf", "fgggg", "ggpgg", "ggpgg"])
+const plotFrame = mapFrame(plotMap.cols, plotMap.rows, { top: 64, side: 8, bottom: 22 })
+/** Where friends who checked in gather: in front of the door, then along the path. */
+const PLOT_SPOTS: [number, number][] = [
+  [2.35, 2.25],
+  [1.55, 2.6],
+  [3.2, 2.15],
+  [2.5, 3.2],
+  [1.5, 3.5],
+  [3.5, 3.1],
+  [0.7, 2.9],
+  [4.2, 2.6],
+]
+
+export function buildActivityScene({
+  roof,
+  lit,
+  attendees,
+}: {
+  roof: RoofColor
+  lit: boolean
+  attendees: Avatar[]
+}) {
+  const drawables: Drawable[] = [
+    ...terrainDrawables(plotMap, plotFrame, new Set(["1,1"])),
+    houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit),
+    ...attendees.slice(0, PLOT_SPOTS.length).map((avatar, index) => {
+      const [u, v] = PLOT_SPOTS[index]!
+      return avatarDrawable(plotFrame, plotMap, avatar, u, v)
+    }),
+  ]
+  return { map: plotMap, frame: plotFrame, drawables: sortDrawables(drawables) }
+}
+
+/** Each activity keeps the roof colour of its cottage on the home island. */
+export function roofForIndex(index: number): RoofColor {
+  return roofColorOrder[Math.max(0, index) % roofColorOrder.length]!
 }
