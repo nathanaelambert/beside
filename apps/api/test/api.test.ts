@@ -118,7 +118,10 @@ describe("public API contract without a database", () => {
       .set("Origin", "http://localhost:3002")
       .set("Access-Control-Request-Method", "PUT")
       .expect(204);
-    assert.match(preflight.headers["access-control-allow-methods"], /PUT/);
+    assert.match(
+      preflight.headers["access-control-allow-methods"] ?? "",
+      /PUT/,
+    );
     await request(server)
       .get("/api/v1/state")
       .set("Origin", "http://localhost:3002")
