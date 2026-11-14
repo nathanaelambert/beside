@@ -112,6 +112,13 @@ describe("public API contract without a database", () => {
       .set("Access-Control-Request-Headers", "content-type")
       .expect(204)
       .expect("Access-Control-Allow-Origin", "http://localhost:3002");
+    // Reward placement and agreement use PUT from browsers too.
+    const preflight = await request(server)
+      .options("/api/v1/rewards/any/agreement")
+      .set("Origin", "http://localhost:3002")
+      .set("Access-Control-Request-Method", "PUT")
+      .expect(204);
+    assert.match(preflight.headers["access-control-allow-methods"], /PUT/);
     await request(server)
       .get("/api/v1/state")
       .set("Origin", "http://localhost:3002")

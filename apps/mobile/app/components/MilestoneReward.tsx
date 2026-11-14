@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated"
 
 import type { Avatar } from "@/components/pixel-world/avatars"
+import { footprint } from "@/components/pixel-world/scene"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { firstName, namesLabel, type RewardStatus } from "@/utils/rewardChoice"
 
@@ -237,6 +238,17 @@ function Sparkle({ x, y, delay }: { x: number; y: number; delay: number }) {
   )
 }
 
+/** A ground shadow under the sprite's actual base, like the meadow draws it. */
+function shadowFor(item: RewardItem): ViewStyle {
+  const { left, right, bottom } = footprint(item.artifact)
+  const width = (right - left + 1) * 4 + 12
+  return {
+    width,
+    left: ((left + right + 1) / 2) * 4 - width / 2,
+    top: (bottom + 1) * 4 - 6,
+  }
+}
+
 /** Shown once, right after the last check-in completes a reward. */
 export function RewardLanded({
   item,
@@ -265,10 +277,12 @@ export function RewardLanded({
         {sparkles.map((sparkle) => (
           <Sparkle key={`${sparkle.x}${sparkle.y}`} {...sparkle} />
         ))}
-        <View style={$landedShadow} />
-        <Animated.View style={spriteStyle}>
-          <PixelArtSprite art={item.artifact} scale={4} />
-        </Animated.View>
+        <View style={$landedSprite}>
+          <View style={[$landedShadow, shadowFor(item)]} />
+          <Animated.View style={spriteStyle}>
+            <PixelArtSprite art={item.artifact} scale={4} />
+          </Animated.View>
+        </View>
       </View>
       <Text text="EVERYONE MADE IT" style={[worldEyebrow, $center]} />
       <Text
@@ -348,10 +362,9 @@ const $landedStage: ViewStyle = {
   borderRadius: worldShape.radius,
   paddingBottom: 6,
 }
+const $landedSprite: ViewStyle = { width: 128, height: 128 }
 const $landedShadow: ViewStyle = {
   position: "absolute",
-  bottom: 12,
-  width: 70,
   height: 8,
   borderRadius: 4,
   backgroundColor: "rgba(30, 52, 34, 0.18)",

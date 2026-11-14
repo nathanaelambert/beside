@@ -196,7 +196,7 @@ await earnAndPlace(
     "Finished Project Hail Mary",
     "star-statue",
   ),
-  { x: 176, y: 104 },
+  { x: 184, y: 96 },
 );
 const run = await activity(
   vaibhav,
@@ -204,9 +204,14 @@ const run = await activity(
   "Wednesday run",
   "5 km, wherever we are.",
 );
-for (const week of ["Week 1", "Week 2", "Week 3"])
+// A small flower bed above the pond: one tulip per week, a collection by design.
+for (const [week, x] of [
+  ["Week 1", 136],
+  ["Week 2", 160],
+  ["Week 3", 184],
+] as const)
   await earnAndPlace(await milestone(vaibhav, run, week, "pink-tulip"), {
-    x: 72,
+    x,
     y: 128,
   });
 
@@ -246,7 +251,7 @@ const partOne = await milestone(
   pick("cherry-tree", "oak-tree"),
   {
     startAt: new Date(now - 30 * 60_000).toISOString(),
-    endAt: new Date(now + 6 * 24 * 60 * 60_000).toISOString(),
+    endAt: new Date(now + 6 * 60 * 60_000).toISOString(),
   },
 );
 await agree(vaibhav, partOne);

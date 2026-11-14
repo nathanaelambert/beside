@@ -37,6 +37,10 @@ const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) /
 const compactHomeFraming = { ...homeFraming, scale: 3, centerY: 120 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
+// Equal-value rewards: every decoration in the home base was earned and remembers why.
+// Keep only the meadow's wild trees as scenery; their spots stay reserved by the
+// shared placement rule.
+const wildTrees = initialItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees")
 type PlacementTarget = { kind: "oak" } | { kind: "reward"; rewardId: string; itemId: string }
 const friends = { x: homeFraming.centerX, y: 92 }
 
@@ -141,7 +145,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const guide = useMemo(() => (editing ? placementGuide(occupied) : []), [editing, occupied])
   const worldItems = useMemo<WorldItem[]>(
     () => [
-      ...initialItems,
+      ...wildTrees,
       ...(oak ? [oakAt(oak)] : []),
       ...placements
         .filter((p) => p.rewardId !== movingId)
@@ -429,7 +433,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         {!editing && !!gardenError && (
           <Text text={gardenError} accessibilityRole="alert" style={styles.error} />
         )}
-        {oak && !nextUp && (
+        {oak && !nextUp && !selectedKey && (
           <Text
             testID="homebase-starter-oak"
             text="Planted in your shared garden"
