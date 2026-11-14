@@ -23,6 +23,7 @@ import { HomeBaseScreen } from "@/screens/HomeBaseScreen"
 import { LoginScreen } from "@/screens/LoginScreen"
 import { PixelWorldScreen } from "@/screens/PixelWorldScreen"
 import { RewardItemsScreen } from "@/screens/RewardItemsScreen"
+import { ShopScreen } from "@/screens/ShopScreen"
 import { WelcomeScreen } from "@/screens/WelcomeScreen"
 import { useAppTheme } from "@/theme/context"
 
@@ -86,6 +87,7 @@ const AppStack = () => {
           <Stack.Screen name="Activities" component={ActivitiesScreen} />
           <Stack.Screen name="ActivityCreate" component={ActivityCreateScreen} />
           <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+          <Stack.Screen name="Shop" component={ShopScreen} />
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
 
           <Stack.Screen name="Demo" component={DemoNavigator} />

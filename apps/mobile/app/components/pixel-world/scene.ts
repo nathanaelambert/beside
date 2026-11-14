@@ -1,7 +1,7 @@
 import { rewardItems, type PixelArt } from "@beside/rewards"
 
 import { avatars, type Avatar } from "./avatars"
-import { Ground, groundAt } from "./terrain"
+import { GROUP_BLANKET, Ground, groundAt } from "./terrain"
 
 export { WORLD_HEIGHT, WORLD_WIDTH } from "./terrain"
 export const catalogue = new Map(rewardItems.map((item) => [item.id, item]))
@@ -49,16 +49,40 @@ export function avatarAt(x: number, y: number, scale: number, roster: Avatar[] =
     .find((a) => Math.abs(x - a.x) <= 7 + padding / 2 && y >= a.y - 20 - padding && y <= a.y + 2)
 }
 
-export function placementAt(x: number, y: number, items: WorldItem[]) {
+export function placementAt(
+  x: number,
+  y: number,
+  items: WorldItem[],
+  roster: Pick<Avatar, "x" | "y">[] = avatars,
+) {
   const position = { x: Math.round(x / 8) * 8, y: Math.round(y / 8) * 8 }
   // The whole base must rest on open lawn: not woods, path, water, shore, dock, or blanket.
   for (let dx = -8; dx <= 8; dx += 4)
     for (let dy = -4; dy <= 0; dy += 2)
       if (groundAt(position.x + dx, position.y - 3 + dy) !== Ground.Lawn) return null
-  const occupied = [...items, ...avatars].some(
+  const occupied = [...items, ...roster].some(
     (item) => Math.abs(item.x - position.x) < 22 && Math.abs(item.y - position.y) < 18,
   )
   return occupied ? null : position
+}
+
+/** Home-base placement: also keep the whole group picnic, and the friends on it, clear. */
+export function homePlacementAt(
+  x: number,
+  y: number,
+  items: WorldItem[],
+  roster: Pick<Avatar, "x" | "y">[],
+) {
+  const position = placementAt(x, y, items, roster)
+  if (
+    !position ||
+    (position.x >= GROUP_BLANKET.x0 - 12 &&
+      position.x <= GROUP_BLANKET.x1 + 12 &&
+      position.y >= GROUP_BLANKET.y0 - 4 &&
+      position.y <= GROUP_BLANKET.y1 + 24)
+  )
+    return null
+  return position
 }
 
 // Visible extent of a sprite, used to size its ground shadow and place the selection marker.

@@ -22,7 +22,8 @@ export const acornBalance = (
     .filter((entry) => entry.homebaseId === homebaseId)
     .reduce((sum, entry) => sum + entry.amount, 0);
 
-const joinedAt = (db: Database, activityId: string, userId: string) =>
+type RosterSource = Pick<Database, "participations" | "logs" | "milestones">;
+const joinedAt = (db: RosterSource, activityId: string, userId: string) =>
   db.logs
     .filter(
       (log) =>
@@ -43,7 +44,10 @@ const joinedAt = (db: Database, activityId: string, userId: string) =>
  * still in the activity who had joined when the milestone was planned. People
  * who join later are not required; people who leave stop blocking the bonus.
  */
-export function togetherRoster(db: Database, milestone: Milestone) {
+export function togetherRoster(
+  db: RosterSource,
+  milestone: Pick<Milestone, "activityId" | "createdAt">,
+) {
   return db.participations
     .filter(
       (person) =>

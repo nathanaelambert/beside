@@ -3,6 +3,7 @@ import { ActivityIndicator, RefreshControl, View, ViewStyle } from "react-native
 import type { ApiState, MilestoneSchedule } from "@beside/api-client"
 import { useFocusEffect } from "@react-navigation/native"
 
+import { AcornAmount } from "@/components/AcornCount"
 import {
   ActivityWorldHeader,
   activityWorldStyles,
@@ -15,6 +16,7 @@ import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import { milestoneEarnings } from "@/services/api/acorns"
 import {
   attendanceMembers,
   attendanceMilestones,
@@ -134,6 +136,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       user &&
       (attendanceMembers(data?.logs ?? [], id).has(user.id) || confirmed[id] === user.id)
     const saving = submitting === id
+    const pay = open && data ? milestoneEarnings(data, milestone) : undefined
+    const youEarned = pay && user && pay.checkedIn.includes(user.id)
     return (
       <View
         key={id}
@@ -148,12 +152,64 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
         {quantity > 1 && activity && (
           <Text text={quantityLabel(quantity, activity.unit)} style={activityWorldStyles.muted} />
         )}
+        {pay && !pay.together && (
+          <View style={$earnRow} testID={primary ? "milestone-acorn-preview" : undefined}>
+            <AcornAmount amount={pay.checkIn} signed muted={!!youEarned} />
+            <Text
+              text={youEarned ? "earned for you" : "for each check-in"}
+              style={activityWorldStyles.muted}
+            />
+            {pay.rosterSize > 0 && (
+              <>
+                <AcornAmount amount={pay.togetherBonus} signed muted />
+                <Text
+                  text={`when all ${pay.rosterSize} make it (${pay.checkedIn.length}/${pay.rosterSize})`}
+                  style={activityWorldStyles.muted}
+                />
+              </>
+            )}
+          </View>
+        )}
+        {pay?.together && (
+          <View
+            style={$together}
+            testID={primary ? "milestone-together-bonus" : undefined}
+            accessibilityLiveRegion="polite"
+          >
+            <Text
+              text="Everyone made it!"
+              weight="semiBold"
+              style={activityWorldStyles.sectionTitle}
+            />
+            <View style={$earnRow}>
+              <AcornAmount amount={pay.together.amount} signed />
+              <Text
+                text={`bonus acorns for ${data?.connections.find((c) => c.id === activity?.connectionId)?.name ?? "your home base"}`}
+                style={activityWorldStyles.body}
+              />
+            </View>
+            <Button
+              text="Spend them in the shop"
+              testID="milestone-open-shop"
+              onPress={() =>
+                activity && navigation.navigate("Shop", { connectionId: activity.connectionId })
+              }
+            />
+          </View>
+        )}
         {done ? (
-          <View testID="milestone-done" accessibilityLiveRegion="polite">
+          <View testID="milestone-done" accessibilityLiveRegion="polite" style={$earnRow}>
             <Text
               text="✓ Attendance recorded"
               style={{ ...activityWorldStyles.body, color: world.leaf }}
             />
+            {youEarned && (
+              <Text
+                text={`· +${pay!.checkIn} acorns`}
+                testID="milestone-acorns-earned"
+                style={{ ...activityWorldStyles.body, color: world.leaf }}
+              />
+            )}
           </View>
         ) : open && user ? (
           <Button
@@ -292,5 +348,14 @@ const $occurrenceHeading: ViewStyle = {
   gap: 8,
 }
 const $membersSection: ViewStyle = { gap: 12 }
+const $earnRow: ViewStyle = { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }
+const $together: ViewStyle = {
+  backgroundColor: world.meadow,
+  borderColor: world.meadowBorder,
+  borderWidth: 1,
+  borderRadius: worldShape.radius,
+  padding: 12,
+  gap: 8,
+}
 const $members: ViewStyle = { flexDirection: "row", flexWrap: "wrap", gap: 16 }
 const $member: ViewStyle = { width: 64, alignItems: "center", gap: 6 }
