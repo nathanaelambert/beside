@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, View } from "react-native"
 import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
 import type { MeadowPoint } from "@beside/api-client/garden"
@@ -8,7 +8,12 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
 import { avatarAt, initialItems } from "@/components/pixel-world/scene"
-import { oakAt, starterOakGuidePoints, starterOakTap } from "@/components/pixel-world/starterOak"
+import {
+  oakAt,
+  oakPlantingPulseMs,
+  starterOakGuidePoints,
+  starterOakTap,
+} from "@/components/pixel-world/starterOak"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { RewardSprite } from "@/components/RewardSprite"
@@ -40,6 +45,12 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [savingOak, setSavingOak] = useState(false)
   const [plantedIn, setPlantedIn] = useState<string>()
   const plantingLock = useRef(false)
+
+  useEffect(() => {
+    if (!plantedIn) return
+    const timer = setTimeout(() => setPlantedIn(undefined), oakPlantingPulseMs)
+    return () => clearTimeout(timer)
+  }, [plantedIn])
 
   useFocusEffect(
     useCallback(() => {
@@ -75,7 +86,10 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           }
         })
         .catch(() => {
-          if (active) setError("We couldn’t open your home base. Please try again.")
+          if (active) {
+            setData(null)
+            setError("We couldn’t open your home base. Please try again.")
+          }
         })
         .finally(() => {
           if (active) setBusy(false)
@@ -100,11 +114,14 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const canPlant = !!data?.garden && !oak && !busy
   const editing = !!planting && planting.homebaseId === homebase?.id && canPlant
   const position = editing ? planting?.position : undefined
-  const framing = editing
-    ? size.width < 600
-      ? compactPlantingFraming
-      : plantingFraming
-    : homeFraming
+  const justPlanted =
+    oak && homebase && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined
+  const framing =
+    editing || justPlanted
+      ? size.width < 600
+        ? compactPlantingFraming
+        : plantingFraming
+      : homeFraming
 
   function startPlanting() {
     if (!homebase || !canPlant || editing || plantingLock.current) return
@@ -242,7 +259,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
               selectedKey={selectedKey}
               preview={position ? oakAt(position, "preview") : undefined}
               showPlantingGuide={editing}
-              justPlanted={oak && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined}
+              justPlanted={justPlanted}
               framing={framing}
               picnic="group"
               resetCamera={cameraReset}
@@ -266,7 +283,10 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 accessibilityRole="button"
                 accessibilityLabel="Recenter on your friends"
                 style={styles.recenter}
-                onPress={() => setCameraReset((value) => value + 1)}
+                onPress={() => {
+                  setPlantedIn(undefined)
+                  setCameraReset((value) => value + 1)
+                }}
               >
                 <Text text="Recenter" style={styles.smallText} />
               </Pressable>

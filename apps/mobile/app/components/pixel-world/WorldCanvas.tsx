@@ -28,7 +28,7 @@ import {
 import { AVATAR_HEIGHT, AVATAR_WIDTH, avatars as defaultAvatars, type Avatar } from "./avatars"
 import { cameraFrame, type WorldFraming } from "./camera"
 import { catalogue, footprint, WORLD_HEIGHT, WORLD_WIDTH, type WorldItem } from "./scene"
-import { starterOakGuidePoints } from "./starterOak"
+import { oakPlantingPulseMs, starterOakGuidePoints } from "./starterOak"
 import { getTerrain, getWoodsTile, WOODS_TILE, type PicnicLayout } from "./terrain"
 
 // Everything is a bitmap at one texel per world pixel, scaled by an integer with nearest
@@ -136,7 +136,7 @@ function PlantingPulse({ x, y }: { x: number; y: number }) {
   useEffect(() => {
     if (!reduceMotion) {
       opacity.value = 1
-      opacity.value = withTiming(0, { duration: 760 })
+      opacity.value = withTiming(0, { duration: oakPlantingPulseMs })
     }
   }, [opacity, reduceMotion])
   return (

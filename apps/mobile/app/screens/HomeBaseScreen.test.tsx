@@ -1,9 +1,10 @@
 import type { EffectCallback } from "react"
 import { ApiError, type ApiHomebase, type ApiState } from "@beside/api-client"
-import { fireEvent, render, waitFor } from "@testing-library/react-native"
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
+import { oakPlantingPulseMs } from "@/components/pixel-world/starterOak"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { besideApi } from "@/services/api/beside"
 import { ThemeProvider } from "@/theme/context"
@@ -132,6 +133,23 @@ it("keeps the losing member's 409 notice after refreshing the shared oak", async
   expect(screen.queryByTestId("start-planting-oak")).toBeNull()
   expect(besideApi.homebases).toHaveBeenCalledTimes(1)
   expect(besideApi.homebaseGarden).toHaveBeenCalledTimes(2)
+})
+
+it("keeps the planting frame for the success pulse and then restores normal browsing", async () => {
+  const screen = openScreen()
+  fireEvent.press(await screen.findByTestId("start-planting-oak"))
+  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+  jest.useFakeTimers()
+  try {
+    await act(async () => fireEvent.press(screen.getByTestId("confirm-starter-oak")))
+    expect(canvasProps().justPlanted).toBeDefined()
+    expect(canvasProps().framing).toMatchObject({ scale: 3, centerY: 120 })
+    act(() => jest.advanceTimersByTime(oakPlantingPulseMs))
+    expect(canvasProps().justPlanted).toBeUndefined()
+    expect(canvasProps().framing).toMatchObject({ scale: 4, centerY: 137 })
+  } finally {
+    jest.useRealTimers()
+  }
 })
 
 it("offers retry and disables planting if the refresh after a 409 fails", async () => {
