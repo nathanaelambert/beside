@@ -47,6 +47,9 @@ export function migrateDemoIdentity(database: Database): Database {
     reward.requiredUserIds = reward.requiredUserIds.map((userId) =>
       rename(userId)!,
     );
+  for (const row of db.acornEntries) row.userId = rename(row.userId)!;
+  for (const row of db.decorations)
+    row.purchasedByUserId = rename(row.purchasedByUserId)!;
   for (const connection of db.connections) {
     if (connection.name === "Maya's home base")
       connection.name = "Rishik's home base";
@@ -84,6 +87,8 @@ export function migrateMilestones(input: unknown): unknown {
   old.version = 2;
   old.milestones = [];
   old.rewards = [];
+  // v1 had no milestones, so it never earned or spent acorns.
+  Object.assign(old, { acornEntries: [], decorations: [] });
   for (const base of old.connections) base.personalOwnerId = null;
   for (const user of old.users) {
     const baseId = `personal_${user.id}`;

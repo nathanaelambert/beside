@@ -54,7 +54,12 @@ describe("acorn rules in the shared command engine", () => {
   before(() => {
     db = emptyDatabase();
     for (const id of people)
-      db.users.push({ id, name: id, email: `${id}@example.test`, color: "blue" });
+      db.users.push({
+        id,
+        name: id,
+        email: `${id}@example.test`,
+        color: "blue",
+      });
     base = run({ type: "createHomebase", actorId: "ana", name: "Meadow" });
     db.memberships.push({ id: "m_ben", connectionId: base, userId: "ben" });
     activity = run({
@@ -80,7 +85,8 @@ describe("acorn rules in the shared command engine", () => {
     assert.equal(together[0]!.userId, "ben");
     assert.ok(
       db.events.some(
-        (event) => event.type === "acorns.together" && event.entityId === chapter,
+        (event) =>
+          event.type === "acorns.together" && event.entityId === chapter,
       ),
     );
     parseDatabase(db);
@@ -212,8 +218,12 @@ describe(
     });
     const server = () => app.getHttpServer();
     const state = async (session: Session): Promise<ApiState> =>
-      (await request(server()).get("/api/v1/state").set(auth(session)).expect(200))
-        .body;
+      (
+        await request(server())
+          .get("/api/v1/state")
+          .set(auth(session))
+          .expect(200)
+      ).body;
     const balance = async (session: Session) =>
       (await state(session)).acornEntries
         .filter((row) => row.homebaseId === baseId)
@@ -305,9 +315,11 @@ describe(
     });
 
     it("rejects a purchase the base cannot afford without charging", async () => {
-      const { body } = await buy(alice, { itemId: "sunflower", x: 96, y: 96 }).expect(
-        400,
-      );
+      const { body } = await buy(alice, {
+        itemId: "sunflower",
+        x: 96,
+        y: 96,
+      }).expect(400);
       assert.match(body.message, /costs 10 and your home base has 0/);
       assert.equal((await state(alice)).decorations.length, 0);
     });
@@ -359,7 +371,7 @@ describe(
         y: 104,
       }).expect(400);
       assert.match(taken.message, /already taken/);
-      // 10 acorns left: two members racing for 10-acorn items get one each? No: only one.
+      // With 10 acorns left, two members racing for 10-acorn items: only one wins.
       const results = await Promise.all([
         buy(alice, { itemId: "pink-tulip", x: 200, y: 200 }),
         buy(bob, { itemId: "sunflower", x: 48, y: 200 }),

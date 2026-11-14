@@ -55,7 +55,12 @@ export const rarityTiers: Record<Rarity, RarityTier> = {
   },
 };
 
-export const rarityOrder: Rarity[] = ["common", "uncommon", "rare", "legendary"];
+export const rarityOrder: Rarity[] = [
+  "common",
+  "uncommon",
+  "rare",
+  "legendary",
+];
 
 // Every catalog item belongs to exactly one tier. Items missing here are not for sale.
 export const itemRarity: Record<string, Rarity> = {

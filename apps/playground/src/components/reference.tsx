@@ -24,6 +24,24 @@ const definitions: Record<
     example:
       "Mosaab and Nathaniel both complete Chapter 1 and their home base earns one Meadow oak, shared by both.",
   },
+  acornEntries: {
+    name: "Acorn entry",
+    meaning:
+      "One change to a home base's shared acorn pool (experiment: rewards currency).",
+    purpose:
+      "Pay 2 acorns per achievement check-in and 8 per roster member once everyone made it; record purchases and refunds. The balance is the sum and never goes below zero.",
+    example:
+      "Mosaab and Nathaniel both check in to Chapter 1: +2, +2 and a +16 together bonus.",
+  },
+  decorations: {
+    name: "Decoration",
+    meaning:
+      "A catalog item a home base bought with acorns and placed in its meadow.",
+    purpose:
+      "Remember the price paid, the buyer and where it stands; returning it refunds the price.",
+    example:
+      "Nathaniel buys a Sunflower for 10 acorns and plants it by the pond.",
+  },
   rewardItems: {
     name: "Reward item",
     meaning: "A reusable item with a name, category, and pixel-art artifact.",

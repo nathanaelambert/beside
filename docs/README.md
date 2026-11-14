@@ -17,6 +17,10 @@ Start with the [working concept brief](product/concept-brief.md) for the product
 - [Implemented playground model](architecture/playground-model.md): milestones, home-base rewards, milestone-zero participation, schedule policies, and compatibility decisions. These prototype choices differ from parts of the entity draft.
 - [Playground model](../apps/playground/README.md): a runnable conceptual experiment with working ownership/participation assumptions, five rendered ERDs, and a [reference SQL shape](../apps/playground/schema.sql). These prototype choices are not final product decisions.
 
+## Experiments
+
+- [Tiered rewards through a currency](experiments/rewards-currency.md): milestones earn shared acorns for the home base, and items are bought at tiered prices. Branch `exp/rewards-currency`.
+
 ## Design
 
 - [Interaction storyboard](design/storyboard.md): a proposed mobile visit to an established shared space, from discovering a friend's progress to decorating and revisiting keepsakes. Its interface proposals remain exploratory.

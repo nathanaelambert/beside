@@ -28,9 +28,7 @@ export function stateForUser(db: Database, userId: string): ApiState {
   const acornEntries = db.acornEntries.filter((row) =>
     bases.has(row.homebaseId),
   );
-  const decorations = db.decorations.filter((row) =>
-    bases.has(row.homebaseId),
-  );
+  const decorations = db.decorations.filter((row) => bases.has(row.homebaseId));
   const users = new Set([
     userId,
     ...memberships.map((m) => m.userId),

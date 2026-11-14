@@ -26,7 +26,9 @@ async function call<T>(
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok)
-    throw new Error(`${method} ${path}: ${response.status} ${JSON.stringify(json)}`);
+    throw new Error(
+      `${method} ${path}: ${response.status} ${JSON.stringify(json)}`,
+    );
   return json as T;
 }
 
@@ -98,9 +100,17 @@ const checkIn = (who: string, milestoneId: string) =>
 const now = Date.now();
 // Earlier chapters stay open just long enough to seed their check-ins.
 const closesSoon = now + 20_000;
-const one = await milestone("Chapter 1", now - 7 * 24 * 60 * minute, closesSoon);
+const one = await milestone(
+  "Chapter 1",
+  now - 7 * 24 * 60 * minute,
+  closesSoon,
+);
 for (const person of people) await checkIn(person.key, one); // 4 × 2 + 32
-const two = await milestone("Chapter 2", now - 2 * 24 * 60 * minute, closesSoon);
+const two = await milestone(
+  "Chapter 2",
+  now - 2 * 24 * 60 * minute,
+  closesSoon,
+);
 for (const who of ["nathanael", "vaibhav", "pritesh"]) await checkIn(who, two); // 6
 await call("/decorations", sessions.nathanael!.token, "POST", {
   homebaseId: base!.id,
@@ -110,8 +120,13 @@ await call("/decorations", sessions.nathanael!.token, "POST", {
   externalKey: "demo:sunflower",
 });
 // Tonight's chapter: everyone but Mosaab has already checked in.
-const three = await milestone("Chapter 3", now - 30 * minute, now + 6 * 60 * minute);
-for (const who of ["nathanael", "vaibhav", "pritesh"]) await checkIn(who, three); // 6
+const three = await milestone(
+  "Chapter 3",
+  now - 30 * minute,
+  now + 6 * 60 * minute,
+);
+for (const who of ["nathanael", "vaibhav", "pritesh"])
+  await checkIn(who, three); // 6
 await milestone(
   "Chapter 4",
   now + 7 * 24 * 60 * minute,

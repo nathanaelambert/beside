@@ -134,6 +134,17 @@ their unrelated credit and sharing. A deletion notice references the surviving
 activity, base or actor so event references remain valid. The last base can be
 deleted; the account can create or join another.
 
+Experiment (rewards currency): achievement check-ins earn acorns for the home
+base's shared pool, and members spend them on catalog items. `GET /shop`
+returns tiers, prices and earning rules. `POST /decorations` buys and places an
+item, rejecting without charging when the base cannot afford it, and accepts an
+optional `externalKey` for retries. `DELETE /decorations/:decorationId` refunds
+the price. State includes `acornEntries` (the ledger) and `decorations`. See
+[the design note](../../docs/experiments/rewards-currency.md). To seed a
+showcase base through the API, run
+`API_URL=http://localhost:3001 node --experimental-strip-types scripts/seed-acorns-demo.ts`
+against a disposable database.
+
 `GET /state` is an audience-filtered projection rather than an import/export
 format. User profiles omit email, and deliveries are limited to the recipient.
 A shared log can refer to a milestone outside the viewer's visible activities.

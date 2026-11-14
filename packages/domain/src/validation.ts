@@ -621,7 +621,8 @@ export function parseDatabase(input: unknown): Database {
     fk(db.users, a.userId);
     fk(db.milestones, a.milestoneId);
     fk(db.decorations, a.decorationId);
-    const positive = a.kind === "check-in" || a.kind === "together" || a.kind === "refund";
+    const positive =
+      a.kind === "check-in" || a.kind === "together" || a.kind === "refund";
     if (positive !== a.amount > 0)
       throw new Error("Acorn entry amount has the wrong sign for its kind.");
   }
