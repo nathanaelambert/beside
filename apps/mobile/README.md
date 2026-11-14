@@ -63,9 +63,13 @@ first tap. Tap a marker to preview the oak, tap another to move it, or use
 areas stay unmarked. **Plant oak** saves one tree per Home Base; a brief ring
 and the confirmation label appear on success. The ring is skipped with Reduce
 Motion, and other sessions show the saved tree when they load the garden.
-The camera widens on compact screens only while placing or confirming an oak;
-**Recenter** returns to the regular meadow view. If another member plants
-first, the garden refreshes and explains why your preview was not saved.
+The meadow keeps your view while opening the tray, previewing, cancelling,
+and saving. **Suggest spot** looks for a valid marker in the visible area.
+If none is in view, **Find another area** explicitly moves the camera to a
+valid area. **Recenter** returns to the default view. If another member
+plants first, the garden refreshes and explains why your preview was not saved.
+The meadow exposes an accessible image description with the full names of
+its members in both browsing and planting modes.
 
 For the web version, run from the repository root:
 
