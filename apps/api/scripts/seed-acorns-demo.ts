@@ -96,8 +96,8 @@ const checkIn = (who: string, milestoneId: string) =>
   });
 
 const now = Date.now();
-// Earlier chapters close a couple of minutes after seeding.
-const closesSoon = now + 2 * minute;
+// Earlier chapters stay open just long enough to seed their check-ins.
+const closesSoon = now + 20_000;
 const one = await milestone("Chapter 1", now - 7 * 24 * 60 * minute, closesSoon);
 for (const person of people) await checkIn(person.key, one); // 4 × 2 + 32
 const two = await milestone("Chapter 2", now - 2 * 24 * 60 * minute, closesSoon);
@@ -118,6 +118,10 @@ await milestone(
   now + 7 * 24 * 60 * minute + 3 * 60 * minute,
 );
 
+// Let the earlier chapters close so only tonight's chapter is open.
+await new Promise((resolve) =>
+  setTimeout(resolve, Math.max(0, closesSoon + 2000 - Date.now())),
+);
 const state = await call<{ acornEntries: { amount: number }[] }>(
   "/state",
   first.token,

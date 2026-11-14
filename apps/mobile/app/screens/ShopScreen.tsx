@@ -238,7 +238,7 @@ export function ShopScreen({ navigation, route }: AppStackScreenProps<"Shop">) {
               disabled={!selected.affordable}
               accessibilityState={{ disabled: !selected.affordable }}
               onPress={() =>
-                navigation.navigate("HomeBase", { connectionId, placeItemId: selected.itemId })
+                navigation.popTo("HomeBase", { connectionId, placeItemId: selected.itemId })
               }
               style={({ pressed }) => [
                 styles.primary,

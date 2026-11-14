@@ -313,17 +313,10 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 onPress={() => void buy()}
               >
                 <Text
-                  text={busyAction ? "Buying…" : "Buy for"}
+                  text={busyAction ? "Buying…" : `Buy for ${placingListing?.price ?? ""} acorns`}
                   weight="medium"
                   style={styles.primaryText}
                 />
-                {!busyAction && placingListing && (
-                  <Text
-                    text={`${placingListing.price} acorns`}
-                    weight="medium"
-                    style={styles.primaryText}
-                  />
-                )}
               </Pressable>
               <Pressable
                 testID="homebase-cancel-placing"
@@ -353,7 +346,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                     />
                     <View style={styles.boughtRow}>
                       <Text
-                        text={`${shopListing(selectedDecoration.itemId) ? tierFor(shopListing(selectedDecoration.itemId)!.rarity).name : "Bought"} · ${buyerName.split(/\s+/)[0]} bought it for`}
+                        text={`${shopListing(selectedDecoration.itemId) ? tierFor(shopListing(selectedDecoration.itemId)!.rarity).name : "Bought"} · ${buyerName.split(/\s+/)[0]} paid`}
                         style={styles.description}
                       />
                       <AcornAmount amount={selectedDecoration.price} muted />

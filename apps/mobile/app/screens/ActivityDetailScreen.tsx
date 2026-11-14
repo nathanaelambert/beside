@@ -153,20 +153,22 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
           <Text text={quantityLabel(quantity, activity.unit)} style={activityWorldStyles.muted} />
         )}
         {pay && !pay.together && (
-          <View style={$earnRow} testID={primary ? "milestone-acorn-preview" : undefined}>
-            <AcornAmount amount={pay.checkIn} signed muted={!!youEarned} />
-            <Text
-              text={youEarned ? "earned for you" : "for each check-in"}
-              style={activityWorldStyles.muted}
-            />
+          <View style={$earnings} testID={primary ? "milestone-acorn-preview" : undefined}>
+            <View style={$earnRow}>
+              <AcornAmount amount={pay.checkIn} signed muted={!!youEarned} />
+              <Text
+                text={youEarned ? "earned by your check-in" : "for each check-in"}
+                style={activityWorldStyles.muted}
+              />
+            </View>
             {pay.rosterSize > 0 && (
-              <>
+              <View style={$earnRow}>
                 <AcornAmount amount={pay.togetherBonus} signed muted />
                 <Text
-                  text={`when all ${pay.rosterSize} make it (${pay.checkedIn.length}/${pay.rosterSize})`}
+                  text={`when all ${pay.rosterSize} make it · ${pay.checkedIn.length} of ${pay.rosterSize} in`}
                   style={activityWorldStyles.muted}
                 />
-              </>
+              </View>
             )}
           </View>
         )}
@@ -191,8 +193,9 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
             <Button
               text="Spend them in the shop"
               testID="milestone-open-shop"
+              preset="filled"
               onPress={() =>
-                activity && navigation.navigate("Shop", { connectionId: activity.connectionId })
+                activity && navigation.popTo("Shop", { connectionId: activity.connectionId })
               }
             />
           </View>
@@ -348,6 +351,7 @@ const $occurrenceHeading: ViewStyle = {
   gap: 8,
 }
 const $membersSection: ViewStyle = { gap: 12 }
+const $earnings: ViewStyle = { gap: 4 }
 const $earnRow: ViewStyle = { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }
 const $together: ViewStyle = {
   backgroundColor: world.meadow,
