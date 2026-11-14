@@ -172,13 +172,24 @@ export function GardenRewardsScreen({ navigation, route }: AppStackScreenProps<"
           <View key={upgrade.itemId} style={$panel} testID={`upgrade-${upgrade.itemId}`}>
             <Text text="UPGRADE IN PLACE" style={worldEyebrow} />
             <View style={$track}>
-              <Stage
-                itemId={
+              {(() => {
+                const precursorId =
                   upgrade.status.kind === "place" ? upgrade.itemId : upgrade.status.precursorId
-                }
-                state="built"
-                label="Needs this"
-              />
+                const precursor = entry(precursorId)
+                return (
+                  <Stage
+                    itemId={precursorId}
+                    state={precursor?.inGarden ? "built" : "next"}
+                    label={
+                      precursor?.inGarden
+                        ? "✓ In garden"
+                        : precursor?.planned
+                          ? "Planned"
+                          : "Needed"
+                    }
+                  />
+                )
+              })()}
               <Text text="›" style={$arrow} />
               <Stage
                 itemId={upgrade.itemId}
@@ -188,7 +199,14 @@ export function GardenRewardsScreen({ navigation, route }: AppStackScreenProps<"
                 label={upgrade.inGarden ? "✓ In garden" : upgrade.planned ? "Planned" : "Becomes"}
               />
             </View>
-            <Text text={statusLine(upgrade.status).text} style={activityWorldStyles.body} />
+            <Text
+              text={
+                upgrade.inGarden && upgrade.status.kind === "locked"
+                  ? `Your ${itemLabel(upgrade.status.precursorId)} became a ${upgrade.name}. Another one needs ${aItem(upgrade.status.precursorId)} first.`
+                  : statusLine(upgrade.status).text
+              }
+              style={activityWorldStyles.body}
+            />
           </View>
         ))}
         {data && (

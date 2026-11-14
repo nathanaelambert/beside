@@ -2,7 +2,7 @@
 // over HTTP, so it exercises the same rules as the app. Never point it at a
 // shared or production API: it registers demo accounts.
 //
-//   API_URL=http://localhost:3094 node --experimental-strip-types scripts/precursor-demo.ts setup
+//   API_URL=http://localhost:3094 node --experimental-strip-types scripts/precursor-demo.ts setup [--oak]
 //   ... friend      # the friend checks in to every open milestone
 //   ... cottage     # plan all four cottage stages as open milestones
 import process from "node:process";
@@ -122,8 +122,11 @@ async function setup() {
       target: 10,
     },
   );
-  await plan(you, activityId, "Plant our first tree", "oak-tree");
-  await friend();
+  // With --oak, also plan the first tree and check the friend in to it.
+  if (process.argv.includes("--oak")) {
+    await plan(you, activityId, "Plant our first tree", "oak-tree");
+    await friend();
+  }
   console.log(`Sign in as ${people.you.email} / ${password}`);
 }
 

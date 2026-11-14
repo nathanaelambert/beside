@@ -275,7 +275,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 testID="activity-open-garden"
                 style={$action}
                 onPress={() =>
-                  navigation.navigate("HomeBase", { connectionId: activity.connectionId })
+                  // Return to the garden already in the stack instead of stacking another.
+                  navigation.popTo("HomeBase", { connectionId: activity.connectionId })
                 }
               />
             </View>
