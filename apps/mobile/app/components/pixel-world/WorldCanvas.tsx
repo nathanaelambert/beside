@@ -370,9 +370,15 @@ export function WorldCanvas({
   ].sort((a, b) => a.y - b.y)
 
   return (
-    <GestureHandlerRootView style={styles.fill}>
+    // Use a real accessibility node outside Skia's drawing surface.
+    <GestureHandlerRootView
+      style={styles.fill}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={accessibilityLabel}
+    >
       <GestureDetector gesture={Gesture.Race(pan, tap)}>
-        <Canvas style={styles.fill} accessibilityLabel={accessibilityLabel}>
+        <Canvas style={styles.fill}>
           <Group transform={transform} antiAlias={false}>
             {/* Forest continues past the world, so tall or wide screens never show a bare edge. */}
             <Rect

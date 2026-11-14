@@ -66,6 +66,8 @@ Motion, and other sessions show the saved tree when they load the garden.
 The camera widens on compact screens only while placing or confirming an oak;
 **Recenter** returns to the regular meadow view. If another member plants
 first, the garden refreshes and explains why your preview was not saved.
+The meadow exposes an accessible image description with the full names of
+its members in both browsing and planting modes.
 
 For the web version, run from the repository root:
 
