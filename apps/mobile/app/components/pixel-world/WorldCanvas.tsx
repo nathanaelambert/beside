@@ -28,7 +28,7 @@ import {
 import { AVATAR_HEIGHT, AVATAR_WIDTH, avatars as defaultAvatars, type Avatar } from "./avatars"
 import { cameraFrame, type WorldFraming } from "./camera"
 import { catalogue, footprint, WORLD_HEIGHT, WORLD_WIDTH, type WorldItem } from "./scene"
-import { starterOakGuidePoints } from "./starterOak"
+import { oakPlantingPulseMs, starterOakGuidePoints } from "./starterOak"
 import { getTerrain, getWoodsTile, WOODS_TILE, type PicnicLayout } from "./terrain"
 
 // Everything is a bitmap at one texel per world pixel, scaled by an integer with nearest
@@ -99,11 +99,6 @@ function shadowPath(width: number) {
   if (!shadows.has(width)) shadows.set(width, ellipsePath(width + 4, 4))
   return shadows.get(width)!
 }
-const softShadows = new Map<number, string>()
-function softShadowPath(width: number) {
-  if (!softShadows.has(width)) softShadows.set(width, ellipsePath(width + 10, 8))
-  return softShadows.get(width)!
-}
 const spriteFootprints = new Map(
   [...catalogue].map(([id, item]) => [id, footprint(item.artifact)] as const),
 )
@@ -141,7 +136,7 @@ function PlantingPulse({ x, y }: { x: number; y: number }) {
   useEffect(() => {
     if (!reduceMotion) {
       opacity.value = 1
-      opacity.value = withTiming(0, { duration: 760 })
+      opacity.value = withTiming(0, { duration: oakPlantingPulseMs })
     }
   }, [opacity, reduceMotion])
   return (
@@ -167,8 +162,7 @@ const glints = [
 const Shadow = memo(function Shadow({ x, y, width }: { x: number; y: number; width: number }) {
   return (
     <Group transform={[{ translateX: x }, { translateY: y }]}>
-      <Path path={softShadowPath(width)} color="rgba(30, 52, 34, 0.12)" antiAlias={false} />
-      <Path path={shadowPath(width)} color="rgba(30, 52, 34, 0.24)" antiAlias={false} />
+      <Path path={shadowPath(width)} color="rgba(30, 52, 34, 0.3)" antiAlias={false} />
     </Group>
   )
 })

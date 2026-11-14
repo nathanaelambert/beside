@@ -8,6 +8,8 @@ import {
   type MeadowPoint,
 } from "@beside/api-client/garden"
 
+export const oakPlantingPulseMs = 760
+
 let guidePoints: readonly MeadowPoint[] | undefined
 
 export function starterOakTap(x: number, y: number) {

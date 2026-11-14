@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, View } from "react-native"
 import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
 import type { MeadowPoint } from "@beside/api-client/garden"
@@ -8,7 +8,12 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
 import { avatarAt, initialItems } from "@/components/pixel-world/scene"
-import { oakAt, starterOakGuidePoints, starterOakTap } from "@/components/pixel-world/starterOak"
+import {
+  oakAt,
+  oakPlantingPulseMs,
+  starterOakGuidePoints,
+  starterOakTap,
+} from "@/components/pixel-world/starterOak"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { RewardSprite } from "@/components/RewardSprite"
@@ -19,8 +24,9 @@ import { besideApi } from "@/services/api/beside"
 import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
-const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 110 }
-const compactHomeFraming = { ...homeFraming, scale: 3, centerY: 120 }
+const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
+const plantingFraming = { ...homeFraming, centerY: 110 }
+const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 
@@ -36,9 +42,16 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [planting, setPlanting] = useState<{ homebaseId: string; position?: MeadowPoint }>()
   const [gardenError, setGardenError] = useState("")
+  const [oakConflictIn, setOakConflictIn] = useState<string>()
   const [savingOak, setSavingOak] = useState(false)
   const [plantedIn, setPlantedIn] = useState<string>()
   const plantingLock = useRef(false)
+
+  useEffect(() => {
+    if (!plantedIn) return
+    const timer = setTimeout(() => setPlantedIn(undefined), oakPlantingPulseMs)
+    return () => clearTimeout(timer)
+  }, [plantedIn])
 
   useFocusEffect(
     useCallback(() => {
@@ -53,23 +66,32 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         .then(async ([bases, state]) => {
           if (!active) return
           const homebase = selectHomebase(bases, state.users, route.params?.connectionId)
-          setData((current) => ({
-            homebase,
-            state,
-            garden: current?.homebase?.id === homebase?.id ? current?.garden : undefined,
-          }))
-          if (!homebase) return
+          if (!homebase) {
+            setData({ state })
+            return
+          }
           try {
             const garden = await besideApi.homebaseGarden(homebase.id)
             if (active) setData({ homebase, state, garden })
           } catch (e) {
-            // A web build can be opened before the garden endpoint is deployed.
-            if (active && !(e instanceof ApiError && e.status === 404))
+            if (!active) return
+            if (e instanceof ApiError && e.status === 404) {
+              // Older servers have no garden route; membership can also disappear after the first request.
+              const latest = (await besideApi.homebases()).find((base) => base.id === homebase.id)
+              if (!active) return
+              setData({ homebase: latest, state })
+              if (!latest) setError("This home base is no longer available.")
+            } else {
+              setData({ homebase, state })
               setError("We couldn’t load garden decorations. Please try again.")
+            }
           }
         })
         .catch(() => {
-          if (active) setError("We couldn’t open your home base. Please try again.")
+          if (active) {
+            setData(null)
+            setError("We couldn’t open your home base. Please try again.")
+          }
         })
         .finally(() => {
           if (active) setBusy(false)
@@ -94,11 +116,20 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const canPlant = !!data?.garden && !oak && !busy
   const editing = !!planting && planting.homebaseId === homebase?.id && canPlant
   const position = editing ? planting?.position : undefined
+  const justPlanted =
+    oak && homebase && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined
+  const framing =
+    editing || justPlanted
+      ? size.width < 600
+        ? compactPlantingFraming
+        : plantingFraming
+      : homeFraming
 
   function startPlanting() {
     if (!homebase || !canPlant || editing || plantingLock.current) return
     setSelectedKey(undefined)
     setGardenError("")
+    setOakConflictIn(undefined)
     setPlanting({ homebaseId: homebase.id })
   }
 
@@ -149,7 +180,8 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setPlanting(undefined)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        setGardenError("Someone already planted the shared oak.")
+        setOakConflictIn(homebase.id)
+        setPlanting(undefined)
         setAttempt((value) => value + 1)
       } else {
         setGardenError("We couldn’t plant the oak. Try again.")
@@ -213,12 +245,12 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
               selectedKey={selectedKey}
               preview={position ? oakAt(position, "preview") : undefined}
               showPlantingGuide={editing}
-              justPlanted={oak && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined}
-              framing={size.width < 600 ? compactHomeFraming : homeFraming}
+              justPlanted={justPlanted}
+              framing={framing}
               picnic="group"
               resetCamera={cameraReset}
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${editing ? "Tap an open patch of lawn to preview the oak." : "Drag to explore. Tap a friend to see their name."}`}
+              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? "Tap a marked spot or use Suggest spot to preview the oak." : "Drag to explore. Tap a friend to see their name."}`}
             />
             <View
               pointerEvents="none"
@@ -237,7 +269,10 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 accessibilityRole="button"
                 accessibilityLabel="Recenter on your friends"
                 style={styles.recenter}
-                onPress={() => setCameraReset((value) => value + 1)}
+                onPress={() => {
+                  setPlantedIn(undefined)
+                  setCameraReset((value) => value + 1)
+                }}
               >
                 <Text text="Recenter" style={styles.smallText} />
               </Pressable>
@@ -257,6 +292,13 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         )}
       </View>
       <View style={styles.dock}>
+        {!!homebase && oakConflictIn === homebase.id && (
+          <Text
+            text="Someone already planted the shared oak."
+            accessibilityRole="alert"
+            style={styles.error}
+          />
+        )}
         {!editing && !!gardenError && (
           <Text text={gardenError} accessibilityRole="alert" style={styles.error} />
         )}
