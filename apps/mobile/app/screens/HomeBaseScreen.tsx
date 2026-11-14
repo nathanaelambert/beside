@@ -1,16 +1,31 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, View } from "react-native"
 import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
-import type { MeadowPoint } from "@beside/api-client/garden"
+import { initialMeadowItems, type MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
+import { PixelArtSprite } from "@/components/BesideMark"
+import { bitmapToPixelArt } from "@/components/iso-world/bitmap"
+import {
+  homeActivities,
+  homeRewards,
+  plantableTiles,
+  plantingTap,
+} from "@/components/iso-world/homeWorld"
+import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
+import { meadowToIso } from "@/components/iso-world/projection"
+import {
+  buildHomeScene,
+  catalogue,
+  houseSprite,
+  itemDrawable,
+  sortDrawables,
+  type HitTarget,
+} from "@/components/iso-world/scene"
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
-import { avatarAt, initialItems } from "@/components/pixel-world/scene"
-import { oakAt, starterOakGuidePoints, starterOakTap } from "@/components/pixel-world/starterOak"
-import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
-import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
+import { oakAt } from "@/components/pixel-world/starterOak"
 import { RewardSprite } from "@/components/RewardSprite"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
@@ -19,8 +34,8 @@ import { besideApi } from "@/services/api/beside"
 import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
-const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 110 }
-const compactHomeFraming = { ...homeFraming, scale: 3, centerY: 120 }
+/** The camera opens on the picnic blanket and the cottages beside it. */
+const homeFocus = { u: 8.4, v: 9.8 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 
@@ -31,13 +46,13 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [busy, setBusy] = useState(true)
   const [attempt, setAttempt] = useState(0)
   const [loggingOut, setLoggingOut] = useState(false)
-  const [selectedKey, setSelectedKey] = useState<string>()
+  const [selected, setSelected] = useState<HitTarget>()
   const [cameraReset, setCameraReset] = useState(0)
+  const [zoom, setZoom] = useState<number>()
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [planting, setPlanting] = useState<{ homebaseId: string; position?: MeadowPoint }>()
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
-  const [plantedIn, setPlantedIn] = useState<string>()
   const plantingLock = useRef(false)
 
   useFocusEffect(
@@ -47,7 +62,6 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setBusy(true)
       setError("")
       setPlanting(undefined)
-      setPlantedIn(undefined)
       setGardenError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
         .then(async ([bases, state]) => {
@@ -89,26 +103,76 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
     [data],
   )
   const avatars = useMemo(() => avatarsForMembers(members), [members])
-  const selected = avatars.find((avatar) => avatar.key === selectedKey)
   const oak = data?.garden?.oak
   const canPlant = !!data?.garden && !oak && !busy
   const editing = !!planting && planting.homebaseId === homebase?.id && canPlant
   const position = editing ? planting?.position : undefined
 
+  const activities = useMemo(() => {
+    if (!data?.homebase) return []
+    const serverNow = Date.parse(data.state.serverTime ?? "")
+    return homeActivities(
+      data.state,
+      data.homebase.id,
+      Number.isFinite(serverNow) ? serverNow : Date.now(),
+    )
+  }, [data])
+  const rewards = useMemo(
+    () => (data?.homebase ? homeRewards(data.state, data.homebase.id) : []),
+    [data],
+  )
+
+  const scene = useMemo(() => {
+    const items = oak ? [...initialMeadowItems, oakAt(oak)] : initialMeadowItems
+    const built = buildHomeScene({ avatars, items, rewards, activities })
+    if (!position) return built
+    const { u, v } = meadowToIso(position.x, position.y)
+    const preview = itemDrawable(built.frame, built.map, "oak-preview", "oak-tree", u, v, {
+      opacity: 0.72,
+      hit: undefined,
+    })
+    return preview ? { ...built, drawables: sortDrawables([...built.drawables, preview]) } : built
+  }, [avatars, oak, rewards, activities, position])
+
+  const autoZoom = size.width >= 700 ? 3 : 2
+  const currentZoom = zoom ?? autoZoom
+  const changeZoom = (direction: 1 | -1) =>
+    setZoom(Math.max(1, Math.min(4, currentZoom + direction)))
+
+  const selectedAvatar =
+    selected?.type === "avatar" ? avatars.find((a) => a.key === selected.id) : undefined
+  const selectedHouse =
+    selected?.type === "house" ? scene.houses.find((h) => h.activity.id === selected.id) : undefined
+  const selectedItem = selected?.type === "item" ? catalogue.get(selected.itemId) : undefined
+  const selectedKey = selectedAvatar
+    ? `avatar-${selectedAvatar.key}`
+    : selectedHouse
+      ? `house-${selectedHouse.activity.id}`
+      : selected?.type === "item"
+        ? selected.id
+        : undefined
+
+  function openActivity(activityId: string) {
+    navigation.navigate("ActivityDetail", { activityId })
+  }
+
   function startPlanting() {
     if (!homebase || !canPlant || editing || plantingLock.current) return
-    setSelectedKey(undefined)
+    setSelected(undefined)
     setGardenError("")
     setPlanting({ homebaseId: homebase.id })
   }
 
-  function tapWorld(x: number, y: number, scale: number) {
+  function tapWorld({ hit, x, y }: { hit?: HitTarget; x: number; y: number }) {
     if (plantingLock.current) return
     if (!editing || !homebase) {
-      setSelectedKey(avatarAt(x, y, scale, avatars)?.key)
+      // A second tap on a selected cottage walks in.
+      if (hit?.type === "house" && selected?.type === "house" && selected.id === hit.id)
+        openActivity(hit.id)
+      else setSelected(hit)
       return
     }
-    const { point, rejection } = starterOakTap(x, y)
+    const { point, rejection } = plantingTap(scene.frame, x, y)
     setPlanting({ homebaseId: homebase.id, position: rejection ? undefined : point })
     setGardenError(
       rejection === "occupied"
@@ -121,17 +185,22 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
 
   function suggestSpot() {
     if (!homebase || !editing || plantingLock.current) return
-    // Offer a keyboard/screen-reader path without requiring a canvas gesture.
-    const points = [...starterOakGuidePoints()].sort(
+    // A keyboard/screen-reader path that doesn't require a canvas gesture.
+    const points = [...plantableTiles()].sort(
       (a, b) =>
-        Math.hypot(a.x - homeFraming.centerX, a.y - 92) -
-        Math.hypot(b.x - homeFraming.centerX, b.y - 92),
+        Math.hypot(a.col + 0.5 - homeFocus.u, a.row + 0.5 - homeFocus.v) -
+        Math.hypot(b.col + 0.5 - homeFocus.u, b.row + 0.5 - homeFocus.v),
     )
-    const index = points.findIndex((point) => point.x === position?.x && point.y === position.y)
+    const index = points.findIndex(
+      ({ col, row }) => col * 16 + 8 === position?.x && row * 16 + 8 === position.y,
+    )
     const next = points[(index + 1) % points.length]
     if (!next) return
     setCameraReset((value) => value + 1)
-    setPlanting({ homebaseId: homebase.id, position: next })
+    setPlanting({
+      homebaseId: homebase.id,
+      position: { x: next.col * 16 + 8, y: next.row * 16 + 8 },
+    })
     setGardenError("")
   }
 
@@ -145,8 +214,8 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setData((current) =>
         current?.homebase?.id === homebase.id ? { ...current, garden } : current,
       )
-      setPlantedIn(homebase.id)
       setPlanting(undefined)
+      setSelected({ type: "item", id: "starter-oak", itemId: "oak-tree" })
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setGardenError("Someone already planted the shared oak.")
@@ -170,6 +239,14 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setLoggingOut(false)
     }
   }
+
+  const houseArt = useMemo(
+    () =>
+      selectedHouse
+        ? bitmapToPixelArt(houseSprite(selectedHouse.roof, !!selectedHouse.activity.open).bitmap)
+        : undefined,
+    [selectedHouse],
+  )
 
   return (
     <SafeAreaView
@@ -206,19 +283,22 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       >
         {homebase && size.width > 0 && size.height > 0 && (
           <>
-            <WorldCanvas
+            <IsoWorldCanvas
               {...size}
-              items={oak ? [...initialItems, oakAt(oak)] : initialItems}
-              avatars={avatars}
-              selectedKey={selectedKey}
-              preview={position ? oakAt(position, "preview") : undefined}
-              showPlantingGuide={editing}
-              justPlanted={oak && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined}
-              framing={size.width < 600 ? compactHomeFraming : homeFraming}
-              picnic="group"
+              map={scene.map}
+              frame={scene.frame}
+              drawables={scene.drawables}
+              zoom={currentZoom}
+              focus={homeFocus}
               resetCamera={cameraReset}
+              selectedKey={editing ? undefined : selectedKey}
+              guideTiles={editing ? plantableTiles() : undefined}
+              previewTile={
+                position ? { col: (position.x - 8) / 16, row: (position.y - 8) / 16 } : undefined
+              }
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${editing ? "Tap an open patch of lawn to preview the oak." : "Drag to explore. Tap a friend to see their name."}`}
+              onPinch={changeZoom}
+              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} friends on the picnic blanket and ${activities.length} activity cottages. ${editing ? "Tap a marked tile to preview the oak." : "Drag to explore, pinch to zoom. Tap a friend, cottage or decoration."}`}
             />
             <View
               pointerEvents="none"
@@ -227,27 +307,52 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             >
               <View style={[styles.dot, editing && styles.guideDot]} />
               <Text
-                text={editing ? "Marked spots are plantable" : "The meadow"}
+                text={editing ? "Glowing tiles are plantable" : "The island"}
                 style={styles.labelText}
               />
             </View>
             {!editing && (
-              <Pressable
-                testID="homebase-recenter"
-                accessibilityRole="button"
-                accessibilityLabel="Recenter on your friends"
-                style={styles.recenter}
-                onPress={() => setCameraReset((value) => value + 1)}
-              >
-                <Text text="Recenter" style={styles.smallText} />
-              </Pressable>
+              <View style={styles.cameraControls}>
+                <Pressable
+                  testID="homebase-zoom-out"
+                  accessibilityRole="button"
+                  accessibilityLabel="Zoom out"
+                  disabled={currentZoom <= 1}
+                  style={[styles.chip, currentZoom <= 1 && styles.disabled]}
+                  onPress={() => changeZoom(-1)}
+                >
+                  <Text text="−" style={styles.chipText} />
+                </Pressable>
+                <Pressable
+                  testID="homebase-zoom-in"
+                  accessibilityRole="button"
+                  accessibilityLabel="Zoom in"
+                  disabled={currentZoom >= 4}
+                  style={[styles.chip, currentZoom >= 4 && styles.disabled]}
+                  onPress={() => changeZoom(1)}
+                >
+                  <Text text="+" style={styles.chipText} />
+                </Pressable>
+                <Pressable
+                  testID="homebase-recenter"
+                  accessibilityRole="button"
+                  accessibilityLabel="Recenter on your friends"
+                  style={styles.chip}
+                  onPress={() => {
+                    setZoom(undefined)
+                    setCameraReset((value) => value + 1)
+                  }}
+                >
+                  <Text text="Recenter" style={styles.smallText} />
+                </Pressable>
+              </View>
             )}
           </>
         )}
         {!data && busy && (
           <View style={styles.loading}>
             <ActivityIndicator color={world.forest} />
-            <Text text="Opening your meadow…" style={styles.body} />
+            <Text text="Opening your island…" style={styles.body} />
           </View>
         )}
         {!busy && !homebase && !error && (
@@ -260,25 +365,6 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         {!editing && !!gardenError && (
           <Text text={gardenError} accessibilityRole="alert" style={styles.error} />
         )}
-        {oak && (
-          <Text
-            testID="homebase-starter-oak"
-            text="Planted in your shared garden"
-            style={styles.plantedLabel}
-            accessibilityLiveRegion="polite"
-          />
-        )}
-        {canPlant && (
-          <Pressable
-            testID="start-planting-oak"
-            accessibilityRole="button"
-            accessibilityState={{ expanded: editing }}
-            style={styles.secondary}
-            onPress={startPlanting}
-          >
-            <Text text="Plant a tree" weight="medium" style={styles.secondaryText} />
-          </Pressable>
-        )}
         {!!error && (
           <View style={styles.notice}>
             <Text text={error} accessibilityRole="alert" style={styles.error} />
@@ -288,40 +374,71 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           </View>
         )}
         <View style={styles.detail}>
-          {selected && (
-            <View style={styles.thumbnail}>
-              <RewardSprite
-                item={{
-                  id: selected.key,
-                  name: selected.name,
-                  category: "Friends",
-                  artifact: selected.frames.idle,
-                }}
-                scale={3}
-              />
-            </View>
-          )}
+          <View style={styles.thumbnail}>
+            {selectedAvatar ? (
+              <PixelArtSprite art={selectedAvatar.frames.idle} scale={2.5} />
+            ) : houseArt ? (
+              <PixelArtSprite art={houseArt} scale={1} />
+            ) : selectedItem ? (
+              <RewardSprite item={selectedItem} scale={1.5} />
+            ) : (
+              <Text text={`${activities.length}`} weight="semiBold" style={styles.countBadge} />
+            )}
+          </View>
           <View style={styles.detailText}>
             <Text
               testID="homebase-selected-member"
-              text={selected?.name ?? "Your people, together"}
+              text={
+                selectedAvatar?.name ??
+                selectedHouse?.activity.name ??
+                (selected?.type === "item" && selected.id === "starter-oak"
+                  ? "Your shared oak"
+                  : selectedItem?.name) ??
+                "Your people, together"
+              }
               weight="semiBold"
               style={styles.sectionTitle}
               accessibilityLiveRegion="polite"
+              numberOfLines={1}
             />
             <Text
-              text={selected ? "Part of your home base." : "Tap a friend in the meadow."}
+              text={
+                selectedAvatar
+                  ? "Part of your home base."
+                  : selectedHouse
+                    ? selectedHouse.activity.open
+                      ? "Lights are on: a session is open now."
+                      : "An activity cottage. Open it to plan or check in."
+                    : selected?.type === "item"
+                      ? selected.id.startsWith("reward-")
+                        ? "Earned together."
+                        : selected.id === "starter-oak"
+                          ? "Planted in your shared garden."
+                          : "Part of the meadow."
+                      : `${members.length} members · ${activities.length} activity ${activities.length === 1 ? "cottage" : "cottages"}. Tap a friend or a cottage.`
+              }
               style={styles.description}
             />
           </View>
-          {homebase && (
-            <Text
-              testID="homebase-member-count"
-              text={`${members.length} members`}
-              style={styles.count}
-            />
+          {selectedHouse && (
+            <Pressable
+              testID="homebase-open-activity"
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${selectedHouse.activity.name}`}
+              style={({ pressed }) => [styles.open, pressed && styles.pressed]}
+              onPress={() => openActivity(selectedHouse.activity.id)}
+            >
+              <Text text="Open" weight="medium" style={styles.primaryText} />
+            </Pressable>
           )}
         </View>
+        {homebase && (
+          <Text
+            testID="homebase-member-count"
+            text={`${members.length} members`}
+            style={styles.count}
+          />
+        )}
         <View style={styles.actions}>
           <Pressable
             testID="homebase-create-activity"
@@ -345,7 +462,25 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           >
             <Text text="Activities" weight="medium" style={styles.secondaryText} />
           </Pressable>
+          {canPlant && (
+            <Pressable
+              testID="start-planting-oak"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: editing }}
+              style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+              onPress={startPlanting}
+            >
+              <Text text="Plant" weight="medium" style={styles.secondaryText} />
+            </Pressable>
+          )}
         </View>
+        {oak && (
+          <Text
+            testID="homebase-starter-oak"
+            text="Your shared oak is planted on the island."
+            style={styles.count}
+          />
+        )}
       </View>
       {editing && (
         <PlantOakPanel
@@ -365,13 +500,42 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: "row", gap: 12 },
+  actions: { flexDirection: "row", gap: 10 },
   body: { color: world.text, fontSize: 14, lineHeight: 22 },
+  cameraControls: {
+    bottom: 12,
+    flexDirection: "row",
+    gap: 8,
+    position: "absolute",
+    right: 12,
+  },
+  chip: {
+    alignItems: "center",
+    backgroundColor: world.panel,
+    borderColor: world.line,
+    borderRadius: worldShape.smallRadius,
+    borderWidth: worldShape.border,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 44,
+    paddingHorizontal: 12,
+  },
+  chipText: { color: world.ink, fontSize: 20, lineHeight: 24 },
   count: { color: world.muted, fontSize: 11, lineHeight: 16 },
+  countBadge: { color: world.forest, fontSize: 22, lineHeight: 28 },
   description: { color: world.muted, fontSize: 12, lineHeight: 18 },
-  detail: { alignItems: "center", flexDirection: "row", gap: 12, minHeight: 64 },
+  detail: { alignItems: "center", flexDirection: "row", gap: 12, minHeight: 72 },
   detailText: { flex: 1, gap: 3 },
-  dock: { backgroundColor: world.paper, gap: 16, padding: 20, paddingBottom: 12 },
+  disabled: { opacity: 0.45 },
+  dock: {
+    backgroundColor: world.paper,
+    borderTopColor: world.line,
+    borderTopWidth: worldShape.border,
+    gap: 10,
+    paddingBottom: 8,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+  },
   dot: { backgroundColor: world.leaf, height: 5, width: 5 },
   error: { color: world.error, fontSize: 13, lineHeight: 20 },
   guideDot: {
@@ -381,7 +545,7 @@ const styles = StyleSheet.create({
     height: 8,
     width: 8,
   },
-  header: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 8 },
+  header: { paddingBottom: 14, paddingHorizontal: 20, paddingTop: 4 },
   headingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   labelText: { color: world.text, fontSize: 11, lineHeight: 16 },
   loading: {
@@ -394,17 +558,13 @@ const styles = StyleSheet.create({
   },
   logout: { justifyContent: "center", minHeight: 40, paddingLeft: 16 },
   notice: { gap: 8 },
-  plantedLabel: {
-    alignSelf: "flex-start",
-    backgroundColor: world.meadow,
-    borderColor: world.meadowBorder,
-    borderRadius: worldShape.smallRadius,
-    borderWidth: worldShape.border,
-    color: world.ink,
-    fontSize: 12,
-    lineHeight: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  open: {
+    alignItems: "center",
+    backgroundColor: world.forest,
+    borderRadius: worldShape.radius,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 18,
   },
   pressed: { opacity: 0.75 },
   primary: {
@@ -417,16 +577,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   primaryText: { color: world.onForest, fontSize: 14, lineHeight: 22 },
-  recenter: {
-    backgroundColor: world.panel,
-    borderRadius: worldShape.smallRadius,
-    bottom: 16,
-    justifyContent: "center",
-    minHeight: worldShape.control,
-    paddingHorizontal: 12,
-    position: "absolute",
-    right: 20,
-  },
   screen: { backgroundColor: world.paper, flex: 1 },
   secondary: {
     alignItems: "center",
@@ -436,34 +586,35 @@ const styles = StyleSheet.create({
     borderWidth: worldShape.border,
     justifyContent: "center",
     minHeight: worldShape.control,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   secondaryText: { color: world.text, fontSize: 14, lineHeight: 22 },
   sectionTitle: { color: world.ink, fontSize: 18, lineHeight: 24 },
   smallText: { color: world.text, fontSize: 13, lineHeight: 20 },
-  subtitle: { color: world.muted, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  subtitle: { color: world.muted, fontSize: 12, lineHeight: 18, marginTop: 6 },
   thumbnail: {
     alignItems: "center",
     backgroundColor: world.meadow,
     borderColor: world.meadowBorder,
     borderRadius: worldShape.radius,
     borderWidth: worldShape.border,
-    height: 64,
+    height: 72,
     justifyContent: "center",
-    width: 64,
+    overflow: "hidden",
+    width: 72,
   },
   title: { color: world.ink, fontSize: 27, lineHeight: 34 },
-  world: { backgroundColor: world.canvas, flex: 1, overflow: "hidden" },
+  world: { backgroundColor: world.sea, flex: 1, overflow: "hidden" },
   worldLabel: {
     alignItems: "center",
     backgroundColor: world.panel,
     borderRadius: worldShape.smallRadius,
     flexDirection: "row",
     gap: 7,
-    left: 20,
+    left: 12,
     paddingHorizontal: 10,
     paddingVertical: 6,
     position: "absolute",
-    top: 16,
+    top: 12,
   },
 })
