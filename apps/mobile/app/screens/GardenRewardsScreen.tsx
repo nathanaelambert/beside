@@ -136,9 +136,9 @@ export function GardenRewardsScreen({ navigation, route }: AppStackScreenProps<"
                       state={
                         index < build.reached
                           ? "built"
-                          : entry(stage)?.status.kind === "locked"
-                            ? "locked"
-                            : "next"
+                          : entry(stage)?.planned || entry(stage)?.status.kind !== "locked"
+                            ? "next"
+                            : "locked"
                       }
                       label={
                         index < build.reached
