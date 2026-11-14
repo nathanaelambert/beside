@@ -6,13 +6,16 @@ import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
+import { cameraFrame, type CameraOffset, type WorldFraming } from "@/components/pixel-world/camera"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
 import { avatarAt, initialItems } from "@/components/pixel-world/scene"
 import {
+  findOakInAnotherArea,
   oakAt,
   oakPlantingPulseMs,
-  starterOakGuidePoints,
   starterOakTap,
+  suggestVisibleOak,
+  type MeadowOverlay,
 } from "@/components/pixel-world/starterOak"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
@@ -25,8 +28,6 @@ import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
 const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
-const plantingFraming = { ...homeFraming, centerY: 110 }
-const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 
@@ -39,7 +40,14 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [loggingOut, setLoggingOut] = useState(false)
   const [selectedKey, setSelectedKey] = useState<string>()
   const [cameraReset, setCameraReset] = useState(0)
-  const [size, setSize] = useState({ width: 0, height: 0 })
+  const [cameraFocus, setCameraFocus] = useState<{ homebaseId: string; framing: WorldFraming }>()
+  const cameraOffset = useRef<CameraOffset>(undefined)
+  const rememberCamera = useCallback((offset: CameraOffset) => {
+    cameraOffset.current = offset
+  }, [])
+  const [size, setSize] = useState({ x: 0, y: 0, width: 0, height: 0 })
+  const panelLayout = useRef<MeadowOverlay>(undefined)
+  const [searchAnotherArea, setSearchAnotherArea] = useState(false)
   const [planting, setPlanting] = useState<{ homebaseId: string; position?: MeadowPoint }>()
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
@@ -115,17 +123,11 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const position = editing ? planting?.position : undefined
   const justPlanted =
     oak && homebase && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined
-  const framing =
-    editing || justPlanted
-      ? size.width < 600
-        ? compactPlantingFraming
-        : plantingFraming
-      : homeFraming
-
   function startPlanting() {
     if (!homebase || !canPlant || editing || plantingLock.current) return
     setSelectedKey(undefined)
     setGardenError("")
+    setSearchAnotherArea(false)
     setPlanting({ homebaseId: homebase.id })
   }
 
@@ -136,6 +138,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       return
     }
     const { point, rejection } = starterOakTap(x, y)
+    setSearchAnotherArea(false)
     setPlanting({ homebaseId: homebase.id, position: rejection ? undefined : point })
     setGardenError(
       rejection === "occupied"
@@ -147,17 +150,25 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   }
 
   function suggestSpot() {
-    if (!homebase || !editing || plantingLock.current) return
-    // Offer a keyboard/screen-reader path without requiring a canvas gesture.
-    const points = [...starterOakGuidePoints()].sort(
-      (a, b) =>
-        Math.hypot(a.x - framing.centerX, a.y - framing.centerY) -
-        Math.hypot(b.x - framing.centerX, b.y - framing.centerY),
-    )
-    const index = points.findIndex((point) => point.x === position?.x && point.y === position.y)
-    const next = points[(index + 1) % points.length]
-    if (!next) return
-    setCameraReset((value) => value + 1)
+    if (!homebase || !editing || plantingLock.current || !panelLayout.current) return
+    const panel = panelLayout.current
+    const overlay = { ...panel, x: panel.x - size.x, y: panel.y - size.y }
+    const camera = cameraOffset.current ?? cameraFrame(size.width, size.height, homeFraming)
+    let next = suggestVisibleOak(camera, size, overlay, position)
+    if (!next && searchAnotherArea) {
+      const result = findOakInAnotherArea(homeFraming, size, overlay)
+      if (result) {
+        setCameraFocus({ homebaseId: homebase.id, framing: result.focus })
+        setCameraReset((value) => value + 1)
+        next = result.point
+      }
+    }
+    if (!next) {
+      setSearchAnotherArea(true)
+      setGardenError("No clear spot in view.")
+      return
+    }
+    setSearchAnotherArea(false)
     setPlanting({ homebaseId: homebase.id, position: next })
     setGardenError("")
   }
@@ -252,16 +263,19 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         {homebase && size.width > 0 && size.height > 0 && (
           <>
             <WorldCanvas
-              {...size}
+              key={homebase.id}
+              width={size.width}
+              height={size.height}
               items={oak ? [...initialItems, oakAt(oak)] : initialItems}
               avatars={avatars}
               selectedKey={selectedKey}
               preview={position ? oakAt(position, "preview") : undefined}
               showPlantingGuide={editing}
               justPlanted={justPlanted}
-              framing={framing}
+              framing={cameraFocus?.homebaseId === homebase.id ? cameraFocus.framing : homeFraming}
               picnic="group"
               resetCamera={cameraReset}
+              onCameraChange={rememberCamera}
               onTap={tapWorld}
               accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? "Tap an open patch of lawn to preview the oak, or use Suggest spot." : "Drag to explore. Tap a friend to see their name."}`}
             />
@@ -284,6 +298,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 style={styles.recenter}
                 onPress={() => {
                   setPlantedIn(undefined)
+                  setCameraFocus(undefined)
                   setCameraReset((value) => value + 1)
                 }}
               >
@@ -404,6 +419,10 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           hasPreview={!!position}
           saving={savingOak}
           error={gardenError}
+          searchAnotherArea={searchAnotherArea}
+          onLayout={(event) => {
+            panelLayout.current = event.nativeEvent.layout
+          }}
           onCancel={() => {
             setPlanting(undefined)
             setGardenError("")

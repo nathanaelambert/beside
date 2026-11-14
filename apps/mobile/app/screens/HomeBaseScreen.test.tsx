@@ -104,17 +104,26 @@ function openScreen(width = 390) {
   return screen
 }
 
+function suggestSpot(screen: ReturnType<typeof openScreen>) {
+  fireEvent(screen.getByTestId("plant-oak-panel"), "layout", {
+    nativeEvent: { layout: { x: 0, y: 320, width: 390, height: 80 } },
+  })
+  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+}
+
 const canvasProps = () => jest.mocked(WorldCanvas).mock.calls.at(-1)![0]
 
 it.each([390, 900])("preserves the roster and normal framing at width %i", async (width) => {
   const screen = openScreen(width)
-  fireEvent.press(await screen.findByTestId("start-planting-oak"))
+  const start = await screen.findByTestId("start-planting-oak")
+  const { framing, resetCamera } = canvasProps()
+  fireEvent.press(start)
   expect(canvasProps().accessibilityLabel).toContain(roster)
   expect(canvasProps().accessibilityLabel).toContain("Suggest spot")
-  expect(canvasProps().framing).toMatchObject({ scale: width < 600 ? 3 : 4 })
+  expect(canvasProps()).toMatchObject({ framing, resetCamera })
   fireEvent.press(screen.getByRole("button", { name: "Cancel" }))
   expect(canvasProps().accessibilityLabel).toContain(roster)
-  expect(canvasProps().framing).toMatchObject({ scale: 4, centerY: 137 })
+  expect(canvasProps()).toMatchObject({ framing, resetCamera })
 })
 
 it("keeps the losing member's 409 notice after refreshing the shared oak", async () => {
@@ -125,7 +134,7 @@ it("keeps the losing member's 409 notice after refreshing the shared oak", async
   jest.mocked(besideApi.plantStarterOak).mockRejectedValue(new ApiError(409, "Already planted"))
   const screen = openScreen()
   fireEvent.press(await screen.findByTestId("start-planting-oak"))
-  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+  suggestSpot(screen)
   fireEvent.press(screen.getByTestId("confirm-starter-oak"))
   await screen.findByTestId("homebase-starter-oak")
   expect(screen.getByText("Someone already planted the shared oak.")).toBeTruthy()
@@ -135,21 +144,41 @@ it("keeps the losing member's 409 notice after refreshing the shared oak", async
   expect(besideApi.homebaseGarden).toHaveBeenCalledTimes(2)
 })
 
-it("keeps the planting frame for the success pulse and then restores normal browsing", async () => {
+it("keeps the same framing for suggestion, save, and the success pulse", async () => {
   const screen = openScreen()
   fireEvent.press(await screen.findByTestId("start-planting-oak"))
-  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+  const { framing, resetCamera } = canvasProps()
+  suggestSpot(screen)
+  expect(canvasProps().preview).toBeDefined()
+  expect(canvasProps()).toMatchObject({ framing, resetCamera })
   jest.useFakeTimers()
   try {
     await act(async () => fireEvent.press(screen.getByTestId("confirm-starter-oak")))
     expect(canvasProps().justPlanted).toBeDefined()
-    expect(canvasProps().framing).toMatchObject({ scale: 3, centerY: 120 })
+    expect(canvasProps()).toMatchObject({ framing, resetCamera })
     act(() => jest.advanceTimersByTime(oakPlantingPulseMs))
     expect(canvasProps().justPlanted).toBeUndefined()
-    expect(canvasProps().framing).toMatchObject({ scale: 4, centerY: 137 })
+    expect(canvasProps()).toMatchObject({ framing, resetCamera })
   } finally {
     jest.useRealTimers()
   }
+})
+
+it("only moves the camera to suggest an off-screen spot when explicitly requested", async () => {
+  const screen = openScreen()
+  fireEvent.press(await screen.findByTestId("start-planting-oak"))
+  const { resetCamera, onCameraChange } = canvasProps()
+  act(() => onCameraChange?.({ x: 0, y: 0, scale: 4 }))
+  fireEvent(screen.getByTestId("plant-oak-panel"), "layout", {
+    nativeEvent: { layout: { x: 0, y: 110, width: 390, height: 290 } },
+  })
+  fireEvent.press(screen.getByRole("button", { name: "Suggest spot" }))
+  expect(screen.getByText("No clear spot in view.")).toBeTruthy()
+  expect(canvasProps().preview).toBeUndefined()
+  expect(canvasProps().resetCamera).toBe(resetCamera)
+  fireEvent.press(screen.getByRole("button", { name: "Find another area" }))
+  expect(canvasProps().preview).toBeDefined()
+  expect(canvasProps().resetCamera).toBe(resetCamera + 1)
 })
 
 it("offers retry and disables planting if the refresh after a 409 fails", async () => {
@@ -160,7 +189,7 @@ it("offers retry and disables planting if the refresh after a 409 fails", async 
   jest.mocked(besideApi.plantStarterOak).mockRejectedValue(new ApiError(409, "Already planted"))
   const screen = openScreen()
   fireEvent.press(await screen.findByTestId("start-planting-oak"))
-  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+  suggestSpot(screen)
   fireEvent.press(screen.getByTestId("confirm-starter-oak"))
   await screen.findByText("We couldn’t load garden decorations. Please try again.")
   expect(screen.getByText("Someone already planted the shared oak.")).toBeTruthy()
@@ -209,7 +238,7 @@ it("keeps the same reserved dock row when the planting button becomes a saved la
   expect(status.props.style).toMatchObject({ minHeight: 48 })
 
   fireEvent.press(plant)
-  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+  suggestSpot(screen)
   fireEvent.press(screen.getByTestId("confirm-starter-oak"))
   await screen.findByTestId("homebase-starter-oak")
 
