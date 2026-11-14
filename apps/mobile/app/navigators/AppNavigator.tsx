@@ -19,6 +19,7 @@ import { ActivitiesScreen } from "@/screens/ActivitiesScreen"
 import { ActivityCreateScreen } from "@/screens/ActivityCreateScreen"
 import { ActivityDetailScreen } from "@/screens/ActivityDetailScreen"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
+import { GardenRewardsScreen } from "@/screens/GardenRewardsScreen"
 import { HomeBaseScreen } from "@/screens/HomeBaseScreen"
 import { LoginScreen } from "@/screens/LoginScreen"
 import { PixelWorldScreen } from "@/screens/PixelWorldScreen"
@@ -86,6 +87,7 @@ const AppStack = () => {
           <Stack.Screen name="Activities" component={ActivitiesScreen} />
           <Stack.Screen name="ActivityCreate" component={ActivityCreateScreen} />
           <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+          <Stack.Screen name="GardenRewards" component={GardenRewardsScreen} />
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
 
           <Stack.Screen name="Demo" component={DemoNavigator} />

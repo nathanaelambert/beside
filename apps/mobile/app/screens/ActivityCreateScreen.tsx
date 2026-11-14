@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, View } from "react-native"
-import type { ApiState } from "@beside/api-client"
+import type { ApiState, HomebaseRewards } from "@beside/api-client"
 
 import {
   ActivityWorldHeader,
@@ -10,6 +10,7 @@ import {
   WorldTextField as TextField,
 } from "@/components/ActivityWorld"
 import { FormChoice, MilestoneScheduleFields } from "@/components/MilestoneScheduleFields"
+import { RewardPicker } from "@/components/RewardPicker"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
@@ -29,10 +30,16 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
   const [description, setDescription] = useState("")
   const [templateId, setTemplateId] = useState("")
   const [target, setTarget] = useState("1")
-  const [step, setStep] = useState<"activity" | "milestone">("activity")
+  // Planning for an existing activity starts at the milestone step.
+  const existingActivityId = route.params.activityId
+  const [step, setStep] = useState<"activity" | "milestone">(
+    existingActivityId ? "milestone" : "activity",
+  )
   const [form, setForm] = useState(initialScheduleForm)
+  const [itemId, setItemId] = useState<string | null>(null)
+  const [rewards, setRewards] = useState<HomebaseRewards>()
   const [saving, setSaving] = useState(false)
-  const [createdActivityId, setCreatedActivityId] = useState<string>()
+  const [createdActivityId, setCreatedActivityId] = useState(existingActivityId)
   const savingRef = useRef(false)
   const [loadAttempt, setLoadAttempt] = useState(0)
   const template = data?.activityTemplates.find((t) => t.id === templateId)
@@ -42,11 +49,18 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
     let active = true
     setLoading(true)
     setError("")
+    // Rewards are optional: an older API without precursors still lets you plan.
+    besideApi
+      .homebaseRewards(route.params.connectionId)
+      .then((value) => active && setRewards(value))
+      .catch(() => undefined)
     besideApi
       .state()
       .then((state) => {
         if (!active) return
         setData(state)
+        const existing = state.activities.find((a) => a.id === existingActivityId)
+        if (existing) setName((current) => current || existing.name)
         setTemplateId(
           (current) =>
             current ||
@@ -64,7 +78,7 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
     return () => {
       active = false
     }
-  }, [loadAttempt])
+  }, [loadAttempt, route.params.connectionId, existingActivityId])
 
   function next() {
     if (!name.trim()) {
@@ -88,7 +102,10 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
     setError("")
     let input
     try {
-      input = scheduleFormToInput(form)
+      input = { ...scheduleFormToInput(form), itemId }
+      const upgrade = rewards?.items.find((i) => i.itemId === itemId)?.status.kind !== "place"
+      if (itemId && upgrade && input.count !== 1)
+        throw new Error("Upgrades are one-off rewards. Set the milestone to not repeat.")
     } catch (e) {
       setError((e as Error).message)
       return
@@ -110,7 +127,8 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
         setCreatedActivityId(activityId)
       }
       await besideApi.createSchedule(activityId, input)
-      navigation.replace("ActivityDetail", { activityId })
+      if (existingActivityId) navigation.goBack()
+      else navigation.replace("ActivityDetail", { activityId })
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save. Please try again.")
     } finally {
@@ -134,7 +152,9 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
           saving
             ? undefined
             : () => {
-                if (createdActivityId)
+                // Planning for an existing activity closes back to it.
+                if (existingActivityId) navigation.goBack()
+                else if (createdActivityId)
                   navigation.replace("ActivityDetail", { activityId: createdActivityId })
                 else if (step === "milestone") {
                   setStep("activity")
@@ -219,7 +239,7 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
             />
             <Text text="Plan a milestone" weight="semiBold" style={activityWorldStyles.title} />
             <Text text={name.trim()} style={activityWorldStyles.body} />
-            {createdActivityId && (
+            {createdActivityId && !existingActivityId && (
               <Text
                 text="Your activity is saved. Finish saving its milestone below, or close to view the activity."
                 style={activityWorldStyles.muted}
@@ -228,6 +248,15 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
             <View pointerEvents={saving ? "none" : "auto"} accessibilityElementsHidden={saving}>
               <MilestoneScheduleFields value={form} onChange={setForm} />
             </View>
+            <RewardPicker
+              rewards={rewards}
+              value={itemId}
+              onChange={(next) => {
+                setItemId(next)
+                const status = rewards?.items.find((i) => i.itemId === next)?.status
+                if (status && status.kind !== "place") setForm((f) => ({ ...f, repeat: "none" }))
+              }}
+            />
             <WorldSchedulePanel
               name={form.name}
               summary={summary}

@@ -21,8 +21,10 @@ export type AppStackParamList = {
   Login: undefined
   HomeBase: { connectionId?: string } | undefined
   Activities: { connectionId: string }
-  ActivityCreate: { connectionId: string }
+  // With activityId, plan another milestone for an existing activity.
+  ActivityCreate: { connectionId: string; activityId?: string }
   ActivityDetail: { activityId: string }
+  GardenRewards: { connectionId: string }
   Demo: NavigatorScreenParams<DemoTabParamList>
   RewardItems: undefined
   PixelWorld: undefined

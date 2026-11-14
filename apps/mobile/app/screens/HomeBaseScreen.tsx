@@ -1,11 +1,19 @@
 import { useCallback, useMemo, useState } from "react"
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, View } from "react-native"
 import type { ApiHomebase, ApiState } from "@beside/api-client"
+import { buildPlans, gardenHistory } from "@beside/api-client/precursors"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
-import { avatarAt, initialItems } from "@/components/pixel-world/scene"
+import {
+  gardenItems,
+  gardenKey,
+  itemLabel,
+  seenStamp,
+  unseenChange,
+} from "@/components/pixel-world/garden"
+import { avatarAt, catalogue, hitTest, initialItems } from "@/components/pixel-world/scene"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { RewardSprite } from "@/components/RewardSprite"
@@ -15,8 +23,19 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { besideApi } from "@/services/api/beside"
 import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
+import { loadString, saveString } from "@/utils/storage"
 
-const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
+// Framed a little north of the picnic so the nearest garden plots are in view.
+const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 118 }
+const seenKey = (homebaseId: string) => `beside.garden.seen.${homebaseId}`
+
+function readSeen(homebaseId: string): Record<string, string> {
+  try {
+    return JSON.parse(loadString(seenKey(homebaseId)) ?? "{}")
+  } catch {
+    return {}
+  }
+}
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState }
 
@@ -30,6 +49,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [selectedKey, setSelectedKey] = useState<string>()
   const [cameraReset, setCameraReset] = useState(0)
   const [size, setSize] = useState({ width: 0, height: 0 })
+  const [fresh, setFresh] = useState<string>()
 
   useFocusEffect(
     useCallback(() => {
@@ -39,11 +59,19 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
         .then(([bases, state]) => {
-          if (active)
-            setData({
-              homebase: selectHomebase(bases, state.users, route.params?.connectionId),
-              state,
-            })
+          if (!active) return
+          const homebase = selectHomebase(bases, state.users, route.params?.connectionId)
+          setData({ homebase, state })
+          if (!homebase) return
+          // Celebrate the newest change this device has not shown yet, then remember it.
+          const objects = state.gardenObjects ?? []
+          const change = unseenChange(objects, homebase.id, readSeen(homebase.id))
+          setFresh(change && gardenKey(change.id))
+          if (change) setSelectedKey(gardenKey(change.id))
+          saveString(
+            seenKey(homebase.id),
+            JSON.stringify(Object.fromEntries(objects.map((o) => [o.id, seenStamp(o)]))),
+          )
         })
         .catch(() => {
           if (active) setError("We couldn’t open your home base. Please try again.")
@@ -67,6 +95,30 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   )
   const avatars = useMemo(() => avatarsForMembers(members), [members])
   const selected = avatars.find((avatar) => avatar.key === selectedKey)
+  const garden = useMemo(
+    () => (homebase && data ? gardenItems(data.state.gardenObjects ?? [], homebase.id) : []),
+    [data, homebase],
+  )
+  const items = useMemo(() => [...initialItems, ...garden], [garden])
+  const selectedObject = data?.state.gardenObjects?.find((o) => gardenKey(o.id) === selectedKey)
+  const selectedItem = selectedObject && catalogue.get(selectedObject.itemId)
+  const history = selectedObject && data ? gardenHistory(data.state, selectedObject) : []
+  const build = selectedObject && buildPlans.find((p) => p.stages.includes(selectedObject.itemId))
+  const objectStory = !selectedObject
+    ? ""
+    : build
+      ? `${build.name} · stage ${build.stages.indexOf(selectedObject.itemId) + 1} of ${build.stages.length}. ${history.map((r) => itemLabel(r.itemId)).join(" → ")}`
+      : history.length > 1
+        ? `Was ${history
+            .slice(0, -1)
+            .map((r) => `a ${itemLabel(r.itemId)}`)
+            .join(", then ")}. Upgraded together.`
+        : "Earned together for your garden."
+
+  function tapWorld(x: number, y: number, scale: number) {
+    const avatar = avatarAt(x, y, scale, avatars)
+    setSelectedKey(avatar?.key ?? hitTest(garden, x, y, scale)?.key)
+  }
 
   async function signOut() {
     setLoggingOut(true)
@@ -116,14 +168,15 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           <>
             <WorldCanvas
               {...size}
-              items={initialItems}
+              items={items}
+              sparkleKey={fresh}
               avatars={avatars}
               selectedKey={selectedKey}
               framing={homeFraming}
               picnic="group"
               resetCamera={cameraReset}
-              onTap={(x, y, scale) => setSelectedKey(avatarAt(x, y, scale, avatars)?.key)}
-              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. Drag to explore. Tap a friend to see their name.`}
+              onTap={tapWorld}
+              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. Garden: ${garden.map((g) => itemLabel(g.itemId)).join(", ") || "nothing earned yet"}. Drag to explore. Tap a friend or a garden item.`}
             />
             <View pointerEvents="none" style={styles.worldLabel}>
               <View style={styles.dot} />
@@ -162,6 +215,11 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           </View>
         )}
         <View style={styles.detail}>
+          {selectedItem && (
+            <View style={styles.thumbnail}>
+              <RewardSprite item={selectedItem} scale={1.5} />
+            </View>
+          )}
           {selected && (
             <View style={styles.thumbnail}>
               <RewardSprite
@@ -176,15 +234,27 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             </View>
           )}
           <View style={styles.detailText}>
+            {selectedObject && fresh === selectedKey && (
+              <Text text="NEW IN YOUR GARDEN" style={worldEyebrow} testID="homebase-garden-new" />
+            )}
             <Text
               testID="homebase-selected-member"
-              text={selected?.name ?? "Your people, together"}
+              text={selectedItem?.name ?? selected?.name ?? "Your people, together"}
               weight="semiBold"
               style={styles.sectionTitle}
               accessibilityLiveRegion="polite"
             />
             <Text
-              text={selected ? "Part of your home base." : "Tap a friend in the meadow."}
+              testID={selectedObject ? "homebase-garden-story" : undefined}
+              text={
+                selectedObject
+                  ? objectStory
+                  : selected
+                    ? "Part of your home base."
+                    : garden.length
+                      ? "Tap a friend or something you earned."
+                      : "Tap a friend in the meadow."
+              }
               style={styles.description}
             />
           </View>
@@ -218,6 +288,17 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             }
           >
             <Text text="Activities" weight="medium" style={styles.secondaryText} />
+          </Pressable>
+          <Pressable
+            testID="homebase-rewards"
+            accessibilityRole="button"
+            disabled={!homebase}
+            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+            onPress={() =>
+              homebase && navigation.navigate("GardenRewards", { connectionId: homebase.id })
+            }
+          >
+            <Text text="Rewards" weight="medium" style={styles.secondaryText} />
           </Pressable>
         </View>
       </View>

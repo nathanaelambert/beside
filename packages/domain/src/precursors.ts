@@ -116,12 +116,18 @@ export function rewardStatus(
 export const itemName = (db: Pick<Database, "rewardItems">, itemId: string) =>
   db.rewardItems.find((item) => item.id === itemId)?.name ?? itemId;
 
+// "a Meadow oak", but plain "Cottage walls" for plural names.
+export function withArticle(name: string) {
+  if (/[^s]s$/.test(name)) return name;
+  return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
+}
+
 export function lockedMessage(
   db: Pick<Database, "rewardItems">,
   itemId: string,
   precursorId: string,
 ) {
-  return `${itemName(db, itemId)} needs a ${itemName(db, precursorId)} in your garden first. Plan or earn one, then try again.`;
+  return `${itemName(db, itemId)} needs ${withArticle(itemName(db, precursorId))} in your garden first. Plan or earn one, then try again.`;
 }
 
 export function nextFreePlot(

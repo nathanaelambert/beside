@@ -14,6 +14,7 @@ import { logInputSchema, milestoneInputSchema } from "./validation.ts";
 import {
   itemName,
   lockedMessage,
+  withArticle,
   precursorOf,
   rewardStatus,
   settleGarden,
@@ -268,7 +269,7 @@ function awardReward(
       "garden.waiting",
       "reward",
       reward.id,
-      `${itemName(db, reward.itemId)} is earned and waits for a ${itemName(db, precursorId)} to build on.`,
+      `${itemName(db, reward.itemId)} is earned and waits for ${withArticle(itemName(db, precursorId))} to build on.`,
       members(db, reward.homebaseId),
       reward.homebaseId,
       "progress",

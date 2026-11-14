@@ -162,7 +162,7 @@ describe("precursor rewards in the domain", () => {
     ];
     assert.throws(
       () => plan(db, activityId, "cottage-roof"),
-      /needs a Cottage walls/,
+      /Cottage roof needs Cottage walls in your garden/,
     );
     const ids: string[] = [];
     // Each planned stage unlocks planning the next one.

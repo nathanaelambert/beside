@@ -217,6 +217,40 @@ function Marker({ x, top, tick }: { x: number; top: number; tick: SharedValue<nu
   )
 }
 
+// A four-point twinkle that blinks on its own beat around a freshly earned or upgraded object.
+const sparkleOffsets = [
+  [-13, -26, 0],
+  [12, -30, 3],
+  [15, -12, 6],
+  [-15, -10, 9],
+  [0, -36, 5],
+  [-6, -18, 11],
+] as const
+function Sparkle({
+  x,
+  y,
+  phase,
+  tick,
+}: {
+  x: number
+  y: number
+  phase: number
+  tick: SharedValue<number>
+}) {
+  const opacity = useDerivedValue(() => (Math.floor((tick.value + phase) / 2) % 6 < 2 ? 1 : 0))
+  const big = useDerivedValue(() => (Math.floor((tick.value + phase) / 2) % 6 === 0 ? 1 : 0))
+  return (
+    <Group opacity={opacity}>
+      <Rect x={x} y={y} width={1} height={1} color="#fff8d6" />
+      <Group opacity={big}>
+        <Rect x={x - 1} y={y} width={3} height={1} color="#f6dc8f" />
+        <Rect x={x} y={y - 1} width={1} height={3} color="#f6dc8f" />
+        <Rect x={x} y={y} width={1} height={1} color="#ffffff" />
+      </Group>
+    </Group>
+  )
+}
+
 export interface WorldCanvasProps {
   width: number
   height: number
@@ -227,6 +261,8 @@ export interface WorldCanvasProps {
   accessibilityLabel?: string
   selectedKey?: string
   preview?: WorldItem
+  /** Twinkles around this item to celebrate a new or upgraded garden object. */
+  sparkleKey?: string
   resetCamera: number
   onTap: (x: number, y: number, scale: number) => void
 }
@@ -241,6 +277,7 @@ export function WorldCanvas({
   accessibilityLabel = "Pixel meadow ringed by woods, with a pond and dock, two friends on a picnic blanket, and catalogue decorations. Drag to explore; tap an item to inspect it.",
   selectedKey,
   preview,
+  sparkleKey,
   resetCamera,
   onTap,
 }: WorldCanvasProps) {
@@ -308,6 +345,7 @@ export function WorldCanvas({
         top: selectedItem.y - 32 + (spriteFootprints.get(selectedItem.itemId)?.top ?? 0),
       }
 
+  const sparkled = items.find((item) => item.key === sparkleKey)
   const drawables = [
     ...items.map((item) => ({
       y: item.y,
@@ -365,6 +403,16 @@ export function WorldCanvas({
               <Group key={key}>{node}</Group>
             ))}
             {preview && <Path path={bracketPath(preview)} color="#fff4cf" antiAlias={false} />}
+            {sparkled &&
+              sparkleOffsets.map(([dx, dy, phase]) => (
+                <Sparkle
+                  key={`${dx}-${dy}`}
+                  x={sparkled.x + dx}
+                  y={sparkled.y + dy}
+                  phase={phase}
+                  tick={tick}
+                />
+              ))}
             {marker && <Marker x={marker.x} top={marker.top} tick={tick} />}
           </Group>
         </Canvas>

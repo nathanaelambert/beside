@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react"
 import { ActivityIndicator, RefreshControl, View, ViewStyle } from "react-native"
 import type { ApiState, MilestoneSchedule } from "@beside/api-client"
+import { precursorOf } from "@beside/api-client/precursors"
 import { useFocusEffect } from "@react-navigation/native"
 
 import {
@@ -11,6 +12,8 @@ import {
 } from "@/components/ActivityWorld"
 import { PixelArtSprite } from "@/components/BesideMark"
 import { avatarsForMembers } from "@/components/pixel-world/avatars"
+import { aItem, itemLabel } from "@/components/pixel-world/garden"
+import { catalogue } from "@/components/pixel-world/scene"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
@@ -125,6 +128,35 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     }
   }
 
+  function renderReward(milestone: ApiState["milestones"][number]) {
+    const reward = data?.rewards.find((r) => r.id === milestone.rewardId)
+    const item = reward && catalogue.get(reward.itemId)
+    if (!reward || !item) return null
+    const precursor = precursorOf(reward.itemId)
+    const object = data?.gardenObjects.find((o) => o.id === reward.gardenObjectId)
+    const done = reward.requiredUserIds.filter((id) =>
+      data?.logs.some(
+        (l) => l.milestoneId === milestone.id && l.authorUserId === id && l.isSuccess,
+      ),
+    ).length
+    const text = !reward.obtainedAt
+      ? `Earns ${item.name}${precursor ? `, built on ${aItem(precursor)}` : ""} · ${done} of ${reward.requiredUserIds.length} checked in`
+      : !object
+        ? `${item.name} earned · waiting for ${aItem(precursor ?? reward.itemId)} to build on`
+        : precursor
+          ? `✓ ${item.name} earned · your ${itemLabel(precursor)} was upgraded`
+          : `✓ ${item.name} earned · now in your garden`
+    return (
+      <View style={$reward} testID={`milestone-reward-${reward.itemId}`}>
+        <PixelArtSprite art={item.artifact} scale={1} />
+        <Text
+          text={text}
+          style={[activityWorldStyles.muted, reward.obtainedAt ? { color: world.forest } : null]}
+        />
+      </View>
+    )
+  }
+
   function renderMilestone(milestone: ApiState["milestones"][number], open = false) {
     const { id, name, startAt, endAt, quantity } = milestone
     const primary = id === currentOccurrence?.id
@@ -145,6 +177,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
           {open && <Text text="Open now" style={activityWorldStyles.muted} />}
         </View>
         <Text text={time ? `${date} · ${time}` : date} style={activityWorldStyles.muted} />
+        {renderReward(milestone)}
         {quantity > 1 && activity && (
           <Text text={quantityLabel(quantity, activity.unit)} style={activityWorldStyles.muted} />
         )}
@@ -225,6 +258,27 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
             {!!activity.description && (
               <Text text={activity.description} style={activityWorldStyles.body} />
             )}
+            <View style={$actions}>
+              <Button
+                text="Plan a milestone"
+                testID="activity-plan-milestone"
+                style={$action}
+                onPress={() =>
+                  navigation.navigate("ActivityCreate", {
+                    connectionId: activity.connectionId,
+                    activityId: activity.id,
+                  })
+                }
+              />
+              <Button
+                text="Garden"
+                testID="activity-open-garden"
+                style={$action}
+                onPress={() =>
+                  navigation.navigate("HomeBase", { connectionId: activity.connectionId })
+                }
+              />
+            </View>
             {schedules.map((schedule) => (
               <WorldSchedulePanel
                 key={schedule.id}
@@ -294,3 +348,6 @@ const $occurrenceHeading: ViewStyle = {
 const $membersSection: ViewStyle = { gap: 12 }
 const $members: ViewStyle = { flexDirection: "row", flexWrap: "wrap", gap: 16 }
 const $member: ViewStyle = { width: 64, alignItems: "center", gap: 6 }
+const $reward: ViewStyle = { flexDirection: "row", alignItems: "center", gap: 8 }
+const $actions: ViewStyle = { flexDirection: "row", gap: 12 }
+const $action: ViewStyle = { flex: 1 }

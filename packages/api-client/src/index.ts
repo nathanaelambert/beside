@@ -13,6 +13,7 @@ import type {
   CreateLogInput,
   CreateMilestoneInput,
   CreateSubjectInput,
+  HomebaseRewards,
   LoginInput,
   MutationResult,
   RegisterInput,
@@ -20,7 +21,8 @@ import type {
   UpdateActivityInput,
   UpdateMilestoneInput,
 } from "@beside/domain/api";
-import type { User } from "@beside/domain/types";
+import type { GardenObject, User } from "@beside/domain/types";
+export type { GardenObject } from "@beside/domain/types";
 export type * from "@beside/domain/api";
 
 export class ApiError extends Error {
@@ -114,6 +116,15 @@ export class BesideClient {
   }
   homebases() {
     return this.request<ApiHomebase[]>("/homebases");
+  }
+  // Precursor-aware catalog: available, queued and locked items, build progress.
+  homebaseRewards(homebaseId: string) {
+    return this.request<HomebaseRewards>(
+      `/homebases/${encodeURIComponent(homebaseId)}/rewards`,
+    );
+  }
+  garden() {
+    return this.request<GardenObject[]>("/garden");
   }
   createHomebase(name: string) {
     return this.request<ApiHomebase>("/homebases", "POST", { name });
