@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Pressable, StyleSheet, View } from "react-native"
+import { Pressable, StyleSheet, View, type LayoutChangeEvent } from "react-native"
 import { starterOakItemId } from "@beside/api-client/garden"
 import { rewardItems } from "@beside/rewards"
 import Animated, {
@@ -22,6 +22,8 @@ export function PlantOakPanel({
   hasPreview,
   saving,
   error,
+  searchAnotherArea,
+  onLayout,
   onCancel,
   onPlant,
   onSuggest,
@@ -29,6 +31,8 @@ export function PlantOakPanel({
   hasPreview: boolean
   saving: boolean
   error?: string
+  searchAnotherArea?: boolean
+  onLayout?: (event: LayoutChangeEvent) => void
   onCancel: () => void
   onPlant: () => void
   onSuggest: () => void
@@ -51,6 +55,7 @@ export function PlantOakPanel({
     <Animated.View
       style={[styles.panel, { bottom: insets.bottom + 12 }, revealStyle]}
       testID="plant-oak-panel"
+      onLayout={onLayout}
     >
       <View style={styles.row}>
         <View style={styles.copy}>
@@ -112,7 +117,7 @@ export function PlantOakPanel({
       <View style={styles.row}>
         <WorldButton text="Cancel" onPress={onCancel} disabled={saving} />
         <WorldButton
-          text="Suggest spot"
+          text={searchAnotherArea ? "Find another area" : "Suggest spot"}
           testID="suggest-oak-spot"
           onPress={onSuggest}
           disabled={saving}

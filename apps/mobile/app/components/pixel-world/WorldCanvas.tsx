@@ -26,7 +26,7 @@ import {
 } from "react-native-reanimated"
 
 import { AVATAR_HEIGHT, AVATAR_WIDTH, avatars as defaultAvatars, type Avatar } from "./avatars"
-import { cameraFrame, type WorldFraming } from "./camera"
+import { cameraFrame, type CameraOffset, type WorldFraming } from "./camera"
 import { catalogue, footprint, WORLD_HEIGHT, WORLD_WIDTH, type WorldItem } from "./scene"
 import { oakPlantingPulseMs, starterOakGuidePoints } from "./starterOak"
 import { getTerrain, getWoodsTile, WOODS_TILE, type PicnicLayout } from "./terrain"
@@ -264,6 +264,7 @@ export interface WorldCanvasProps {
   showPlantingGuide?: boolean
   justPlanted?: WorldItem
   resetCamera: number
+  onCameraChange?: (camera: CameraOffset) => void
   onTap: (x: number, y: number, scale: number) => void
 }
 
@@ -280,6 +281,7 @@ export function WorldCanvas({
   showPlantingGuide,
   justPlanted,
   resetCamera,
+  onCameraChange,
   onTap,
 }: WorldCanvasProps) {
   // Opening the tray changes height, so derive zoom from width to keep pixels the same size.
@@ -295,7 +297,8 @@ export function WorldCanvas({
   useEffect(() => {
     cameraX.value = initialX
     cameraY.value = initialY
-  }, [initialX, initialY, resetCamera, cameraX, cameraY])
+    onCameraChange?.({ x: initialX, y: initialY, scale })
+  }, [initialX, initialY, resetCamera, cameraX, cameraY, onCameraChange, scale])
 
   useEffect(() => {
     if (reduceMotion) return
@@ -326,6 +329,14 @@ export function WorldCanvas({
         height >= WORLD_HEIGHT * scale
           ? Math.round((height - WORLD_HEIGHT * scale) / 2)
           : Math.min(0, Math.max(height - WORLD_HEIGHT * scale, startY.value + e.translationY))
+    })
+    .onFinalize(() => {
+      if (onCameraChange)
+        runOnJS(onCameraChange)({
+          x: Math.round(cameraX.value),
+          y: Math.round(cameraY.value),
+          scale,
+        })
     })
   const tap = Gesture.Tap()
     .maxDistance(8)
@@ -370,9 +381,15 @@ export function WorldCanvas({
   ].sort((a, b) => a.y - b.y)
 
   return (
-    <GestureHandlerRootView style={styles.fill}>
+    // Use a real accessibility node outside Skia's drawing surface.
+    <GestureHandlerRootView
+      style={styles.fill}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={accessibilityLabel}
+    >
       <GestureDetector gesture={Gesture.Race(pan, tap)}>
-        <Canvas style={styles.fill} accessibilityLabel={accessibilityLabel}>
+        <Canvas style={styles.fill}>
           <Group transform={transform} antiAlias={false}>
             {/* Forest continues past the world, so tall or wide screens never show a bare edge. */}
             <Rect

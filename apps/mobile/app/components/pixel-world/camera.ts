@@ -6,6 +6,8 @@ export interface WorldFraming {
   centerY: number
 }
 
+export type CameraOffset = { x: number; y: number; scale: number }
+
 export function cameraFrame(width: number, height: number, framing?: WorldFraming) {
   const scale = framing?.scale ?? Math.max(1, Math.floor(width / 176))
   const axis = (viewport: number, extent: number, center: number) => {
