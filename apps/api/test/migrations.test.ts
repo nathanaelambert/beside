@@ -111,7 +111,10 @@ it(
         // The garden arrived after v2: no objects, and no reward link column yet.
         if (key === "gardenObjects") continue;
         const columns: string[] = currentColumns.filter(
-          (column) => column !== "gardenObjectId",
+          (column) =>
+            !["gardenObjectId", "targetObjectId", "targetRewardId"].includes(
+              column,
+            ),
         );
         if (key === "connections" || key === "activities")
           columns.push("personalOwnerId");
@@ -164,19 +167,53 @@ it(
       for (const name of [
         "003_crud_events.sql",
         "004_milestone_schedules.sql",
+        "005_homebase_starter_oak.sql",
         "007_reward_precursors.sql",
-      ])
+      ]) {
+        // A base that planted PR #14's starter oak before precursors existed.
+        if (name === "007_reward_precursors.sql")
+          await client.query(
+            "INSERT INTO homebase_starter_oak (homebase_id, x, y) VALUES ('mn', 120, 112)",
+          );
         await client.query(
           await readFile(
             new URL(`../src/db/migrations/${name}`, import.meta.url),
             "utf8",
           ),
         );
+      }
       const upgraded = parseDatabase(await loadDatabase(client));
       for (const key of Object.keys(seed) as (keyof typeof seed)[]) {
-        if (key !== "logShares")
+        if (key !== "logShares" && key !== "gardenObjects")
           assert.deepEqual(upgraded[key], seed[key], `Preserve ${key}`);
       }
+      // The starter oak became the base's first garden object, at its spot.
+      assert.deepEqual(
+        upgraded.gardenObjects.map(
+          ({ id, homebaseId, itemId, origin, x, y }) => ({
+            id,
+            homebaseId,
+            itemId,
+            origin,
+            x,
+            y,
+          }),
+        ),
+        [
+          {
+            id: "garden_starter_mn",
+            homebaseId: "mn",
+            itemId: "oak-tree",
+            origin: "starter",
+            x: 120,
+            y: 112,
+          },
+        ],
+      );
+      const oldTable = await client.query(
+        "SELECT to_regclass('homebase_starter_oak') AS name",
+      );
+      assert.equal(oldTable.rows[0].name, null);
       assert.deepEqual(
         new Set(
           upgraded.logShares.map(

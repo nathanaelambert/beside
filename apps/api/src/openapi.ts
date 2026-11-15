@@ -37,6 +37,7 @@ export const schemas = {
   Reward: databaseSchema.shape.rewards.element,
   GardenObject: databaseSchema.shape.gardenObjects.unwrap().element,
   HomebaseRewards: api.homebaseRewardsSchema,
+  PlaceGardenObject: api.placeGardenObjectSchema,
   Event: databaseSchema.shape.events.element,
   Templates: z.object({
     subjectTemplates: databaseSchema.shape.subjectTemplates,

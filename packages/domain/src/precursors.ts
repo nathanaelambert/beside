@@ -3,24 +3,6 @@ import type { Database, GardenObject, Reward } from "./types.ts";
 
 export { buildPlans, precursorChain, precursorOf } from "@beside/rewards";
 
-// Fixed lawn plots for earned objects, nearest the picnic first. Each is a
-// bottom-centre anchor on the 8 px meadow grid, clear of the scenery, pond,
-// paths and the four-person picnic. The mobile scene test checks the art.
-export const gardenPlots: readonly { x: number; y: number }[] = [
-  { x: 168, y: 120 },
-  { x: 112, y: 104 },
-  { x: 136, y: 80 },
-  { x: 80, y: 120 },
-  { x: 168, y: 96 },
-  { x: 48, y: 112 },
-  { x: 144, y: 56 },
-  { x: 208, y: 72 },
-  { x: 72, y: 64 },
-  { x: 40, y: 168 },
-  { x: 160, y: 216 },
-  { x: 112, y: 40 },
-];
-
 type Garden = Pick<
   Database,
   "rewards" | "gardenObjects" | "milestones" | "rewardItems"
@@ -46,45 +28,109 @@ export function liveReward(
 const byAge = (a: GardenObject, b: GardenObject) =>
   Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id);
 
-// Supply and demand for one precursor stage in a home base. Rewards are
-// "pending" until they are applied to a garden object.
-export function precursorSupply(
+/** Not yet applied to the garden: unearned, or earned and waiting. */
+const pending = (reward: Reward) => !reward.gardenObjectId;
+
+/** The object an upgrade builds on, once its chosen precursor exists. */
+export function resolvedTarget(db: Pick<Database, "rewards">, reward: Reward) {
+  return (
+    reward.targetObjectId ??
+    db.rewards.find((r) => r.id === reward.targetRewardId)?.gardenObjectId ??
+    null
+  );
+}
+
+export const milestoneFor = (
+  db: Pick<Database, "milestones">,
+  rewardId: string,
+) => db.milestones.find((m) => m.rewardId === rewardId);
+
+// What a live pending upgrade has already claimed: one object or one planned
+// reward each. A claimed precursor cannot carry a second upgrade.
+function claims(
   db: Garden,
   homebaseId: string,
-  precursorId: string,
   now: string,
   ignoreRewardId?: string,
 ) {
+  const objects = new Set<string>();
+  const rewards = new Set<string>();
+  for (const r of db.rewards) {
+    if (
+      r.homebaseId !== homebaseId ||
+      r.id === ignoreRewardId ||
+      !pending(r) ||
+      !precursorOf(r.itemId) ||
+      !liveReward(db, r, now)
+    )
+      continue;
+    const object = resolvedTarget(db, r);
+    if (object) objects.add(object);
+    if (r.targetRewardId) rewards.add(r.targetRewardId);
+  }
+  return { objects, rewards };
+}
+
+export type PrecursorCandidate =
+  | { kind: "object"; object: GardenObject; milestoneName: string | null }
+  | { kind: "reward"; reward: Reward; milestoneName: string | null };
+
+/**
+ * Everything an upgrade could build on right now, oldest first: free objects
+ * at the precursor stage, then planned or waiting rewards of that stage.
+ */
+export function precursorCandidates(
+  db: Garden,
+  homebaseId: string,
+  itemId: string,
+  now: string,
+  ignoreRewardId?: string,
+): PrecursorCandidate[] {
+  const precursorId = precursorOf(itemId);
+  if (!precursorId) return [];
+  const claimed = claims(db, homebaseId, now, ignoreRewardId);
   const objects = db.gardenObjects
-    .filter((o) => o.homebaseId === homebaseId && o.itemId === precursorId)
-    .sort(byAge);
-  const pending = db.rewards.filter(
-    (r) =>
-      r.homebaseId === homebaseId &&
-      r.id !== ignoreRewardId &&
-      !r.gardenObjectId &&
-      liveReward(db, r, now),
-  );
-  const promised = pending.filter((r) => r.itemId === precursorId).length;
-  const claimed = pending.filter(
-    (r) => precursorOf(r.itemId) === precursorId,
-  ).length;
-  return {
-    objects,
-    promised,
-    claimed,
-    free: objects.length + promised - claimed,
-  };
+    .filter(
+      (o) =>
+        o.homebaseId === homebaseId &&
+        o.itemId === precursorId &&
+        !claimed.objects.has(o.id),
+    )
+    .sort(byAge)
+    .map((object) => {
+      // The milestone that first earned this object; none for the starter oak.
+      const first = gardenHistory(db, object)[0];
+      return {
+        kind: "object" as const,
+        object,
+        milestoneName: (first && milestoneFor(db, first.id)?.name) ?? null,
+      };
+    });
+  const rewards = db.rewards
+    .filter(
+      (r) =>
+        r.homebaseId === homebaseId &&
+        r.itemId === precursorId &&
+        pending(r) &&
+        liveReward(db, r, now) &&
+        !claimed.rewards.has(r.id),
+    )
+    .map((reward) => ({
+      kind: "reward" as const,
+      reward,
+      milestoneName: milestoneFor(db, reward.id)?.name ?? null,
+    }));
+  return [...objects, ...rewards];
 }
 
 export type RewardStatus =
-  // No precursor: it gets its own plot.
+  // No precursor: a new object for the garden.
   | { kind: "place" }
-  // The precursor stands in the garden and nobody has claimed it yet.
-  | { kind: "ready"; precursorId: string; target: GardenObject }
-  // The precursor is planned or earned but not built yet. Plannable; it is
-  // applied automatically once the precursor exists.
-  | { kind: "queued"; precursorId: string }
+  // At least one free precursor stands in the garden.
+  | { kind: "ready"; precursorId: string; candidates: PrecursorCandidate[] }
+  // Only planned or earned-and-waiting precursors are free. Plannable; it is
+  // applied once that precursor exists.
+  | { kind: "queued"; precursorId: string; candidates: PrecursorCandidate[] }
   // Nothing to build on. Plan or earn the precursor first.
   | { kind: "locked"; precursorId: string; chain: string[] };
 
@@ -97,20 +143,18 @@ export function rewardStatus(
 ): RewardStatus {
   const precursorId = precursorOf(itemId);
   if (!precursorId) return { kind: "place" };
-  const supply = precursorSupply(
+  const candidates = precursorCandidates(
     db,
     homebaseId,
-    precursorId,
+    itemId,
     now,
     ignoreRewardId,
   );
-  if (supply.free <= 0)
+  if (!candidates.length)
     return { kind: "locked", precursorId, chain: precursorChain(itemId) };
-  // Pending upgrades take the oldest objects first, matching settleGarden.
-  const target = supply.objects[supply.claimed];
-  return target
-    ? { kind: "ready", precursorId, target }
-    : { kind: "queued", precursorId };
+  return candidates[0]!.kind === "object"
+    ? { kind: "ready", precursorId, candidates }
+    : { kind: "queued", precursorId, candidates };
 }
 
 export const itemName = (db: Pick<Database, "rewardItems">, itemId: string) =>
@@ -130,27 +174,62 @@ export function lockedMessage(
   return `${itemName(db, itemId)} needs ${withArticle(itemName(db, precursorId))} in your garden first. Plan or earn one, then try again.`;
 }
 
-export function nextFreePlot(
-  db: Pick<Database, "gardenObjects">,
+/**
+ * Resolve the planner's choice (or the oldest free precursor) into a target.
+ * Throws a readable error when the choice is not a free precursor.
+ */
+export function chooseTarget(
+  db: Garden,
   homebaseId: string,
-) {
-  return gardenPlots.find(
-    (plot) =>
-      !db.gardenObjects.some(
-        (o) => o.homebaseId === homebaseId && o.x === plot.x && o.y === plot.y,
-      ),
+  itemId: string,
+  now: string,
+  buildOnId: string | null | undefined,
+  ignoreRewardId?: string,
+): Pick<Reward, "targetObjectId" | "targetRewardId"> {
+  const precursorId = precursorOf(itemId);
+  if (!precursorId) {
+    if (buildOnId)
+      throw new Error(
+        `${itemName(db, itemId)} gets its own spot and does not build on anything.`,
+      );
+    return { targetObjectId: null, targetRewardId: null };
+  }
+  const candidates = precursorCandidates(
+    db,
+    homebaseId,
+    itemId,
+    now,
+    ignoreRewardId,
   );
+  if (!candidates.length)
+    throw new Error(lockedMessage(db, itemId, precursorId));
+  const choice = buildOnId
+    ? candidates.find((c) =>
+        c.kind === "object"
+          ? c.object.id === buildOnId
+          : c.reward.id === buildOnId,
+      )
+    : candidates[0];
+  if (!choice)
+    throw new Error(
+      `Choose a free ${itemName(db, precursorId)} for ${itemName(db, itemId)} to build on.`,
+    );
+  return choice.kind === "object"
+    ? { targetObjectId: choice.object.id, targetRewardId: null }
+    : { targetObjectId: null, targetRewardId: choice.reward.id };
 }
 
 export interface GardenChange {
-  kind: "placed" | "upgraded";
+  kind: "earned" | "upgraded";
   reward: Reward;
   object: GardenObject;
   fromItemId: string | null;
 }
 
 // Apply every obtained-but-unapplied reward, oldest first, until nothing more
-// can change. A roof earned before its walls waits, then lands with them.
+// can change. A plain item arrives unplaced, ready for a member to place it.
+// An upgrade changes its chosen precursor in place; a roof earned before its
+// walls waits, then lands with them.
 export function settleGarden(
   db: Database,
   homebaseId: string,
@@ -171,26 +250,26 @@ export function settleGarden(
     for (const reward of waiting) {
       const precursorId = precursorOf(reward.itemId);
       if (!precursorId) {
-        const plot = nextFreePlot(db, homebaseId);
         const object: GardenObject = {
           id: `garden_${crypto.randomUUID()}`,
           homebaseId,
           itemId: reward.itemId,
-          x: plot?.x ?? null,
-          y: plot?.y ?? null,
+          origin: "reward",
+          x: null,
+          y: null,
           createdAt: now,
           updatedAt: now,
         };
         db.gardenObjects.push(object);
         reward.gardenObjectId = object.id;
-        changes.push({ kind: "placed", reward, object, fromItemId: null });
+        changes.push({ kind: "earned", reward, object, fromItemId: null });
         changed = true;
         continue;
       }
-      const target = db.gardenObjects
-        .filter((o) => o.homebaseId === homebaseId && o.itemId === precursorId)
-        .sort(byAge)[0];
-      if (!target) continue;
+      const target = db.gardenObjects.find(
+        (o) => o.id === resolvedTarget(db, reward),
+      );
+      if (!target || target.itemId !== precursorId) continue;
       changes.push({
         kind: "upgraded",
         reward,
@@ -206,7 +285,7 @@ export function settleGarden(
   return changes;
 }
 
-// Rewards that placed or upgraded an object, in build order. A stage earned
+// Rewards that created or upgraded an object, in build order. A stage earned
 // early (walls before the foundation) still lists after the stage below it.
 export function gardenHistory(
   db: Pick<Database, "rewards">,
@@ -260,7 +339,7 @@ export function rewardCatalog(db: Garden, homebaseId: string, now: string) {
   return { items, builds };
 }
 
-// The API shape of rewardCatalog: plain ids, no nested objects.
+// The API shape of rewardCatalog: plain ids, no nested records.
 export function homebaseRewards(db: Garden, homebaseId: string, now: string) {
   const catalog = rewardCatalog(db, homebaseId, now);
   return {
@@ -271,11 +350,27 @@ export function homebaseRewards(db: Garden, homebaseId: string, now: string) {
         name: item.name,
         category: item.category,
         status:
-          status.kind === "ready"
+          status.kind === "ready" || status.kind === "queued"
             ? {
                 kind: status.kind,
                 precursorId: status.precursorId,
-                targetObjectId: status.target.id,
+                candidates: status.candidates.map((c) =>
+                  c.kind === "object"
+                    ? {
+                        kind: c.kind,
+                        id: c.object.id,
+                        origin: c.object.origin,
+                        placed: c.object.x !== null,
+                        milestoneName: c.milestoneName,
+                      }
+                    : {
+                        kind: c.kind,
+                        id: c.reward.id,
+                        origin: "reward" as const,
+                        placed: false,
+                        milestoneName: c.milestoneName,
+                      },
+                ),
               }
             : status,
         inGarden,

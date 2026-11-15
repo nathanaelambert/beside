@@ -80,3 +80,27 @@ export function starterOakPlacements(): MeadowPoint[] {
       if (!checkStarterOakPlacement({ x, y })) points.push({ x, y });
   return points;
 }
+
+/** Garden objects keep the same clearance from each other as from the scenery. */
+export const tooClose = (a: MeadowPoint, b: MeadowPoint) =>
+  Math.abs(a.x - b.x) < 22 && Math.abs(a.y - b.y) < 18;
+
+/**
+ * The starter oak's rule, extended to anything placed in a garden: open lawn,
+ * off the picnic, clear of the scenery and of every other placed object.
+ */
+export function checkGardenPlacement(
+  point: MeadowPoint,
+  others: readonly MeadowPoint[],
+) {
+  return (
+    checkStarterOakPlacement(point) ??
+    (others.some((other) => tooClose(other, point)) ? "occupied" : null)
+  );
+}
+
+export function gardenPlacements(others: readonly MeadowPoint[]) {
+  return starterOakPlacements().filter(
+    (point) => !others.some((other) => tooClose(other, point)),
+  );
+}

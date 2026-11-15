@@ -16,6 +16,7 @@ import type {
   HomebaseRewards,
   HomebaseGarden,
   LoginInput,
+  PlaceGardenObjectInput,
   MutationResult,
   RegisterInput,
   Session,
@@ -127,6 +128,14 @@ export class BesideClient {
   }
   garden() {
     return this.request<GardenObject[]>("/garden");
+  }
+  // Place an earned garden object, or move any placed one. Moving is free.
+  placeGardenObject(objectId: string, position: PlaceGardenObjectInput) {
+    return this.request<MutationResult>(
+      `/garden/${encodeURIComponent(objectId)}/place`,
+      "POST",
+      position,
+    );
   }
   homebaseGarden(homebaseId: string) {
     return this.request<HomebaseGarden>(

@@ -122,6 +122,11 @@ async function setup() {
       target: 10,
     },
   );
+  // PR #14's free starter oak, by the picnic. It can carry a Christmas tree.
+  await call(`/homebases/${base!.id}/garden/starter-oak`, you.token, "POST", {
+    x: 112,
+    y: 112,
+  });
   // With --oak, also plan the first tree and check the friend in to it.
   if (process.argv.includes("--oak")) {
     await plan(you, activityId, "Plant our first tree", "oak-tree");

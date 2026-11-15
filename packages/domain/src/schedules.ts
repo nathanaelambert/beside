@@ -29,6 +29,8 @@ export const createScheduleSchema = z
     name: z.string().trim().min(1).max(200),
     quantity: z.number().positive().finite(),
     itemId: z.string().min(1).max(200).nullable().default(null),
+    // For an upgrade reward: the garden object or planned reward it builds on.
+    buildOnId: z.string().min(1).max(200).nullable().default(null),
     timeZone: z
       .string()
       .min(1)

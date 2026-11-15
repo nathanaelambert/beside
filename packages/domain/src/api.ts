@@ -35,10 +35,15 @@ export const plantStarterOakSchema = z.strictObject({
     .multipleOf(meadowGridSize),
 });
 export const homebaseGardenSchema = z.strictObject({
+  // The starter oak at its current stage; an upgrade can decorate it.
   oak: plantStarterOakSchema
-    .extend({ itemId: z.literal(starterOakItemId) })
+    .extend({
+      itemId: z.string().describe(`"${starterOakItemId}" until upgraded`),
+    })
     .nullable(),
 });
+// Place an earned garden object, or move any placed one. Free for members.
+export const placeGardenObjectSchema = plantStarterOakSchema;
 const hasChanges = (value: object) =>
   Object.values(value).some((field) => field !== undefined);
 export const updateHomebaseSchema = createHomebaseSchema;
@@ -118,15 +123,27 @@ export const errorSchema = z.object({
     .optional(),
 });
 const count = z.number().int().nonnegative();
+// Something an upgrade could build on: a garden object, or a planned reward.
+export const precursorCandidateSchema = z.object({
+  kind: z.enum(["object", "reward"]),
+  id,
+  origin: z.enum(["reward", "starter"]),
+  placed: z.boolean(),
+  milestoneName: z.string().nullable(),
+});
 // What each catalog item needs in one home base's garden right now.
 export const rewardStatusSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("place") }),
   z.object({
     kind: z.literal("ready"),
     precursorId: id,
-    targetObjectId: id,
+    candidates: z.array(precursorCandidateSchema),
   }),
-  z.object({ kind: z.literal("queued"), precursorId: id }),
+  z.object({
+    kind: z.literal("queued"),
+    precursorId: id,
+    candidates: z.array(precursorCandidateSchema),
+  }),
   z.object({
     kind: z.literal("locked"),
     precursorId: id,
@@ -158,6 +175,8 @@ export const homebaseRewardsSchema = z.object({
 export type ApiState = z.infer<typeof stateSchema>;
 export type HomebaseRewards = z.infer<typeof homebaseRewardsSchema>;
 export type RewardStatusView = z.infer<typeof rewardStatusSchema>;
+export type PrecursorCandidateView = z.infer<typeof precursorCandidateSchema>;
+export type PlaceGardenObjectInput = z.input<typeof placeGardenObjectSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type MutationResult = z.infer<typeof mutationSchema>;
 export type ApiHomebase = z.infer<typeof homebaseSchema>;

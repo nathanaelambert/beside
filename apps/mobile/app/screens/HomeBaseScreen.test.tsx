@@ -32,12 +32,14 @@ jest.mock("@/components/pixel-world/WorldCanvas", () => ({
 }))
 jest.mock("@/components/RewardSprite", () => ({ RewardSprite: () => null }))
 jest.mock("@/context/AuthContext", () => ({ useAuth: () => ({ logout: jest.fn() }) }))
+jest.mock("@/utils/storage", () => ({ loadString: () => null, saveString: () => true }))
 jest.mock("@/services/api/beside", () => ({
   besideApi: {
     homebases: jest.fn(),
     state: jest.fn(),
     homebaseGarden: jest.fn(),
     plantStarterOak: jest.fn(),
+    placeGardenObject: jest.fn(),
   },
 }))
 
@@ -227,4 +229,67 @@ it("offers a retry if the initial garden request fails", async () => {
   const screen = openScreen()
   fireEvent.press(await screen.findByText("Try again"))
   await screen.findByTestId("homebase-starter-oak")
+})
+
+describe("earned garden objects", () => {
+  const earned = (x: number | null) => ({
+    id: "garden_oak",
+    homebaseId: base.id,
+    itemId: "oak-tree",
+    origin: "reward" as const,
+    x,
+    y: x === null ? null : 104,
+    createdAt: "2026-11-13T10:00:00.000Z",
+    updatedAt: "2026-11-13T10:00:00.000Z",
+  })
+  const withObject = (x: number | null): ApiState => ({ ...state, gardenObjects: [earned(x)] })
+
+  it("places an earned oak on a spot the shared rule accepts", async () => {
+    jest.mocked(besideApi.state).mockResolvedValue(withObject(null))
+    jest.mocked(besideApi.placeGardenObject).mockResolvedValue({
+      entityId: "garden_oak",
+      duplicate: false,
+    })
+    const screen = openScreen()
+    fireEvent.press(await screen.findByTestId("homebase-place-ready"))
+    expect(screen.getByText("Place the Meadow oak")).toBeTruthy()
+    expect(canvasProps().showPlantingGuide).toBe(true)
+    expect(canvasProps().guidePoints?.length).toBeGreaterThan(0)
+    fireEvent.press(screen.getByTestId("place-object-suggest"))
+    const preview = canvasProps().preview!
+    expect(preview.itemId).toBe("oak-tree")
+    jest.mocked(besideApi.state).mockResolvedValue(withObject(preview.x))
+    await act(async () => fireEvent.press(screen.getByTestId("place-object-confirm")))
+    expect(besideApi.placeGardenObject).toHaveBeenCalledWith("garden_oak", {
+      x: preview.x,
+      y: preview.y,
+    })
+    await waitFor(() => expect(screen.queryByTestId("place-object-panel")).toBeNull())
+    expect(screen.queryByTestId("homebase-ready-to-place")).toBeNull()
+  })
+
+  it("moves a placed object after tapping it", async () => {
+    jest.mocked(besideApi.state).mockResolvedValue(withObject(104))
+    jest.mocked(besideApi.placeGardenObject).mockResolvedValue({
+      entityId: "garden_oak",
+      duplicate: false,
+    })
+    const screen = openScreen()
+    await screen.findByTestId("world-canvas")
+    expect(canvasProps().items).toContainEqual({
+      key: "garden:garden_oak",
+      itemId: "oak-tree",
+      x: 104,
+      y: 104,
+    })
+    act(() => canvasProps().onTap(104, 90, 4))
+    expect(screen.getByText("Earned together for your garden.")).toBeTruthy()
+    fireEvent.press(screen.getByTestId("homebase-move-object"))
+    expect(screen.getByText("Move the Meadow oak")).toBeTruthy()
+    fireEvent.press(screen.getByTestId("place-object-suggest"))
+    // While previewing, the original sprite steps aside for the preview.
+    expect(canvasProps().items.some((item) => item.key === "garden:garden_oak")).toBe(false)
+    await act(async () => fireEvent.press(screen.getByTestId("place-object-confirm")))
+    expect(besideApi.placeGardenObject).toHaveBeenCalledWith("garden_oak", expect.any(Object))
+  })
 })

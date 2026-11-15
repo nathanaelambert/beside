@@ -70,6 +70,9 @@ export const milestoneInputSchema = z
     startAt: date.nullable(),
     endAt: date.nullable(),
     itemId: key.nullable(),
+    // For an upgrade reward: the garden object or planned reward it builds on.
+    // Omit to use the oldest free precursor.
+    buildOnId: key.nullable().optional(),
   })
   .superRefine((m, ctx) => {
     if (m.policy === "paced" && (!m.startAt || !m.endAt))
@@ -205,6 +208,8 @@ export const databaseSchema = z.object({
       requiredUserIds: z.array(key).min(1),
       // Older experiments predate the garden; nothing was applied there yet.
       gardenObjectId: key.nullable().default(null),
+      targetObjectId: key.nullable().default(null),
+      targetRewardId: key.nullable().default(null),
     }),
   ),
   gardenObjects: rows(
@@ -212,6 +217,7 @@ export const databaseSchema = z.object({
       id: key,
       homebaseId: key,
       itemId: key,
+      origin: z.enum(["reward", "starter"]).default("reward"),
       x: z.number().int().min(0).max(1000).nullable(),
       y: z.number().int().min(0).max(1000).nullable(),
       createdAt: date,
@@ -413,7 +419,26 @@ export function parseDatabase(input: unknown): Database {
     if ((object.x === null) !== (object.y === null))
       throw new Error("A garden object needs both coordinates or neither.");
   }
+  for (const object of db.gardenObjects.filter((o) => o.origin === "starter"))
+    if (
+      db.gardenObjects.some(
+        (o) =>
+          o.origin === "starter" &&
+          o.homebaseId === object.homebaseId &&
+          o.id !== object.id,
+      )
+    )
+      throw new Error("A home base has one starter oak.");
   for (const reward of db.rewards) {
+    fk(db.gardenObjects, reward.targetObjectId);
+    fk(db.rewards, reward.targetRewardId);
+    if (reward.targetObjectId && reward.targetRewardId)
+      throw new Error("An upgrade builds on one precursor.");
+    const target =
+      db.gardenObjects.find((o) => o.id === reward.targetObjectId) ??
+      db.rewards.find((r) => r.id === reward.targetRewardId);
+    if (target && target.homebaseId !== reward.homebaseId)
+      throw new Error("An upgrade builds on something in another home base.");
     fk(db.gardenObjects, reward.gardenObjectId);
     if (!reward.gardenObjectId) continue;
     if (!reward.obtainedAt)

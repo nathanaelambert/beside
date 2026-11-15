@@ -16,6 +16,7 @@ it("handles no schedule and summarizes a real configured recurrence", () => {
       name: "Attendance",
       quantity: 1,
       itemId: null,
+      buildOnId: null,
       timeZone: "America/Toronto",
       startDate: "2026-11-04",
       startTime: "17:00",

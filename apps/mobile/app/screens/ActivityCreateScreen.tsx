@@ -37,6 +37,7 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
   )
   const [form, setForm] = useState(initialScheduleForm)
   const [itemId, setItemId] = useState<string | null>(null)
+  const [buildOnId, setBuildOnId] = useState<string | null>(null)
   const [rewards, setRewards] = useState<HomebaseRewards>()
   const [saving, setSaving] = useState(false)
   const [createdActivityId, setCreatedActivityId] = useState(existingActivityId)
@@ -102,7 +103,13 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
     setError("")
     let input
     try {
-      input = { ...scheduleFormToInput(form), itemId }
+      const status = rewards?.items.find((i) => i.itemId === itemId)?.status
+      // An upgrade builds on the chosen precursor, or the first one offered.
+      const target =
+        status && (status.kind === "ready" || status.kind === "queued")
+          ? (buildOnId ?? status.candidates[0]?.id ?? null)
+          : null
+      input = { ...scheduleFormToInput(form), itemId, buildOnId: target }
       const upgrade = rewards?.items.find((i) => i.itemId === itemId)?.status.kind !== "place"
       if (itemId && upgrade && input.count !== 1)
         throw new Error("Upgrades are one-off rewards. Set the milestone to not repeat.")
@@ -251,6 +258,8 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
             <RewardPicker
               rewards={rewards}
               value={itemId}
+              buildOnId={buildOnId}
+              onBuildOnChange={setBuildOnId}
               onChange={(next) => {
                 setItemId(next)
                 const status = rewards?.items.find((i) => i.itemId === next)?.status

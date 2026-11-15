@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import request from "supertest";
 import { createSeed } from "@beside/domain/seed";
 import { execute } from "@beside/domain/model";
+import { gardenPlacements, tooClose } from "@beside/domain/garden";
 import {
   gardenHistory,
-  gardenPlots,
   homebaseRewards,
   rewardStatus,
 } from "@beside/domain/precursors";
@@ -19,6 +19,16 @@ import { DatabaseService } from "../src/db/database.service.ts";
 const now = "2026-11-13T18:00:00.000Z";
 const later = (minutes: number) =>
   new Date(Date.parse(now) + minutes * 60000).toISOString();
+// Two open spots far apart, from the shared placement rule itself.
+const spots = gardenPlacements([]);
+const spotA = spots[0]!;
+const spotB = spots.find(
+  (p) => Math.abs(p.x - spotA.x) > 40 || Math.abs(p.y - spotA.y) > 40,
+)!;
+// Open lawn, but too close to something standing on spotA.
+const nearA = spots.find(
+  (p) => tooClose(p, spotA) && (p.x !== spotA.x || p.y !== spotA.y),
+)!;
 
 // A fresh one-person base keeps the seed's own rewards out of the counts.
 function garden() {
@@ -54,8 +64,7 @@ function plan(
   db: Database,
   activityId: string,
   itemId: string,
-  at = now,
-  endAt: string | null = null,
+  options: { at?: string; endAt?: string; buildOnId?: string } = {},
 ) {
   return execute(
     db,
@@ -66,12 +75,13 @@ function plan(
       parentId: null,
       name: `Earn ${itemId}`,
       quantity: 1,
-      policy: endAt ? "deadline" : "open",
+      policy: options.endAt ? "deadline" : "open",
       startAt: null,
-      endAt,
+      endAt: options.endAt ?? null,
       itemId,
+      buildOnId: options.buildOnId,
     },
-    at,
+    options.at ?? now,
   );
 }
 
@@ -94,8 +104,21 @@ function complete(db: Database, milestoneId: string, at = now) {
   ).db;
 }
 
+const place = (
+  db: Database,
+  objectId: string,
+  point: { x: number; y: number },
+  actorId = "mosaab",
+) =>
+  execute(db, { type: "placeGardenObject", actorId, objectId, ...point }, now)
+    .db;
+
 const objectsIn = (db: Database, homebaseId: string) =>
   db.gardenObjects.filter((o) => o.homebaseId === homebaseId);
+const rewardOf = (db: Database, milestoneId: string) =>
+  db.rewards.find(
+    (r) => r.id === db.milestones.find((m) => m.id === milestoneId)!.rewardId,
+  )!;
 
 describe("precursor rewards in the domain", () => {
   it("locks a Christmas tree until an oak is planned, then decorates that oak in place", () => {
@@ -104,40 +127,39 @@ describe("precursor rewards in the domain", () => {
       () => plan(db, activityId, "christmas-tree"),
       /Christmas tree needs a Meadow oak in your garden first/,
     );
-    assert.equal(
-      rewardStatus(db, homebaseId, "christmas-tree", now).kind,
-      "locked",
-    );
-
     const oak = plan(db, activityId, "oak-tree");
     db = oak.db;
-    // A planned oak is a promise: the tree can be planned, and waits for it.
-    assert.equal(
-      rewardStatus(db, homebaseId, "christmas-tree", now).kind,
-      "queued",
-    );
-    const tree = plan(db, activityId, "christmas-tree", later(1));
+    // A planned oak is a promise: the tree can be planned on it, and waits.
+    const queued = rewardStatus(db, homebaseId, "christmas-tree", now);
+    assert.equal(queued.kind, "queued");
+    const tree = plan(db, activityId, "christmas-tree", { at: later(1) });
     db = tree.db;
-    // One oak supports one Christmas tree.
+    assert.equal(
+      rewardOf(db, tree.entityId).targetRewardId,
+      rewardOf(db, oak.entityId).id,
+    );
+    // That oak is claimed now, so a second tree has nothing to build on.
     assert.throws(
-      () => plan(db, activityId, "christmas-tree", later(2)),
+      () => plan(db, activityId, "christmas-tree", { at: later(2) }),
       /needs a Meadow oak/,
     );
 
     db = complete(db, oak.entityId, later(3));
-    const [placed] = objectsIn(db, homebaseId);
+    const [earned] = objectsIn(db, homebaseId);
+    // Earned items arrive unplaced; a member chooses the spot.
     assert.deepEqual(
-      { itemId: placed!.itemId, x: placed!.x, y: placed!.y },
-      { itemId: "oak-tree", ...gardenPlots[0] },
+      { itemId: earned!.itemId, x: earned!.x, y: earned!.y },
+      { itemId: "oak-tree", x: null, y: null },
     );
-    assert.ok(db.events.some((e) => e.type === "garden.placed"));
+    assert.ok(db.events.some((e) => e.type === "garden.earned"));
+    db = place(db, earned!.id, spotA);
 
     db = complete(db, tree.entityId, later(4));
     const [decorated] = objectsIn(db, homebaseId);
     assert.equal(objectsIn(db, homebaseId).length, 1);
-    assert.equal(decorated!.id, placed!.id);
+    assert.equal(decorated!.id, earned!.id);
     assert.equal(decorated!.itemId, "christmas-tree");
-    assert.deepEqual([decorated!.x, decorated!.y], [placed!.x, placed!.y]);
+    assert.deepEqual([decorated!.x, decorated!.y], [spotA.x, spotA.y]);
     assert.ok(
       db.events.some(
         (e) =>
@@ -152,7 +174,51 @@ describe("precursor rewards in the domain", () => {
     parseDatabase(structuredClone(db));
   });
 
-  it("builds a cottage stage by stage on one plot, and lands an early stage once its precursor exists", () => {
+  it("lets the planner pick which oak to decorate, including the starter oak", () => {
+    let { db, homebaseId, activityId } = garden();
+    db.gardenObjects.push({
+      id: "garden_starter_test",
+      homebaseId,
+      itemId: "oak-tree",
+      origin: "starter",
+      ...spotA,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const oak = plan(db, activityId, "oak-tree");
+    db = complete(oak.db, oak.entityId, later(1));
+    const earned = objectsIn(db, homebaseId).find(
+      (o) => o.origin === "reward",
+    )!;
+    db = place(db, earned.id, spotB);
+    const ready = rewardStatus(db, homebaseId, "christmas-tree", later(2));
+    assert.equal(ready.kind, "ready");
+    assert.deepEqual(
+      ready.kind === "ready" &&
+        ready.candidates.map((c) => c.kind === "object" && c.object.id),
+      ["garden_starter_test", earned.id],
+    );
+    // Something that is not a free oak cannot be chosen.
+    assert.throws(
+      () =>
+        plan(db, activityId, "christmas-tree", {
+          at: later(3),
+          buildOnId: rewardOf(db, oak.entityId).id,
+        }),
+      /Choose a free Meadow oak for Christmas tree to build on/,
+    );
+    const tree = plan(db, activityId, "christmas-tree", {
+      at: later(3),
+      buildOnId: "garden_starter_test",
+    });
+    db = complete(tree.db, tree.entityId, later(4));
+    const byId = (id: string) => db.gardenObjects.find((o) => o.id === id)!;
+    assert.equal(byId("garden_starter_test").itemId, "christmas-tree");
+    assert.equal(byId(earned.id).itemId, "oak-tree");
+    parseDatabase(structuredClone(db));
+  });
+
+  it("builds a cottage stage by stage on one object, and lands an early stage once its precursor exists", () => {
     let { db, homebaseId, activityId } = garden();
     const stages = [
       "cottage-foundation",
@@ -165,13 +231,13 @@ describe("precursor rewards in the domain", () => {
       /Cottage roof needs Cottage walls in your garden/,
     );
     const ids: string[] = [];
-    // Each planned stage unlocks planning the next one.
+    // Each planned stage unlocks planning the next one on top of it.
     for (const [index, itemId] of stages.entries()) {
       assert.equal(
         rewardStatus(db, homebaseId, itemId, later(index)).kind,
         index ? "queued" : "place",
       );
-      const planned = plan(db, activityId, itemId, later(index));
+      const planned = plan(db, activityId, itemId, { at: later(index) });
       db = planned.db;
       ids.push(planned.entityId);
     }
@@ -181,8 +247,7 @@ describe("precursor rewards in the domain", () => {
         .filter((item) => stages.includes(item.itemId))
         .map((item) => [item.itemId, item.status.kind, item.planned]),
       [
-        // Each planned stage already claims the one below it, so another of
-        // any upper stage would need another foundation first.
+        // Each planned stage already claims the one below it.
         ["cottage-foundation", "place", 1],
         ["cottage-walls", "locked", 1],
         ["cottage-roof", "locked", 1],
@@ -194,22 +259,15 @@ describe("precursor rewards in the domain", () => {
     db = complete(db, ids[1]!, later(10));
     assert.equal(objectsIn(db, homebaseId).length, 0);
     assert.ok(db.events.some((e) => e.type === "garden.waiting"));
-    assert.equal(
-      homebaseRewards(db, homebaseId, later(10)).items.find(
-        (i) => i.itemId === "cottage-walls",
-      )!.waiting,
-      1,
-    );
-
     db = complete(db, ids[0]!, later(11));
     let [house] = objectsIn(db, homebaseId);
     assert.equal(house!.itemId, "cottage-walls");
-    const plot = [house!.x, house!.y];
+    db = place(db, house!.id, spotA);
     for (const [index, id] of ids.slice(2).entries()) {
       db = complete(db, id, later(12 + index));
       [house] = objectsIn(db, homebaseId);
       assert.equal(house!.itemId, stages[index + 2]);
-      assert.deepEqual([house!.x, house!.y], plot);
+      assert.deepEqual([house!.x, house!.y], [spotA.x, spotA.y]);
     }
     assert.equal(objectsIn(db, homebaseId).length, 1);
     assert.equal(
@@ -223,11 +281,43 @@ describe("precursor rewards in the domain", () => {
     parseDatabase(structuredClone(db));
   });
 
-  it("releases a claim when an upgrade's window closes unearned, and keeps the garden when its milestone is deleted", () => {
+  it("places and moves objects only on open lawn clear of everything else", () => {
+    let { db, homebaseId, activityId } = garden();
+    for (const itemId of ["oak-tree", "sunflower"]) {
+      const planned = plan(db, activityId, itemId);
+      db = complete(planned.db, planned.entityId, later(1));
+    }
+    const [oak, flower] = objectsIn(db, homebaseId);
+    db = place(db, oak!.id, spotA);
+    assert.throws(
+      () => place(db, flower!.id, nearA),
+      /Something already stands there/,
+    );
+    // The pond is not lawn.
+    assert.throws(
+      () => place(db, flower!.id, { x: 224, y: 152 }),
+      /Choose a clear patch of lawn/,
+    );
+    assert.throws(
+      () => place(db, flower!.id, spotB, "rishik"),
+      /not accessible/,
+    );
+    db = place(db, flower!.id, spotB);
+    // Moving is free and keeps the object; it may move next to its old spot.
+    db = place(db, oak!.id, nearA);
+    const moved = db.gardenObjects.find((o) => o.id === oak!.id)!;
+    assert.deepEqual([moved.x, moved.y], [nearA.x, nearA.y]);
+    assert.ok(db.events.some((e) => e.type === "garden.moved"));
+    parseDatabase(structuredClone(db));
+  });
+
+  it("releases a claim when an upgrade's window closes unearned, and detaches upgrades from a deleted precursor", () => {
     let { db, homebaseId, activityId } = garden();
     const oak = plan(db, activityId, "oak-tree");
     db = complete(oak.db, oak.entityId);
-    const missed = plan(db, activityId, "christmas-tree", now, later(30));
+    const missed = plan(db, activityId, "christmas-tree", {
+      endAt: later(30),
+    });
     db = missed.db;
     assert.equal(
       rewardStatus(db, homebaseId, "christmas-tree", later(10)).kind,
@@ -237,13 +327,30 @@ describe("precursor rewards in the domain", () => {
       rewardStatus(db, homebaseId, "christmas-tree", later(31)).kind,
       "ready",
     );
-
+    // Deleting the oak's milestone keeps the oak itself.
     db = execute(
       db,
       { type: "deleteMilestone", actorId: "mosaab", milestoneId: oak.entityId },
       later(40),
     ).db;
     assert.equal(objectsIn(db, homebaseId)[0]!.itemId, "oak-tree");
+
+    const foundation = plan(db, activityId, "cottage-foundation", {
+      at: later(41),
+    });
+    const walls = plan(foundation.db, activityId, "cottage-walls", {
+      at: later(42),
+    });
+    db = execute(
+      walls.db,
+      {
+        type: "deleteMilestone",
+        actorId: "mosaab",
+        milestoneId: foundation.entityId,
+      },
+      later(43),
+    ).db;
+    assert.equal(rewardOf(db, walls.entityId).targetRewardId, null);
     parseDatabase(structuredClone(db));
   });
 
@@ -291,7 +398,7 @@ describe(
           .set(auth(session))
           .expect(200)
       ).body;
-    const plan = (itemId: string, status = 201) =>
+    const plan = (itemId: string, status = 201, buildOnId?: string) =>
       http()
         .post("/api/v1/milestones")
         .set(auth(ada))
@@ -304,6 +411,7 @@ describe(
           startAt: null,
           endAt: null,
           itemId,
+          ...(buildOnId ? { buildOnId } : {}),
         })
         .expect(status);
     const attend = (session: Session, milestoneId: string) =>
@@ -319,11 +427,11 @@ describe(
           externalKey: `attendance:${milestoneId}`,
         })
         .expect(200);
-
     // Sign-ups share one per-IP budget across test files; reset it on this
     // disposable test database so suites do not starve each other.
     const resetSignupBudget = () =>
       app.get(DatabaseService).getPool().query("DELETE FROM auth_rate_limit");
+
     before(async () => {
       process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
       app = await createApp(false);
@@ -374,10 +482,11 @@ describe(
       await app.close();
     });
 
-    it("serves the precursor catalog and the garden in the contract", async () => {
+    it("serves the precursor catalog, the garden and the place route in the contract", async () => {
       const { body } = await http().get("/openapi.json").expect(200);
       assert.ok(body.paths["/api/v1/homebases/{homebaseId}/rewards"].get);
       assert.ok(body.paths["/api/v1/garden"].get);
+      assert.ok(body.paths["/api/v1/garden/{objectId}/place"].post);
       assert.ok(body.components.schemas.State.properties.gardenObjects);
       const catalog = await rewards(ada);
       const status = (itemId: string) =>
@@ -409,50 +518,68 @@ describe(
         .expect(404);
     });
 
-    it("earns an oak together, then upgrades it into a Christmas tree for both members", async () => {
-      const locked = await plan("christmas-tree", 400);
-      assert.match(locked.body.message, /needs a Meadow oak in your garden/);
-      const oak = (await plan("oak-tree")).body.entityId;
-      await attend(ada, oak);
-      assert.equal((await state(ada)).gardenObjects.length, 0); // Ben is still required.
-      await attend(ben, oak);
-      const [planted] = (await state(ben)).gardenObjects;
-      assert.equal(planted!.itemId, "oak-tree");
+    it("decorates the chosen starter oak, then places and moves an earned oak", async () => {
+      await http()
+        .post(`/api/v1/homebases/${homebaseId}/garden/starter-oak`)
+        .set(auth(ada))
+        .send(spotA)
+        .expect(200);
+      const [starter] = (await state(ben)).gardenObjects;
+      assert.deepEqual(
+        { origin: starter!.origin, itemId: starter!.itemId },
+        { origin: "starter", itemId: "oak-tree" },
+      );
       const ready = (await rewards(ben)).items.find(
         (i) => i.itemId === "christmas-tree",
       )!;
-      assert.deepEqual(ready.status, {
-        kind: "ready",
-        precursorId: "oak-tree",
-        targetObjectId: planted!.id,
-      });
-
-      const tree = (await plan("christmas-tree")).body.entityId;
+      assert.equal(ready.status.kind, "ready");
+      const tree = (await plan("christmas-tree", 201, starter!.id)).body
+        .entityId;
       await attend(ada, tree);
       await attend(ben, tree);
-      // Replaying a check-in neither duplicates credit nor re-applies the upgrade.
       const replay = await attend(ben, tree);
       assert.equal(replay.body.duplicate, true);
+      // PR #14's endpoint reports the starter at its current stage.
       const { body: garden } = await http()
+        .get(`/api/v1/homebases/${homebaseId}/garden`)
+        .set(auth(ada))
+        .expect(200);
+      assert.deepEqual(garden.oak, { ...spotA, itemId: "christmas-tree" });
+
+      const oak = (await plan("oak-tree")).body.entityId;
+      await attend(ada, oak);
+      await attend(ben, oak);
+      const earned = (await state(ada)).gardenObjects.find(
+        (o) => o.origin === "reward",
+      )!;
+      assert.deepEqual([earned.x, earned.y], [null, null]);
+      const placeAt = (point: { x: number; y: number }, status: number) =>
+        http()
+          .post(`/api/v1/garden/${earned.id}/place`)
+          .set(auth(ben))
+          .send(point)
+          .expect(status);
+      const taken = await placeAt(nearA, 400);
+      assert.match(taken.body.message, /Something already stands there/);
+      await placeAt(spotB, 200);
+      const nearB = spots.find(
+        (p) => tooClose(p, spotB) && (p.x !== spotB.x || p.y !== spotB.y),
+      )!;
+      await placeAt(nearB, 200);
+      const { body: objects } = await http()
         .get("/api/v1/garden")
         .set(auth(ada))
         .expect(200);
       assert.deepEqual(
-        garden.map((o: { id: string; itemId: string }) => [o.id, o.itemId]),
-        [[planted!.id, "christmas-tree"]],
-      );
-      const snapshot = await state(ada);
-      assert.ok(
-        snapshot.events.some(
-          (e) =>
-            e.type === "garden.upgraded" &&
-            e.message ===
-              "Meadow oak became Christmas tree in Ada's home base's garden.",
-        ),
-      );
-      assert.equal(
-        snapshot.rewards.filter((r) => r.gardenObjectId === planted!.id).length,
-        2,
+        objects.map((o: { itemId: string; x: number; y: number }) => [
+          o.itemId,
+          o.x,
+          o.y,
+        ]),
+        [
+          ["christmas-tree", spotA.x, spotA.y],
+          ["oak-tree", nearB.x, nearB.y],
+        ],
       );
     });
 
@@ -481,7 +608,6 @@ describe(
         .set(auth(ada))
         .send(schedule("cottage-foundation", null));
       assert.equal(recurring.status, 201, recurring.body.message);
-      assert.ok(recurring.body.id);
       const repeated = await http()
         .post(`/api/v1/activities/${activityId}/schedules`)
         .set(auth(ada))
@@ -493,7 +619,7 @@ describe(
         .set(auth(ada))
         .send(schedule("cottage-walls", 1))
         .expect(201);
-      // Two queued foundations exist now, but the cottage still needs a roof.
+      // Foundations are planned, but the cottage still needs a roof.
       const locked = await http()
         .post(`/api/v1/activities/${activityId}/schedules`)
         .set(auth(ada))

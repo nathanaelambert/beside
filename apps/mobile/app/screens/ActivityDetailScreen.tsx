@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react"
-import { ActivityIndicator, RefreshControl, View, ViewStyle } from "react-native"
+import { ActivityIndicator, RefreshControl, TextStyle, View, ViewStyle } from "react-native"
 import type { ApiState, MilestoneSchedule } from "@beside/api-client"
 import { precursorOf } from "@beside/api-client/precursors"
 import { useFocusEffect } from "@react-navigation/native"
@@ -139,20 +139,53 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
         (l) => l.milestoneId === milestone.id && l.authorUserId === id && l.isSuccess,
       ),
     ).length
+    // Name the chosen precursor: the starter oak, or the milestone that earns it.
+    const targetObject = data?.gardenObjects.find((o) => o.id === reward.targetObjectId)
+    const targetReward = data?.rewards.find((r) => r.id === reward.targetRewardId)
+    const targetMilestone =
+      targetReward && data?.milestones.find((m) => m.rewardId === targetReward.id)
+    const buildsOn = !precursor
+      ? ""
+      : targetObject?.origin === "starter"
+        ? ", built on your starter oak"
+        : targetMilestone
+          ? `, built on the ${itemLabel(precursor)} from “${targetMilestone.name}”`
+          : `, built on ${aItem(precursor)}`
+    const unplaced = object && object.x === null
     const text = !reward.obtainedAt
-      ? `Earns ${item.name}${precursor ? `, built on ${aItem(precursor)}` : ""} · ${done} of ${reward.requiredUserIds.length} checked in`
+      ? `Earns ${item.name}${buildsOn} · ${done} of ${reward.requiredUserIds.length} checked in`
       : !object
         ? `${item.name} earned · waiting for ${aItem(precursor ?? reward.itemId)} to build on`
         : precursor
-          ? `✓ ${item.name} earned · your ${itemLabel(precursor)} was upgraded`
-          : `✓ ${item.name} earned · now in your garden`
+          ? `✓ ${item.name} earned · your ${targetObject?.origin === "starter" ? "starter oak" : itemLabel(precursor)} was upgraded`
+          : unplaced
+            ? `✓ ${item.name} earned · choose its spot in your garden`
+            : `✓ ${item.name} earned · now in your garden`
     return (
-      <View style={$reward} testID={`milestone-reward-${reward.itemId}`}>
-        <PixelArtSprite art={item.artifact} scale={1} />
-        <Text
-          text={text}
-          style={[activityWorldStyles.muted, reward.obtainedAt ? { color: world.forest } : null]}
-        />
+      <View style={$rewardBlock}>
+        <View style={$reward} testID={`milestone-reward-${reward.itemId}`}>
+          <PixelArtSprite art={item.artifact} scale={1} />
+          <Text
+            text={text}
+            style={[
+              activityWorldStyles.muted,
+              $flex,
+              reward.obtainedAt ? { color: world.forest } : null,
+            ]}
+          />
+        </View>
+        {unplaced && activity && (
+          <Button
+            text="Place it in the garden"
+            testID="milestone-place-reward"
+            onPress={() =>
+              navigation.popTo("HomeBase", {
+                connectionId: activity.connectionId,
+                placeObjectId: object.id,
+              })
+            }
+          />
+        )}
       </View>
     )
   }
@@ -352,3 +385,5 @@ const $member: ViewStyle = { width: 64, alignItems: "center", gap: 6 }
 const $reward: ViewStyle = { flexDirection: "row", alignItems: "center", gap: 8 }
 const $actions: ViewStyle = { flexDirection: "row", gap: 12 }
 const $action: ViewStyle = { flex: 1 }
+const $rewardBlock: ViewStyle = { gap: 8 }
+const $flex: TextStyle = { flex: 1 }

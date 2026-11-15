@@ -341,6 +341,27 @@ export class DomainController {
   async gardenObjects(@Req() request: AuthenticatedRequest) {
     return (await this.domain.state(request.actor.id)).gardenObjects;
   }
+  @Post("garden/:objectId/place")
+  @HttpCode(200)
+  @ApiParam({ name: "objectId", type: String })
+  @ApiBody({ schema: ref("PlaceGardenObject") })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary:
+      "Place an earned garden object on open lawn, or move any placed one (free)",
+  })
+  placeGardenObject(
+    @Req() request: AuthenticatedRequest,
+    @Param("objectId") objectId: string,
+    @Body() body: unknown,
+  ) {
+    return this.domain.command({
+      type: "placeGardenObject",
+      actorId: request.actor.id,
+      objectId,
+      ...input.placeGardenObjectSchema.parse(body),
+    });
+  }
   @Get("homebases/:homebaseId/rewards")
   @ApiParam({ name: "homebaseId", type: String })
   @ApiOkResponse({ schema: ref("HomebaseRewards") })

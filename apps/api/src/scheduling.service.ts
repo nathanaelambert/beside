@@ -15,12 +15,7 @@ import {
   type MilestoneSchedule,
   type ScheduleInput,
 } from "@beside/domain/schedules";
-import {
-  itemName,
-  lockedMessage,
-  precursorOf,
-  rewardStatus,
-} from "@beside/domain/precursors";
+import { chooseTarget, itemName, precursorOf } from "@beside/domain/precursors";
 import type { Database } from "@beside/domain/types";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "./db/database.service.ts";
@@ -94,16 +89,17 @@ export class SchedulingService {
         const homebaseId = before.activities.find(
           (a) => a.id === activityId,
         )!.connectionId;
-        const status = rewardStatus(
-          before,
-          homebaseId,
-          configuration.itemId,
-          now,
-        );
-        if (status.kind === "locked")
-          throw new BadRequestException(
-            lockedMessage(before, configuration.itemId, status.precursorId),
+        try {
+          chooseTarget(
+            before,
+            homebaseId,
+            configuration.itemId,
+            now,
+            configuration.buildOnId,
           );
+        } catch (error) {
+          throw new BadRequestException((error as Error).message);
+        }
       }
       const schedule: MilestoneSchedule = {
         id: id("schedule"),
@@ -232,12 +228,13 @@ export class SchedulingService {
           const homebaseId = db.activities.find(
             (a) => a.id === schedule.activityId,
           )?.connectionId;
-          const itemId =
-            s.itemId &&
-            homebaseId &&
-            rewardStatus(db, homebaseId, s.itemId, now).kind === "locked"
-              ? null
-              : s.itemId;
+          let itemId = s.itemId;
+          if (itemId && homebaseId)
+            try {
+              chooseTarget(db, homebaseId, itemId, now, s.buildOnId);
+            } catch {
+              itemId = null;
+            }
           const result = execute(
             db,
             {
@@ -248,6 +245,7 @@ export class SchedulingService {
               name: s.name,
               quantity: s.quantity,
               itemId,
+              buildOnId: itemId ? s.buildOnId : null,
               policy: "paced",
               ...window,
             },

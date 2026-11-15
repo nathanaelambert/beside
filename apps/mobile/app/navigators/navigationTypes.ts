@@ -19,7 +19,8 @@ export type DemoTabParamList = {
 export type AppStackParamList = {
   Welcome: undefined
   Login: undefined
-  HomeBase: { connectionId?: string } | undefined
+  // placeObjectId opens the garden ready to place that earned object.
+  HomeBase: { connectionId?: string; placeObjectId?: string } | undefined
   Activities: { connectionId: string }
   // With activityId, plan another milestone for an existing activity.
   ActivityCreate: { connectionId: string; activityId?: string }

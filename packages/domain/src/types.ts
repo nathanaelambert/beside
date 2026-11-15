@@ -44,17 +44,23 @@ export interface Reward {
   obtainedAt: string | null;
   // Snapshot the people whose cooperation this reward requires.
   requiredUserIds: string[];
-  // The garden object this reward placed or upgraded. Null until obtained, and
+  // The garden object this reward created or upgraded. Null until obtained, and
   // while an obtained upgrade waits for its precursor to exist in the garden.
   gardenObjectId: string | null;
+  // An upgrade builds on exactly one chosen precursor: an object already in the
+  // garden, or a planned reward that will become one. Null for plain items.
+  targetObjectId: string | null;
+  targetRewardId: string | null;
 }
-// One thing standing in a home base's garden. Upgrades change `itemId` in place,
-// so a cottage keeps the identity and plot of the foundation it grew from.
+// One thing in a home base's garden. Upgrades change `itemId` in place, so a
+// cottage keeps the identity and spot of the foundation it grew from.
 export interface GardenObject {
   id: string;
   homebaseId: string;
   itemId: string;
-  // Bottom-centre anchor in meadow pixels; null when every plot is taken.
+  // "starter": PR #14's free oak. "reward": earned through a milestone.
+  origin: "reward" | "starter";
+  // Bottom-centre anchor in meadow pixels; both null until a member places it.
   x: number | null;
   y: number | null;
   createdAt: string;
@@ -202,7 +208,11 @@ export type ActivityUpdate = Partial<Pick<Activity, "name" | "description">> & {
 };
 export type MilestoneUpdate = Partial<
   Pick<Milestone, "name" | "quantity" | "policy" | "startAt" | "endAt">
-> & { parentId?: string | null; itemId?: string | null };
+> & {
+  parentId?: string | null;
+  itemId?: string | null;
+  buildOnId?: string | null;
+};
 
 export type Command =
   | { type: "createHomebase"; actorId: string; name: string }
@@ -267,6 +277,15 @@ export type Command =
       startAt: string | null;
       endAt: string | null;
       itemId: string | null;
+      buildOnId?: string | null;
+    }
+  | {
+      // Place an earned object on open lawn, or move a placed one. Free.
+      type: "placeGardenObject";
+      actorId: string;
+      objectId: string;
+      x: number;
+      y: number;
     }
   | {
       type: "recordLog";

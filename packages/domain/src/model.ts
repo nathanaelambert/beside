@@ -10,13 +10,13 @@ import type {
   Participation,
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
+import { checkGardenPlacement } from "./garden.ts";
 import { logInputSchema, milestoneInputSchema } from "./validation.ts";
 import {
   itemName,
-  lockedMessage,
+  chooseTarget,
   withArticle,
   precursorOf,
-  rewardStatus,
   settleGarden,
 } from "./precursors.ts";
 
@@ -244,17 +244,17 @@ function awardReward(
     "progress",
     origin,
   );
-  // Earned items land in the shared garden: a new plot, or an upgrade in place.
+  // Earned items join the shared garden: ready to place, or an upgrade in place.
   const base = db.connections.find((b) => b.id === reward.homebaseId)?.name;
   for (const change of settleGarden(db, reward.homebaseId, now))
     emit(
       db,
       actorId,
-      change.kind === "placed" ? "garden.placed" : "garden.upgraded",
+      change.kind === "earned" ? "garden.earned" : "garden.upgraded",
       "reward",
       change.reward.id,
-      change.kind === "placed"
-        ? `${itemName(db, change.object.itemId)} now stands in ${base}'s garden.`
+      change.kind === "earned"
+        ? `${itemName(db, change.object.itemId)} is ready to place in ${base}'s garden.`
         : `${itemName(db, change.fromItemId!)} became ${itemName(db, change.object.itemId)} in ${base}'s garden.`,
       members(db, reward.homebaseId),
       reward.homebaseId,
@@ -276,18 +276,12 @@ function awardReward(
       origin,
     );
 }
-// Planning rule: an upgrade needs a free precursor in the garden, or one that
-// is already planned or earned. Without that path it is locked.
-function requirePrecursor(
-  db: Database,
-  homebaseId: string,
-  itemId: string,
-  now: string,
-  ignoreRewardId?: string,
-) {
-  const status = rewardStatus(db, homebaseId, itemId, now, ignoreRewardId);
-  if (status.kind === "locked")
-    throw new Error(lockedMessage(db, itemId, status.precursorId));
+// Planning rule: an upgrade builds on one free precursor, chosen by the planner
+// (or the oldest). Without one it is locked. See chooseTarget.
+function detachDependents(db: Database, rewardIds: Set<string>) {
+  for (const r of db.rewards)
+    if (r.targetRewardId && rewardIds.has(r.targetRewardId))
+      r.targetRewardId = null;
 }
 // All management actions use the same home-base membership boundary.
 function managedActivity(db: Database, actorId: string, activityId: string) {
@@ -366,6 +360,7 @@ function removeGraph(
     (milestone) => !milestoneIds.has(milestone.id),
   );
   db.rewards = db.rewards.filter((reward) => !rewardIds.has(reward.id));
+  detachDependents(db, rewardIds);
   db.participations = db.participations.filter(
     (person) => !people.has(person.id),
   );
@@ -571,7 +566,8 @@ export function execute(
         input.startAt !== milestone.startAt ||
         input.endAt !== milestone.endAt ||
         parent.id !== milestone.parentId ||
-        input.itemId !== (reward?.itemId ?? null);
+        input.itemId !== (reward?.itemId ?? null) ||
+        changes.buildOnId !== undefined;
       if (
         rulesChanged &&
         db.logs.some((log) => log.milestoneId === milestone.id)
@@ -585,14 +581,19 @@ export function execute(
             db.rewardItems.find((item) => item.id === input.itemId),
             "Reward item is missing.",
           );
-          requirePrecursor(
+          if (reward && db.rewards.some((r) => r.targetRewardId === reward.id))
+            throw new Error(
+              "Something is planned to build on this reward. Change or delete that milestone first.",
+            );
+          const target = chooseTarget(
             db,
             activity.connectionId,
             input.itemId,
             now,
+            changes.buildOnId,
             reward?.id,
           );
-          if (reward) reward.itemId = input.itemId;
+          if (reward) Object.assign(reward, { itemId: input.itemId }, target);
           else {
             milestone.rewardId = id("reward");
             db.rewards.push({
@@ -601,6 +602,7 @@ export function execute(
               itemId: input.itemId,
               obtainedAt: null,
               gardenObjectId: null,
+              ...target,
               requiredUserIds: db.participations
                 .filter(
                   (person) =>
@@ -615,6 +617,7 @@ export function execute(
               );
           }
         } else {
+          detachDependents(db, new Set([milestone.rewardId!]));
           db.rewards = db.rewards.filter(
             (row) => row.id !== milestone.rewardId,
           );
@@ -634,7 +637,19 @@ export function execute(
           );
           milestone.rewardId = null;
         }
-      }
+      } else if (changes.buildOnId !== undefined && reward)
+        // Same item, a different precursor to build on.
+        Object.assign(
+          reward,
+          chooseTarget(
+            db,
+            activity.connectionId,
+            reward.itemId,
+            now,
+            changes.buildOnId,
+            reward.id,
+          ),
+        );
       Object.assign(milestone, {
         name: input.name,
         parentId: parent.id,
@@ -931,7 +946,13 @@ export function execute(
           db.rewardItems.find((item) => item.id === input.itemId),
           "Reward item is missing.",
         );
-        requirePrecursor(db, homebase.id, input.itemId, now);
+        const target = chooseTarget(
+          db,
+          homebase.id,
+          input.itemId,
+          now,
+          input.buildOnId,
+        );
         rewardId = id("reward");
         db.rewards.push({
           id: rewardId,
@@ -939,6 +960,7 @@ export function execute(
           itemId: input.itemId,
           obtainedAt: null,
           gardenObjectId: null,
+          ...target,
           requiredUserIds: db.participations
             .filter(
               (p) => p.activityId === activity.id && p.status === "active",
@@ -969,6 +991,45 @@ export function execute(
         `Planned “${input.name}” with ${input.policy} logging${rewardId ? " and a shared home-base reward" : ""}.`,
         members(db, homebase.id),
         homebase.id,
+        "activity",
+      );
+      break;
+    }
+    case "placeGardenObject": {
+      const object = requireValue(
+        db.gardenObjects.find((o) => o.id === command.objectId),
+        "Garden object is missing.",
+      );
+      if (!members(db, object.homebaseId).includes(command.actorId))
+        throw new Error("Garden object is not accessible.");
+      const point = { x: command.x, y: command.y };
+      const others = db.gardenObjects.filter(
+        (o) =>
+          o.homebaseId === object.homebaseId &&
+          o.id !== object.id &&
+          o.x !== null &&
+          o.y !== null,
+      ) as { x: number; y: number }[];
+      const rejection = checkGardenPlacement(point, others);
+      if (rejection)
+        throw new Error(
+          rejection === "occupied"
+            ? "Something already stands there."
+            : "Choose a clear patch of lawn.",
+        );
+      const moved = object.x !== null;
+      entityId = object.id;
+      if (object.x === point.x && object.y === point.y) break;
+      Object.assign(object, point, { updatedAt: now });
+      emit(
+        db,
+        command.actorId,
+        moved ? "garden.moved" : "garden.placed",
+        "homebase",
+        object.homebaseId,
+        `${db.users.find((u) => u.id === command.actorId)?.name} ${moved ? "moved" : "placed"} the ${itemName(db, object.itemId)}.`,
+        members(db, object.homebaseId),
+        object.homebaseId,
         "activity",
       );
       break;
