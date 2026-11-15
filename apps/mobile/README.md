@@ -9,6 +9,40 @@ pnpm install
 pnpm dev --filter=mobile
 ```
 
+## Local iOS development
+
+The default mobile workflow is an **iPhone simulator running iOS 27**. On macOS,
+install Xcode with its command-line tools, the iOS 27 simulator runtime, and
+CocoaPods. Create an iPhone simulator for that runtime in Xcode if needed.
+
+```sh
+# From the repository root: build/install the development client and start Metro.
+pnpm start
+# Equivalent commands:
+pnpm ios
+pnpm --filter mobile ios
+
+# Check the selected device without building or launching anything.
+pnpm ios --dry-run
+
+# Explicitly choose another simulator or a physical device when needed.
+pnpm ios --device "DEVICE_NAME_OR_UDID"
+
+# Start only Metro, without building or opening a device.
+pnpm --filter mobile start:metro
+
+# Android is opt-in and requires its own SDK/emulator setup.
+pnpm android
+```
+
+`dev`, `start`, and `ios` all use `scripts/ios.mjs`. It selects an available
+iOS 27 iPhone, preferring one already booted, and passes its UDID to Expo.
+If none exists, it reports the missing runtime/device instead of falling back
+to an older iOS version. An explicit `--device` overrides that selection.
+The first run generates the ignored native iOS project and installs CocoaPods;
+later runs reuse the native build cache. This simulator choice does not change
+the app's minimum supported iOS version.
+
 ## Skia pixel-world PoC
 
 On the `pixel-world-skia-poc` branch, a fresh launch opens **A little beside**.
@@ -22,8 +56,8 @@ pnpm --filter mobile ios
 pnpm --filter mobile android
 ```
 
-After that first build, `pnpm --filter mobile start` starts Metro for the installed
-development client. An older development client will need rebuilding.
+After that first build, `pnpm --filter mobile start:metro` starts Metro for the
+installed development client. An older development client will need rebuilding.
 
 - Drag the meadow to pan, and use **Recenter** to return to the starting view.
 - Tap a catalogue item, or either friend on the picnic blanket, to read about it.
@@ -177,7 +211,9 @@ pnpm install
 pnpm run start
 ```
 
-To make things work on your local simulator, or on your phone, you need first to [run `eas build`](https://github.com/infinitered/ignite/blob/master/docs/expo/EAS.md). We have many shortcuts on `package.json` to make it easier:
+For local iOS simulator development, use `pnpm ios` as described above. For
+EAS-managed simulator or device builds, the existing [EAS build workflow](https://github.com/infinitered/ignite/blob/master/docs/expo/EAS.md)
+also has shortcuts in `package.json`:
 
 ```bash
 pnpm run build:ios:sim # build for ios simulator
