@@ -63,6 +63,9 @@ first tap. Tap a marker to preview the oak, tap another to move it, or use
 areas stay unmarked. **Plant oak** saves one tree per Home Base; a brief ring
 and the confirmation label appear on success. The ring is skipped with Reduce
 Motion, and other sessions show the saved tree when they load the garden.
+The camera widens on compact screens only while placing or confirming an oak;
+**Recenter** returns to the regular meadow view. If another member plants
+first, the garden refreshes and explains why your preview was not saved.
 
 For the web version, run from the repository root:
 

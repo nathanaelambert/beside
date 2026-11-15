@@ -45,8 +45,8 @@ authenticated `GET /api/v1/homebases/:homebaseId/garden` returns
 on the 8-pixel grid, such as `{ "x": 104, "y": 104 }`. The server uses the
 same terrain and clearance rules as the preview. Only members can read or
 plant. Retrying the same placement returns the existing oak; planting a
-second oak returns HTTP 409. Migration 006 keeps existing oaks at the
-coordinates of their original slots.
+second oak returns HTTP 409. Migration 005 creates the coordinate-based garden
+table directly, with one oak per Home Base and grid bounds enforced in PostgreSQL.
 
 The app renders the same fixed map position on web and mobile after reopening
 or refreshing the Home Base. This does not consume milestone rewards and

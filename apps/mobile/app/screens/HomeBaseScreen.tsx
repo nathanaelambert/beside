@@ -21,7 +21,7 @@ import {
   initialItems,
   type WorldItem,
 } from "@/components/pixel-world/scene"
-import { oakAt } from "@/components/pixel-world/starterOak"
+import { oakAt, oakPlantingPulseMs } from "@/components/pixel-world/starterOak"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { RewardSprite } from "@/components/RewardSprite"
@@ -33,8 +33,9 @@ import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { firstName, namesLabel, rewardMemory, rewardsToPlace } from "@/utils/rewardChoice"
 
-const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 110 }
-const compactHomeFraming = { ...homeFraming, scale: 3, centerY: 120 }
+const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
+const plantingFraming = { ...homeFraming, centerY: 110 }
+const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 // Equal-value rewards: every decoration in the home base was earned and remembers why.
@@ -43,6 +44,7 @@ type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGard
 const wildTrees = initialItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees")
 type PlacementTarget = { kind: "oak" } | { kind: "reward"; rewardId: string; itemId: string }
 const friends = { x: homeFraming.centerX, y: 92 }
+const placedRewards = (garden?: HomebaseGarden) => garden?.rewards ?? []
 
 function placementMessage(rejection: string | null) {
   return rejection === "occupied"
@@ -69,12 +71,19 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   }>()
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
-  const [justPlanted, setJustPlanted] = useState<{ homebaseId: string; item: WorldItem }>()
+  // What just landed (the oak or an earned reward), for the planting pulse and framing.
+  const [landed, setLanded] = useState<{ homebaseId: string; item: WorldItem }>()
   const [focus, setFocus] = useState<MeadowPoint>()
   const plantingLock = useRef(false)
   // Read the latest deep-link params inside the loader without re-running it.
   const params = useRef(route.params)
   params.current = route.params
+
+  useEffect(() => {
+    if (!landed) return
+    const timer = setTimeout(() => setLanded(undefined), oakPlantingPulseMs)
+    return () => clearTimeout(timer)
+  }, [landed])
 
   useFocusEffect(
     useCallback(() => {
@@ -83,31 +92,38 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setBusy(true)
       setError("")
       setPlanting(undefined)
-      setJustPlanted(undefined)
+      setLanded(undefined)
       setGardenError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
         .then(async ([bases, state]) => {
           if (!active) return
           const homebase = selectHomebase(bases, state.users, route.params?.connectionId)
-          setData((current) => ({
-            homebase,
-            state,
-            garden: current?.homebase?.id === homebase?.id ? current?.garden : undefined,
-          }))
-          if (!homebase) return
+          if (!homebase) {
+            setData({ homebase, state })
+            return
+          }
           try {
             const garden = await besideApi.homebaseGarden(homebase.id)
+            // Commit the scene together, so a saved oak is present on its first frame.
             if (!active) return
             setData({ homebase, state, garden })
             linkedReward.current(homebase.id, state, garden)
           } catch (e) {
-            // A web build can be opened before the garden endpoint is deployed.
-            if (active && !(e instanceof ApiError && e.status === 404))
+            if (!active) return
+            if (e instanceof ApiError && e.status === 404) {
+              setData({ state })
+              setError("This home base is no longer available. Please try again.")
+            } else {
+              setData({ homebase, state })
               setError("We couldn’t load garden decorations. Please try again.")
+            }
           }
         })
         .catch(() => {
-          if (active) setError("We couldn’t open your home base. Please try again.")
+          if (active) {
+            setData(null)
+            setError("We couldn’t open your home base. Please try again.")
+          }
         })
         .finally(() => {
           if (active) setBusy(false)
@@ -129,7 +145,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const avatars = useMemo(() => avatarsForMembers(members), [members])
   const selected = avatars.find((avatar) => avatar.key === selectedKey)
   const oak = data?.garden?.oak
-  const placements = useMemo(() => data?.garden?.rewards ?? [], [data?.garden])
+  const placements = useMemo(() => placedRewards(data?.garden), [data?.garden])
   const placedIds = useMemo(() => new Set(placements.map((p) => p.rewardId)), [placements])
   const waiting = data && homebase ? rewardsToPlace(data.state, homebase.id, placedIds) : []
   const canPlant = !!data?.garden && !oak && !busy
@@ -137,6 +153,16 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const editing = !!target && !!data?.garden && !busy && (target.kind === "reward" || canPlant)
   const movingId = editing && target?.kind === "reward" ? target.rewardId : undefined
   const position = editing ? planting?.position : undefined
+  const justPlanted =
+    landed && homebase && landed.homebaseId === homebase.id ? landed.item : undefined
+  const framing = {
+    ...(editing || justPlanted
+      ? size.width < 600
+        ? compactPlantingFraming
+        : plantingFraming
+      : homeFraming),
+    ...(focus && !editing ? { centerX: focus.x, centerY: focus.y - 16 } : {}),
+  }
   // Everything already standing except what is being placed, as the API sees it.
   const occupied = useMemo(
     () => [...(oak ? [oak] : []), ...placements.filter((p) => p.rewardId !== movingId)],
@@ -166,6 +192,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   function startPlanting() {
     if (!homebase || !canPlant || editing || plantingLock.current) return
     setSelectedKey(undefined)
+    setFocus(undefined)
     setGardenError("")
     setPlanting({ homebaseId: homebase.id, target: { kind: "oak" } })
   }
@@ -180,7 +207,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
     if (plantingLock.current) return
     const others = [
       ...(garden.oak ? [garden.oak] : []),
-      ...garden.rewards.filter((p) => p.rewardId !== rewardId),
+      ...placedRewards(garden).filter((p) => p.rewardId !== rewardId),
     ]
     setSelectedKey(undefined)
     setGardenError("")
@@ -200,7 +227,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
     navigation.setParams({ rewardId: undefined, place: undefined })
     const reward = state.rewards.find((r) => r.id === rewardId && r.homebaseId === homebaseId)
     if (!reward?.obtainedAt) return
-    const placed = garden.rewards.find((p) => p.rewardId === rewardId)
+    const placed = placedRewards(garden).find((p) => p.rewardId === rewardId)
     if (place && !placed) startPlacingReward(homebaseId, reward.id, reward.itemId, garden)
     else if (placed) {
       setSelectedKey(rewardKey(rewardId))
@@ -208,7 +235,6 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setCameraReset((value) => value + 1)
     }
   }
-
   const linkedReward = useRef(openLinkedReward)
   linkedReward.current = openLinkedReward
 
@@ -226,36 +252,11 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   function suggestSpot() {
     if (!homebase || !editing || !target || plantingLock.current) return
     // Offer a keyboard/screen-reader path without requiring a canvas gesture.
-    const next = nextSuggestion(guide, friends, position)
+    const next = nextSuggestion(guide, { x: framing.centerX, y: framing.centerY }, position)
     if (!next) return
     setCameraReset((value) => value + 1)
     setPlanting({ homebaseId: homebase.id, target, position: next })
     setGardenError("")
-  }
-
-  async function plantOak() {
-    if (!position || !homebase || plantingLock.current) return
-    plantingLock.current = true
-    setSavingOak(true)
-    setGardenError("")
-    try {
-      const garden = await besideApi.plantStarterOak(homebase.id, position)
-      setData((current) =>
-        current?.homebase?.id === homebase.id ? { ...current, garden } : current,
-      )
-      setJustPlanted({ homebaseId: homebase.id, item: oakAt(position, homebase.id) })
-      setPlanting(undefined)
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        setGardenError("Someone already planted the shared oak.")
-        setAttempt((value) => value + 1)
-      } else {
-        setGardenError("We couldn’t plant the oak. Try again.")
-      }
-    } finally {
-      setSavingOak(false)
-      plantingLock.current = false
-    }
   }
 
   async function placeReward() {
@@ -269,10 +270,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         current?.homebase?.id === homebase.id ? { ...current, garden } : current,
       )
       const key = rewardKey(target.rewardId)
-      setJustPlanted({
-        homebaseId: homebase.id,
-        item: { key, itemId: target.itemId, ...position },
-      })
+      setLanded({ homebaseId: homebase.id, item: { key, itemId: target.itemId, ...position } })
       setPlanting(undefined)
       setSelectedKey(key)
     } catch (e) {
@@ -299,18 +297,60 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const selectedArt = selectedItem && catalogue.get(selectedItem.itemId)
   const memory =
     selectedPlacement && data ? rewardMemory(data.state, selectedPlacement.rewardId) : undefined
-  const earnedBy =
-    selectedPlacement && data
-      ? (data.state.rewards
-          .find((r) => r.id === selectedPlacement.rewardId)
-          ?.requiredUserIds.map((id) => data.state.users.find((u) => u.id === id)?.name)
-          .filter((name): name is string => !!name)
-          .map(firstName) ?? [])
-      : []
-  const earnedOn =
+  const selectedReward =
     selectedPlacement && data?.state.rewards.find((r) => r.id === selectedPlacement.rewardId)
+  const earnedBy =
+    selectedReward && data
+      ? selectedReward.requiredUserIds
+          .map((id) => data.state.users.find((u) => u.id === id)?.name)
+          .filter((name): name is string => !!name)
+          .map(firstName)
+      : []
   const nextUp = waiting[0]
   const nextUpItem = nextUp && catalogue.get(nextUp.itemId)
+
+  async function plantOak() {
+    if (!position || !homebase || plantingLock.current) return
+    plantingLock.current = true
+    setSavingOak(true)
+    setGardenError("")
+    try {
+      const garden = await besideApi.plantStarterOak(homebase.id, position)
+      setData((current) =>
+        current?.homebase?.id === homebase.id ? { ...current, garden } : current,
+      )
+      setLanded({ homebaseId: homebase.id, item: oakAt(position, homebase.id) })
+      setPlanting(undefined)
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        setPlanting(undefined)
+        setGardenError("Someone already planted the shared oak.")
+        setData((current) =>
+          current?.homebase?.id === homebase.id ? { ...current, garden: undefined } : current,
+        )
+        try {
+          const garden = await besideApi.homebaseGarden(homebase.id)
+          setData((current) =>
+            current?.homebase?.id === homebase.id ? { ...current, garden } : current,
+          )
+        } catch (refreshError) {
+          if (refreshError instanceof ApiError && refreshError.status === 404) {
+            setData((current) =>
+              current?.homebase?.id === homebase.id ? { state: current.state } : current,
+            )
+            setError("This home base is no longer available. Please try again.")
+          } else {
+            setError("We couldn’t load garden decorations. Please try again.")
+          }
+        }
+      } else {
+        setGardenError("We couldn’t plant the oak. Try again.")
+      }
+    } finally {
+      setSavingOak(false)
+      plantingLock.current = false
+    }
+  }
 
   async function signOut() {
     setLoggingOut(true)
@@ -368,15 +408,12 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
               }
               showPlantingGuide={editing}
               guidePoints={guide}
-              justPlanted={justPlanted?.homebaseId === homebase.id ? justPlanted.item : undefined}
-              framing={{
-                ...(size.width < 600 ? compactHomeFraming : homeFraming),
-                ...(focus ? { centerX: focus.x, centerY: focus.y - 16 } : {}),
-              }}
+              justPlanted={justPlanted}
+              framing={framing}
               picnic="group"
               resetCamera={cameraReset}
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${editing ? `Tap an open patch of lawn to preview the ${placingItem?.name ?? "oak"}.` : "Drag to explore. Tap a friend or a reward to learn about it."}`}
+              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? `Tap an open patch of lawn to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore. Tap a friend or a reward to learn about it."}`}
             />
             <View
               pointerEvents="none"
@@ -408,6 +445,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 accessibilityLabel="Recenter on your friends"
                 style={styles.recenter}
                 onPress={() => {
+                  setLanded(undefined)
                   setFocus(undefined)
                   setCameraReset((value) => value + 1)
                 }}
@@ -433,24 +471,28 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         {!editing && !!gardenError && (
           <Text text={gardenError} accessibilityRole="alert" style={styles.error} />
         )}
-        {oak && !nextUp && !selectedKey && (
-          <Text
-            testID="homebase-starter-oak"
-            text="Planted in your shared garden"
-            style={styles.plantedLabel}
-            accessibilityLiveRegion="polite"
-          />
-        )}
-        {canPlant && !editing && (
-          <Pressable
-            testID="start-planting-oak"
-            accessibilityRole="button"
-            accessibilityState={{ expanded: editing }}
-            style={styles.secondary}
-            onPress={startPlanting}
-          >
-            <Text text="Plant a tree" weight="medium" style={styles.secondaryText} />
-          </Pressable>
+        {!!data?.garden && (
+          <View testID="homebase-garden-status" style={styles.gardenStatus}>
+            {oak && !nextUp && !selectedKey && (
+              <Text
+                testID="homebase-starter-oak"
+                text="Planted in your shared garden"
+                style={styles.plantedLabel}
+                accessibilityLiveRegion="polite"
+              />
+            )}
+            {canPlant && !editing && (
+              <Pressable
+                testID="start-planting-oak"
+                accessibilityRole="button"
+                accessibilityState={{ expanded: editing }}
+                style={styles.secondary}
+                onPress={startPlanting}
+              >
+                <Text text="Plant a tree" weight="medium" style={styles.secondaryText} />
+              </Pressable>
+            )}
+          </View>
         )}
         {!!error && (
           <View style={styles.notice}>
@@ -479,8 +521,8 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
               />
               <Text
                 text={[
-                  earnedOn?.obtainedAt &&
-                    new Date(earnedOn.obtainedAt).toLocaleDateString("en-US", {
+                  selectedReward?.obtainedAt &&
+                    new Date(selectedReward.obtainedAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                     }),
@@ -668,6 +710,8 @@ const styles = StyleSheet.create({
   dock: { backgroundColor: world.paper, gap: 16, padding: 20, paddingBottom: 12 },
   dot: { backgroundColor: world.leaf, height: 5, width: 5 },
   error: { color: world.error, fontSize: 13, lineHeight: 20 },
+  // Keep the canvas height unchanged when the button becomes a smaller saved label.
+  gardenStatus: { justifyContent: "center", minHeight: worldShape.control },
   guideDot: {
     backgroundColor: world.onForest,
     borderColor: world.forest,

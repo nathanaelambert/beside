@@ -15,7 +15,7 @@ jest.mock("react-native-reanimated", () => ({
 }))
 jest.mock("@/components/RewardSprite", () => ({ RewardSprite: () => null }))
 
-it("shows both pages of decorations without making preview items plantable", () => {
+it("pages through every decoration without making preview items plantable", () => {
   const onPlant = jest.fn()
   const metrics = {
     frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -43,6 +43,11 @@ it("shows both pages of decorations without making preview items plantable", () 
   expect(screen.getAllByText("Preview")).toHaveLength(4)
   expect(screen.queryByRole("button", { name: "Blue swallowtail" })).toBeNull()
   expect(onPlant).not.toHaveBeenCalled()
+  fireEvent.press(screen.getByRole("button", { name: "Next decorations" }))
+  expect(screen.getByText("Garden lantern")).toBeTruthy()
+  expect(screen.getAllByText("Preview")).toHaveLength(4)
+  fireEvent.press(screen.getByRole("button", { name: "Next decorations" }))
+  expect(screen.getByText("Meadow oak")).toBeTruthy()
   fireEvent.press(screen.getByRole("button", { name: "Plant oak" }))
   expect(onPlant).toHaveBeenCalledTimes(1)
 })

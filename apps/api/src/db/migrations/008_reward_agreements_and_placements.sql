@@ -11,7 +11,7 @@ CREATE TABLE reward_agreement (
 );
 
 -- Where an earned reward stands in its home base's meadow. Uses the same world
--- grid as the starter oak (migration 006). Rows outside the domain snapshot, like
+-- grid as the starter oak (migration 005). Rows outside the domain snapshot, like
 -- the starter oak, so the playground model stays unchanged.
 CREATE TABLE reward_placement (
   reward_id text PRIMARY KEY REFERENCES reward(id) ON DELETE CASCADE,
