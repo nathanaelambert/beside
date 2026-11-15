@@ -273,6 +273,8 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setLanded({ homebaseId: homebase.id, item: { key, itemId: target.itemId, ...position } })
       setPlanting(undefined)
       setSelectedKey(key)
+      // Settle the camera on the new reward, so it stays in view after the pulse.
+      setFocus(position)
     } catch (e) {
       setGardenError(
         e instanceof ApiError && (e.status === 400 || e.status === 409)

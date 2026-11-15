@@ -53,14 +53,22 @@ are not prices.
 
 ## How this relates to PR #14 (starter oak)
 
-The branch is **stacked on PR #14** (merged in, with one trivial test conflict). A
-reward is placed just like the oak. Both use one shared rule,
+PR #14 is merged into `main`, and this branch is built on it. A reward is placed
+exactly like the oak: marked spots, a preview in corner brackets, **Suggest spot**,
+and the same planting pulse and framing. Both use one shared rule,
 `checkMeadowPlacement(point, occupied)` in `packages/domain/src/garden.ts`, so a
-reward can't stand on the oak and the oak can't stand on a reward. Both are stored
-outside the domain snapshot, so the playground model is unchanged. Migration
-**007** adds `reward_agreement` (per person, per item) and `reward_placement`
-(grid coordinates). If PR #14 changes, this branch needs a rebase. If #14 is
-dropped, the shared terrain module has to come with this branch.
+reward can't stand on the oak and the oak can't stand on a reward. The starter oak
+keeps PR #14's own table and API; earned rewards are stored next to it, outside the
+domain snapshot, so the playground model is unchanged.
+
+Migration **008** adds `reward_agreement` (per person, per item) and
+`reward_placement` (grid coordinates). It's numbered after the other two reward
+experiments (006 currency, 007 precursors) so the three can be applied side by
+side.
+
+The home base shows only PR #14's wild trees as scenery: in this model every
+decoration you see was earned and remembers why. The other scenery spots stay
+reserved by the shared rule.
 
 ## API additions
 
@@ -71,7 +79,7 @@ dropped, the shared terrain module has to come with this branch.
 - Picking or changing an item through any path (milestone create or update, a
   schedule, or cron-generated occurrences) records the actor's or series creator's
   agreement.
-- Migration 007 also seeds four catalog items: cherry blossom, lavender, reading
+- Migration 008 also seeds four catalog items: cherry blossom, lavender, reading
   bench and garden lantern.
 
 ## Open questions

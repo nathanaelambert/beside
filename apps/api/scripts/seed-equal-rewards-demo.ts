@@ -161,7 +161,7 @@ const agree = async (session: Session, milestoneId: string) =>
   );
 
 // 3. History: a lived-in meadow where every reward remembers what earned it.
-const placed: MeadowPoint[] = [{ x: 104, y: 104 }]; // The starter oak.
+const placed: MeadowPoint[] = [{ x: 184, y: 104 }]; // The starter oak.
 await call(
   `/homebases/${base!.id}/garden/starter-oak`,
   "POST",
@@ -196,7 +196,7 @@ await earnAndPlace(
     "Finished Project Hail Mary",
     "star-statue",
   ),
-  { x: 184, y: 96 },
+  { x: 112, y: 112 },
 );
 const run = await activity(
   vaibhav,
