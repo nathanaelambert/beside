@@ -1,6 +1,14 @@
 packages:
   - "apps/*"
   - "packages/*"
+# Worklets 0.7 imports these Babel 7 helpers without declaring them. Prevent
+# pnpm's hoisted Babel 8 helpers from breaking clean builds and Jest transforms.
+packageExtensions:
+  "react-native-worklets@0.7.2":
+    dependencies:
+      "@babel/generator": "7.29.7"
+      "@babel/traverse": "7.29.8"
+      "@babel/types": "7.29.8"
 allowBuilds:
   "@scarf/scarf": false
   "@shopify/react-native-skia": true

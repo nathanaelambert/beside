@@ -1,5 +1,4 @@
 -- Experiment: tiered rewards bought with a shared currency (acorns).
--- Numbered 007 to leave 005/006 to the open starter-oak change (PR #14).
 -- Each home base has one acorn pool. The ledger is the source of truth; the
 -- balance is the sum of its amounts and may never go below zero.
 CREATE TABLE homebase_decoration (

@@ -1,34 +1,34 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, View } from "react-native"
-import type { ApiHomebase, ApiState } from "@beside/api-client"
-import { shopListing } from "@beside/api-client/acorns"
+import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
+import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { AcornAmount, AcornCount } from "@/components/AcornCount"
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
+import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
+import { avatarAt, initialItems } from "@/components/pixel-world/scene"
 import {
-  avatarAt,
-  catalogue,
-  hitTest,
-  homePlacementAt,
-  initialItems,
-  type WorldItem,
-} from "@/components/pixel-world/scene"
+  oakAt,
+  oakPlantingPulseMs,
+  starterOakGuidePoints,
+  starterOakTap,
+} from "@/components/pixel-world/starterOak"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { RewardSprite } from "@/components/RewardSprite"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
-import { acornLabel, homebaseAcorns, tierFor } from "@/services/api/acorns"
 import { besideApi } from "@/services/api/beside"
 import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
 const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
+const plantingFraming = { ...homeFraming, centerY: 110 }
+const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
 
-type HomeData = { homebase?: ApiHomebase; state: ApiState }
+type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 
 export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeBase">) {
   const { logout } = useAuth()
@@ -40,13 +40,17 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [selectedKey, setSelectedKey] = useState<string>()
   const [cameraReset, setCameraReset] = useState(0)
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const [preview, setPreview] = useState<WorldItem>()
-  const [placingHint, setPlacingHint] = useState("")
-  const [busyAction, setBusyAction] = useState(false)
-  const [notice, setNotice] = useState("")
-  const placeItemId = route.params?.placeItemId
-  const placingItem = placeItemId ? catalogue.get(placeItemId) : undefined
-  const placingListing = placeItemId ? shopListing(placeItemId) : null
+  const [planting, setPlanting] = useState<{ homebaseId: string; position?: MeadowPoint }>()
+  const [gardenError, setGardenError] = useState("")
+  const [savingOak, setSavingOak] = useState(false)
+  const [plantedIn, setPlantedIn] = useState<string>()
+  const plantingLock = useRef(false)
+
+  useEffect(() => {
+    if (!plantedIn) return
+    const timer = setTimeout(() => setPlantedIn(undefined), oakPlantingPulseMs)
+    return () => clearTimeout(timer)
+  }, [plantedIn])
 
   useFocusEffect(
     useCallback(() => {
@@ -54,16 +58,37 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       let active = true
       setBusy(true)
       setError("")
+      setPlanting(undefined)
+      setPlantedIn(undefined)
+      setGardenError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
-        .then(([bases, state]) => {
-          if (active)
-            setData({
-              homebase: selectHomebase(bases, state.users, route.params?.connectionId),
-              state,
-            })
+        .then(async ([bases, state]) => {
+          if (!active) return
+          const homebase = selectHomebase(bases, state.users, route.params?.connectionId)
+          if (!homebase) {
+            setData({ homebase, state })
+            return
+          }
+          try {
+            const garden = await besideApi.homebaseGarden(homebase.id)
+            // Commit the scene together, so a saved oak is present on its first frame.
+            if (active) setData({ homebase, state, garden })
+          } catch (e) {
+            if (!active) return
+            if (e instanceof ApiError && e.status === 404) {
+              setData({ state })
+              setError("This home base is no longer available. Please try again.")
+            } else {
+              setData({ homebase, state })
+              setError("We couldn’t load garden decorations. Please try again.")
+            }
+          }
         })
         .catch(() => {
-          if (active) setError("We couldn’t open your home base. Please try again.")
+          if (active) {
+            setData(null)
+            setError("We couldn’t open your home base. Please try again.")
+          }
         })
         .finally(() => {
           if (active) setBusy(false)
@@ -84,86 +109,99 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   )
   const avatars = useMemo(() => avatarsForMembers(members), [members])
   const selected = avatars.find((avatar) => avatar.key === selectedKey)
-  const acorns = useMemo(
-    () => (data && homebase ? homebaseAcorns(data.state, homebase.id).balance : 0),
-    [data, homebase],
-  )
-  const decorations = useMemo(
-    () => data?.state.decorations.filter((row) => row.homebaseId === homebase?.id) ?? [],
-    [data, homebase],
-  )
-  const decorationItems = useMemo<WorldItem[]>(
-    () => decorations.map((row) => ({ key: row.id, itemId: row.itemId, x: row.x, y: row.y })),
-    [decorations],
-  )
-  const worldItems = useMemo(() => [...initialItems, ...decorationItems], [decorationItems])
-  const selectedDecoration = decorations.find((row) => row.id === selectedKey)
-  const selectedDecorationItem = selectedDecoration && catalogue.get(selectedDecoration.itemId)
-  const buyerName = selectedDecoration
-    ? (data?.state.users.find((user) => user.id === selectedDecoration.purchasedByUserId)?.name ??
-      "Someone")
-    : ""
+  const oak = data?.garden?.oak
+  const canPlant = !!data?.garden && !oak && !busy
+  const editing = !!planting && planting.homebaseId === homebase?.id && canPlant
+  const position = editing ? planting?.position : undefined
+  const justPlanted =
+    oak && homebase && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined
+  const framing =
+    editing || justPlanted
+      ? size.width < 600
+        ? compactPlantingFraming
+        : plantingFraming
+      : homeFraming
+
+  function startPlanting() {
+    if (!homebase || !canPlant || editing || plantingLock.current) return
+    setSelectedKey(undefined)
+    setGardenError("")
+    setPlanting({ homebaseId: homebase.id })
+  }
 
   function tapWorld(x: number, y: number, scale: number) {
-    if (placingItem) {
-      const spot = homePlacementAt(x, y, worldItems, avatars)
-      setPreview(spot ? { ...spot, key: "preview", itemId: placingItem.id } : undefined)
-      setPlacingHint(
-        spot
-          ? "A good spot? Buy it here, or tap another patch."
-          : "Try an open patch of lawn, away from the pond, path and picnic.",
-      )
+    if (plantingLock.current) return
+    if (!editing || !homebase) {
+      setSelectedKey(avatarAt(x, y, scale, avatars)?.key)
       return
     }
-    const decoration = hitTest(decorationItems, x, y, scale)
-    setSelectedKey(decoration?.key ?? avatarAt(x, y, scale, avatars)?.key)
-    setNotice("")
+    const { point, rejection } = starterOakTap(x, y)
+    setPlanting({ homebaseId: homebase.id, position: rejection ? undefined : point })
+    setGardenError(
+      rejection === "occupied"
+        ? "That spot is occupied."
+        : rejection
+          ? "Choose a clear patch of lawn."
+          : "",
+    )
   }
 
-  function stopPlacing() {
-    setPreview(undefined)
-    setPlacingHint("")
-    navigation.setParams({ placeItemId: undefined })
+  function suggestSpot() {
+    if (!homebase || !editing || plantingLock.current) return
+    // Offer a keyboard/screen-reader path without requiring a canvas gesture.
+    const points = [...starterOakGuidePoints()].sort(
+      (a, b) =>
+        Math.hypot(a.x - framing.centerX, a.y - framing.centerY) -
+        Math.hypot(b.x - framing.centerX, b.y - framing.centerY),
+    )
+    const index = points.findIndex((point) => point.x === position?.x && point.y === position.y)
+    const next = points[(index + 1) % points.length]
+    if (!next) return
+    setCameraReset((value) => value + 1)
+    setPlanting({ homebaseId: homebase.id, position: next })
+    setGardenError("")
   }
 
-  async function buy() {
-    if (!homebase || !placingItem || !preview || busyAction) return
-    setBusyAction(true)
-    setNotice("")
+  async function plantOak() {
+    if (!position || !homebase || plantingLock.current) return
+    plantingLock.current = true
+    setSavingOak(true)
+    setGardenError("")
     try {
-      const result = await besideApi.buyDecoration({
-        homebaseId: homebase.id,
-        itemId: placingItem.id,
-        x: preview.x,
-        y: preview.y,
-        externalKey: `buy:${placingItem.id}:${preview.x}:${preview.y}:${Date.now()}`,
-      })
-      const left = acorns - (placingListing?.price ?? 0)
-      setSelectedKey(result.entityId)
-      setNotice(`${placingItem.name} is in the meadow. ${acornLabel(left)} left.`)
-      stopPlacing()
-      setAttempt((value) => value + 1)
-    } catch (e) {
-      setPlacingHint(e instanceof Error ? e.message : "We couldn’t buy that. Please try again.")
-    } finally {
-      setBusyAction(false)
-    }
-  }
-
-  async function giveBack() {
-    if (!selectedDecoration || busyAction) return
-    setBusyAction(true)
-    try {
-      await besideApi.returnDecoration(selectedDecoration.id)
-      setNotice(
-        `${selectedDecorationItem?.name ?? "It"} went back to the shop. ${acornLabel(selectedDecoration.price)} returned.`,
+      const garden = await besideApi.plantStarterOak(homebase.id, position)
+      setData((current) =>
+        current?.homebase?.id === homebase.id ? { ...current, garden } : current,
       )
-      setSelectedKey(undefined)
-      setAttempt((value) => value + 1)
+      setPlantedIn(homebase.id)
+      setPlanting(undefined)
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : "We couldn’t return that. Please try again.")
+      if (e instanceof ApiError && e.status === 409) {
+        setPlanting(undefined)
+        setGardenError("Someone already planted the shared oak.")
+        setData((current) =>
+          current?.homebase?.id === homebase.id ? { ...current, garden: undefined } : current,
+        )
+        try {
+          const garden = await besideApi.homebaseGarden(homebase.id)
+          setData((current) =>
+            current?.homebase?.id === homebase.id ? { ...current, garden } : current,
+          )
+        } catch (refreshError) {
+          if (refreshError instanceof ApiError && refreshError.status === 404) {
+            setData((current) =>
+              current?.homebase?.id === homebase.id ? { state: current.state } : current,
+            )
+            setError("This home base is no longer available. Please try again.")
+          } else {
+            setError("We couldn’t load garden decorations. Please try again.")
+          }
+        }
+      } else {
+        setGardenError("We couldn’t plant the oak. Try again.")
+      }
     } finally {
-      setBusyAction(false)
+      setSavingOak(false)
+      plantingLock.current = false
     }
   }
 
@@ -198,21 +236,12 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             <Text text={loggingOut ? "Logging out…" : "Log out"} style={styles.smallText} />
           </Pressable>
         </View>
-        <View style={styles.titleRow}>
-          <Text
-            testID="homebase-name"
-            text={homebase?.name ?? "Home base"}
-            weight="semiBold"
-            style={styles.title}
-          />
-          {homebase && (
-            <AcornCount
-              amount={acorns}
-              testID="homebase-acorns"
-              onPress={() => navigation.navigate("Shop", { connectionId: homebase.id })}
-            />
-          )}
-        </View>
+        <Text
+          testID="homebase-name"
+          text={homebase?.name ?? "Home base"}
+          weight="semiBold"
+          style={styles.title}
+        />
         {!!members.length && <Text text={firstNamesLabel(members)} style={styles.subtitle} />}
       </View>
       <View
@@ -224,29 +253,43 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           <>
             <WorldCanvas
               {...size}
-              items={worldItems}
+              items={oak ? [...initialItems, oakAt(oak)] : initialItems}
               avatars={avatars}
-              selectedKey={placingItem ? undefined : selectedKey}
-              preview={preview}
-              framing={homeFraming}
+              selectedKey={selectedKey}
+              preview={position ? oakAt(position, "preview") : undefined}
+              showPlantingGuide={editing}
+              justPlanted={justPlanted}
+              framing={framing}
               picnic="group"
               resetCamera={cameraReset}
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. Drag to explore. Tap a friend to see their name.`}
+              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? "Tap an open patch of lawn to preview the oak, or use Suggest spot." : "Drag to explore. Tap a friend to see their name."}`}
             />
-            <View pointerEvents="none" style={styles.worldLabel}>
-              <View style={styles.dot} />
-              <Text text={placingItem ? "Finding a spot" : "The meadow"} style={styles.labelText} />
-            </View>
-            <Pressable
-              testID="homebase-recenter"
-              accessibilityRole="button"
-              accessibilityLabel="Recenter on your friends"
-              style={styles.recenter}
-              onPress={() => setCameraReset((value) => value + 1)}
+            <View
+              pointerEvents="none"
+              style={styles.worldLabel}
+              testID={editing ? "oak-placement-guide" : undefined}
             >
-              <Text text="Recenter" style={styles.smallText} />
-            </Pressable>
+              <View style={[styles.dot, editing && styles.guideDot]} />
+              <Text
+                text={editing ? "Marked spots are plantable" : "The meadow"}
+                style={styles.labelText}
+              />
+            </View>
+            {!editing && (
+              <Pressable
+                testID="homebase-recenter"
+                accessibilityRole="button"
+                accessibilityLabel="Recenter on your friends"
+                style={styles.recenter}
+                onPress={() => {
+                  setPlantedIn(undefined)
+                  setCameraReset((value) => value + 1)
+                }}
+              >
+                <Text text="Recenter" style={styles.smallText} />
+              </Pressable>
+            )}
           </>
         )}
         {!data && busy && (
@@ -262,6 +305,32 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         )}
       </View>
       <View style={styles.dock}>
+        {!editing && !!gardenError && (
+          <Text text={gardenError} accessibilityRole="alert" style={styles.error} />
+        )}
+        {!!data?.garden && (
+          <View testID="homebase-garden-status" style={styles.gardenStatus}>
+            {oak && (
+              <Text
+                testID="homebase-starter-oak"
+                text="Planted in your shared garden"
+                style={styles.plantedLabel}
+                accessibilityLiveRegion="polite"
+              />
+            )}
+            {canPlant && (
+              <Pressable
+                testID="start-planting-oak"
+                accessibilityRole="button"
+                accessibilityState={{ expanded: editing }}
+                style={styles.secondary}
+                onPress={startPlanting}
+              >
+                <Text text="Plant a tree" weight="medium" style={styles.secondaryText} />
+              </Pressable>
+            )}
+          </View>
+        )}
         {!!error && (
           <View style={styles.notice}>
             <Text text={error} accessibilityRole="alert" style={styles.error} />
@@ -270,196 +339,102 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             </Pressable>
           </View>
         )}
-        {!!notice && (
-          <Text
-            testID="homebase-notice"
-            text={notice}
-            accessibilityLiveRegion="polite"
-            style={styles.success}
-          />
-        )}
-        {placingItem ? (
-          <>
-            <View style={styles.detail} testID="homebase-placing">
-              <View style={styles.thumbnail}>
-                <RewardSprite item={placingItem} scale={2} />
-              </View>
-              <View style={styles.detailText}>
-                <Text
-                  text={`Where should the ${placingItem.name.toLowerCase()} go?`}
-                  weight="semiBold"
-                  style={styles.sectionTitle}
-                />
-                <Text
-                  testID="homebase-placing-hint"
-                  accessibilityLiveRegion="polite"
-                  text={placingHint || "Tap an open patch of lawn in the meadow."}
-                  style={styles.description}
-                />
-              </View>
+        <View style={styles.detail}>
+          {selected && (
+            <View style={styles.thumbnail}>
+              <RewardSprite
+                item={{
+                  id: selected.key,
+                  name: selected.name,
+                  category: "Friends",
+                  artifact: selected.frames.idle,
+                }}
+                scale={3}
+              />
             </View>
-            <View style={styles.actions}>
-              <Pressable
-                testID="homebase-buy"
-                accessibilityRole="button"
-                disabled={!preview || busyAction}
-                accessibilityState={{ disabled: !preview || busyAction }}
-                style={({ pressed }) => [
-                  styles.primary,
-                  styles.buy,
-                  (!preview || busyAction) && styles.disabled,
-                  pressed && styles.pressed,
-                ]}
-                onPress={() => void buy()}
-              >
-                <Text
-                  text={busyAction ? "Buying…" : `Buy for ${placingListing?.price ?? ""} acorns`}
-                  weight="medium"
-                  style={styles.primaryText}
-                />
-              </Pressable>
-              <Pressable
-                testID="homebase-cancel-placing"
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
-                onPress={stopPlacing}
-              >
-                <Text text="Cancel" weight="medium" style={styles.secondaryText} />
-              </Pressable>
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.detail}>
-              {selectedDecoration && selectedDecorationItem ? (
-                <>
-                  <View style={styles.thumbnail}>
-                    <RewardSprite item={selectedDecorationItem} scale={2} />
-                  </View>
-                  <View style={styles.detailText}>
-                    <Text
-                      testID="homebase-selected-decoration"
-                      text={selectedDecorationItem.name}
-                      weight="semiBold"
-                      style={styles.sectionTitle}
-                      accessibilityLiveRegion="polite"
-                    />
-                    <View style={styles.boughtRow}>
-                      <Text
-                        text={`${shopListing(selectedDecoration.itemId) ? tierFor(shopListing(selectedDecoration.itemId)!.rarity).name : "Bought"} · ${buyerName.split(/\s+/)[0]} paid`}
-                        style={styles.description}
-                      />
-                      <AcornAmount amount={selectedDecoration.price} muted />
-                    </View>
-                  </View>
-                  <Pressable
-                    testID="homebase-return-decoration"
-                    accessibilityRole="button"
-                    accessibilityLabel={`Return ${selectedDecorationItem.name} for ${acornLabel(selectedDecoration.price)}`}
-                    disabled={busyAction}
-                    style={({ pressed }) => [styles.returnButton, pressed && styles.pressed]}
-                    onPress={() => void giveBack()}
-                  >
-                    <Text text="Return" style={styles.smallText} />
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  {selected && (
-                    <View style={styles.thumbnail}>
-                      <RewardSprite
-                        item={{
-                          id: selected.key,
-                          name: selected.name,
-                          category: "Friends",
-                          artifact: selected.frames.idle,
-                        }}
-                        scale={3}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.detailText}>
-                    <Text
-                      testID="homebase-selected-member"
-                      text={selected?.name ?? "Your people, together"}
-                      weight="semiBold"
-                      style={styles.sectionTitle}
-                      accessibilityLiveRegion="polite"
-                    />
-                    <Text
-                      text={
-                        selected
-                          ? "Part of your home base."
-                          : "Tap a friend or something you bought."
-                      }
-                      style={styles.description}
-                    />
-                  </View>
-                  {homebase && (
-                    <Text
-                      testID="homebase-member-count"
-                      text={`${members.length} members`}
-                      style={styles.count}
-                    />
-                  )}
-                </>
-              )}
-            </View>
-            <View style={styles.actions}>
-              <Pressable
-                testID="homebase-create-activity"
-                accessibilityRole="button"
-                disabled={!homebase}
-                style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-                onPress={() =>
-                  homebase && navigation.navigate("ActivityCreate", { connectionId: homebase.id })
-                }
-              >
-                <Text text="New activity" weight="medium" style={styles.primaryText} />
-              </Pressable>
-              <Pressable
-                testID="homebase-activities"
-                accessibilityRole="button"
-                disabled={!homebase}
-                style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
-                onPress={() =>
-                  homebase && navigation.navigate("Activities", { connectionId: homebase.id })
-                }
-              >
-                <Text text="Activities" weight="medium" style={styles.secondaryText} />
-              </Pressable>
-              <Pressable
-                testID="homebase-shop"
-                accessibilityRole="button"
-                disabled={!homebase}
-                style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
-                onPress={() =>
-                  homebase && navigation.navigate("Shop", { connectionId: homebase.id })
-                }
-              >
-                <Text text="Shop" weight="medium" style={styles.secondaryText} />
-              </Pressable>
-            </View>
-          </>
-        )}
+          )}
+          <View style={styles.detailText}>
+            <Text
+              testID="homebase-selected-member"
+              text={selected?.name ?? "Your people, together"}
+              weight="semiBold"
+              style={styles.sectionTitle}
+              accessibilityLiveRegion="polite"
+            />
+            <Text
+              text={selected ? "Part of your home base." : "Tap a friend in the meadow."}
+              style={styles.description}
+            />
+          </View>
+          {homebase && (
+            <Text
+              testID="homebase-member-count"
+              text={`${members.length} members`}
+              style={styles.count}
+            />
+          )}
+        </View>
+        <View style={styles.actions}>
+          <Pressable
+            testID="homebase-create-activity"
+            accessibilityRole="button"
+            disabled={!homebase}
+            style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
+            onPress={() =>
+              homebase && navigation.navigate("ActivityCreate", { connectionId: homebase.id })
+            }
+          >
+            <Text text="New activity" weight="medium" style={styles.primaryText} />
+          </Pressable>
+          <Pressable
+            testID="homebase-activities"
+            accessibilityRole="button"
+            disabled={!homebase}
+            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+            onPress={() =>
+              homebase && navigation.navigate("Activities", { connectionId: homebase.id })
+            }
+          >
+            <Text text="Activities" weight="medium" style={styles.secondaryText} />
+          </Pressable>
+        </View>
       </View>
+      {editing && (
+        <PlantOakPanel
+          hasPreview={!!position}
+          saving={savingOak}
+          error={gardenError}
+          onCancel={() => {
+            setPlanting(undefined)
+            setGardenError("")
+          }}
+          onPlant={() => void plantOak()}
+          onSuggest={suggestSpot}
+        />
+      )}
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: "row", gap: 10 },
+  actions: { flexDirection: "row", gap: 12 },
   body: { color: world.text, fontSize: 14, lineHeight: 22 },
-  boughtRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  buy: { flexDirection: "row", gap: 6 },
   count: { color: world.muted, fontSize: 11, lineHeight: 16 },
   description: { color: world.muted, fontSize: 12, lineHeight: 18 },
   detail: { alignItems: "center", flexDirection: "row", gap: 12, minHeight: 64 },
   detailText: { flex: 1, gap: 3 },
-  disabled: { opacity: 0.5 },
   dock: { backgroundColor: world.paper, gap: 16, padding: 20, paddingBottom: 12 },
   dot: { backgroundColor: world.leaf, height: 5, width: 5 },
   error: { color: world.error, fontSize: 13, lineHeight: 20 },
+  // Keep the canvas height unchanged when the button becomes a smaller saved label.
+  gardenStatus: { justifyContent: "center", minHeight: worldShape.control },
+  guideDot: {
+    backgroundColor: world.onForest,
+    borderColor: world.forest,
+    borderWidth: 1,
+    height: 8,
+    width: 8,
+  },
   header: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 8 },
   headingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   labelText: { color: world.text, fontSize: 11, lineHeight: 16 },
@@ -473,6 +448,18 @@ const styles = StyleSheet.create({
   },
   logout: { justifyContent: "center", minHeight: 40, paddingLeft: 16 },
   notice: { gap: 8 },
+  plantedLabel: {
+    alignSelf: "flex-start",
+    backgroundColor: world.meadow,
+    borderColor: world.meadowBorder,
+    borderRadius: worldShape.smallRadius,
+    borderWidth: worldShape.border,
+    color: world.ink,
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   pressed: { opacity: 0.75 },
   primary: {
     alignItems: "center",
@@ -494,15 +481,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 20,
   },
-  returnButton: {
-    backgroundColor: world.panel,
-    borderColor: world.line,
-    borderRadius: worldShape.radius,
-    borderWidth: worldShape.border,
-    justifyContent: "center",
-    minHeight: 40,
-    paddingHorizontal: 12,
-  },
   screen: { backgroundColor: world.paper, flex: 1 },
   secondary: {
     alignItems: "center",
@@ -512,13 +490,12 @@ const styles = StyleSheet.create({
     borderWidth: worldShape.border,
     justifyContent: "center",
     minHeight: worldShape.control,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
   },
   secondaryText: { color: world.text, fontSize: 14, lineHeight: 22 },
   sectionTitle: { color: world.ink, fontSize: 18, lineHeight: 24 },
   smallText: { color: world.text, fontSize: 13, lineHeight: 20 },
   subtitle: { color: world.muted, fontSize: 12, lineHeight: 18, marginTop: 8 },
-  success: { color: world.forest, fontSize: 13, lineHeight: 20 },
   thumbnail: {
     alignItems: "center",
     backgroundColor: world.meadow,
@@ -529,13 +506,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 64,
   },
-  title: { color: world.ink, flexShrink: 1, fontSize: 27, lineHeight: 34 },
-  titleRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between",
-  },
+  title: { color: world.ink, fontSize: 27, lineHeight: 34 },
   world: { backgroundColor: world.canvas, flex: 1, overflow: "hidden" },
   worldLabel: {
     alignItems: "center",

@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { rarityOrder } from "./shop.ts";
+import { meadowGridSize, starterOakItemId } from "./garden.ts";
+import { WORLD_HEIGHT, WORLD_WIDTH } from "./meadow-terrain.ts";
 import {
   databaseSchema,
   logInputSchema,
@@ -21,6 +23,23 @@ export const registerSchema = z.strictObject({
 });
 export const loginSchema = z.strictObject({ email, password });
 export const createHomebaseSchema = z.strictObject({ name });
+export const plantStarterOakSchema = z.strictObject({
+  x: z
+    .int()
+    .min(0)
+    .max(WORLD_WIDTH - 1)
+    .multipleOf(meadowGridSize),
+  y: z
+    .int()
+    .min(0)
+    .max(WORLD_HEIGHT - 1)
+    .multipleOf(meadowGridSize),
+});
+export const homebaseGardenSchema = z.strictObject({
+  oak: plantStarterOakSchema
+    .extend({ itemId: z.literal(starterOakItemId) })
+    .nullable(),
+});
 const hasChanges = (value: object) =>
   Object.values(value).some((field) => field !== undefined);
 export const updateHomebaseSchema = createHomebaseSchema;
@@ -143,6 +162,8 @@ export type ApiState = z.infer<typeof stateSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type MutationResult = z.infer<typeof mutationSchema>;
 export type ApiHomebase = z.infer<typeof homebaseSchema>;
+export type HomebaseGarden = z.infer<typeof homebaseGardenSchema>;
+export type PlantStarterOakInput = z.input<typeof plantStarterOakSchema>;
 export type RegisterInput = z.input<typeof registerSchema>;
 export type LoginInput = z.input<typeof loginSchema>;
 export type CreateSubjectInput = z.input<typeof createSubjectSchema>;
