@@ -158,7 +158,10 @@ base's shared pool, and members spend them on catalog items. `GET /shop`
 returns tiers, prices and earning rules. `POST /decorations` buys and places an
 item, rejecting without charging when the base cannot afford it, and accepts an
 optional `externalKey` for retries. `DELETE /decorations/:decorationId` refunds
-the price. State includes `acornEntries` (the ledger) and `decorations`. See
+the price. `PATCH /decorations/:decorationId` moves an item for free, and
+`PATCH /homebases/:homebaseId/garden/starter-oak` moves the starter oak. Every
+spot uses the shared meadow rule, which also keeps the oak and bought items
+apart. State includes `acornEntries` (the ledger) and `decorations`. See
 [the design note](../../docs/experiments/rewards-currency.md). To seed a
 showcase base through the API, run
 `API_URL=http://localhost:3001 node --experimental-strip-types scripts/seed-acorns-demo.ts`

@@ -1,4 +1,4 @@
-import { memo, useEffect } from "react"
+import { memo, useEffect, useMemo } from "react"
 import { StyleSheet } from "react-native"
 import type { PixelArt } from "@beside/rewards"
 import {
@@ -28,7 +28,7 @@ import {
 import { AVATAR_HEIGHT, AVATAR_WIDTH, avatars as defaultAvatars, type Avatar } from "./avatars"
 import { cameraFrame, type WorldFraming } from "./camera"
 import { catalogue, footprint, WORLD_HEIGHT, WORLD_WIDTH, type WorldItem } from "./scene"
-import { oakPlantingPulseMs, starterOakGuidePoints } from "./starterOak"
+import { oakPlantingPulseMs } from "./starterOak"
 import { getTerrain, getWoodsTile, WOODS_TILE, type PicnicLayout } from "./terrain"
 
 // Everything is a bitmap at one texel per world pixel, scaled by an integer with nearest
@@ -120,12 +120,8 @@ function bracketPath({ x, y }: WorldItem) {
   )
 }
 
-let plantingGuidePath: string | undefined
-function getPlantingGuidePath() {
-  plantingGuidePath ??= starterOakGuidePoints()
-    .map(({ x, y }) => `M${x - 1} ${y - 1}h2v2h-2z`)
-    .join(" ")
-  return plantingGuidePath
+function plantingGuidePath(points: readonly { x: number; y: number }[]) {
+  return points.map(({ x, y }) => `M${x - 1} ${y - 1}h2v2h-2z`).join(" ")
 }
 
 const plantingPulsePath = "M-14 -1h3v-2h7v-1h8v1h7v2h3v2h-3v2h-7v1h-8v-1h-7v-2h-3z"
@@ -261,7 +257,8 @@ export interface WorldCanvasProps {
   accessibilityLabel?: string
   selectedKey?: string
   preview?: WorldItem
-  showPlantingGuide?: boolean
+  /** Open spots to mark while placing something; omit to hide the guide. */
+  plantingGuide?: readonly { x: number; y: number }[]
   justPlanted?: WorldItem
   resetCamera: number
   onTap: (x: number, y: number, scale: number) => void
@@ -277,7 +274,7 @@ export function WorldCanvas({
   accessibilityLabel = "Pixel meadow ringed by woods, with a pond and dock, two friends on a picnic blanket, and catalogue decorations. Drag to explore; tap an item to inspect it.",
   selectedKey,
   preview,
-  showPlantingGuide,
+  plantingGuide,
   justPlanted,
   resetCamera,
   onTap,
@@ -291,6 +288,10 @@ export function WorldCanvas({
   const startY = useSharedValue(0)
   const tick = useSharedValue(0)
   const reduceMotion = useReducedMotion()
+  const guidePath = useMemo(
+    () => (plantingGuide ? plantingGuidePath(plantingGuide) : undefined),
+    [plantingGuide],
+  )
 
   useEffect(() => {
     cameraX.value = initialX
@@ -400,15 +401,10 @@ export function WorldCanvas({
             {glints.map(([x, y, phase]) => (
               <Glint key={`${x}-${y}`} x={x} y={y} phase={phase} tick={tick} />
             ))}
-            {showPlantingGuide && (
+            {!!guidePath && (
               <Group opacity={0.85}>
-                <Path
-                  path={getPlantingGuidePath()}
-                  color="#344b3d"
-                  style="stroke"
-                  strokeWidth={1}
-                />
-                <Path path={getPlantingGuidePath()} color="#fff4cf" />
+                <Path path={guidePath} color="#344b3d" style="stroke" strokeWidth={1} />
+                <Path path={guidePath} color="#fff4cf" />
               </Group>
             )}
             {justPlanted && (

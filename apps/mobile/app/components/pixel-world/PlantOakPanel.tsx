@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
+import { shopListing } from "@beside/api-client/acorns"
 import { starterOakItemId } from "@beside/api-client/garden"
 import { rewardItems } from "@beside/rewards"
 import Animated, {
@@ -92,14 +93,17 @@ export function PlantOakPanel({
             >
               <RewardSprite item={item} scale={1} />
               <Text text={item.name} weight="medium" style={styles.itemName} />
-              <Text text={available ? "Free" : "Preview"} style={styles.badge} />
+              <Text
+                text={available ? "Free" : `${shopListing(item.id)?.price ?? "–"} acorns`}
+                style={styles.badge}
+              />
             </View>
           )
         })}
       </View>
       <View style={styles.row}>
         <Text
-          text="Only the oak can be planted in this demo."
+          text="Your first oak is free. Buy more in the acorn shop."
           style={[styles.detail, styles.copy]}
         />
         <Text

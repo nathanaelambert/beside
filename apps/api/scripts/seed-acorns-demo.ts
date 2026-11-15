@@ -112,11 +112,18 @@ const two = await milestone(
   closesSoon,
 );
 for (const who of ["nathanael", "vaibhav", "pritesh"]) await checkIn(who, two); // 6
+// The free starter oak (PR #14), then a sunflower bought with acorns.
+await call(
+  `/homebases/${base!.id}/garden/starter-oak`,
+  sessions.pritesh!.token,
+  "POST",
+  { x: 120, y: 112 },
+);
 await call("/decorations", sessions.nathanael!.token, "POST", {
   homebaseId: base!.id,
   itemId: "sunflower",
-  x: 176,
-  y: 112,
+  x: 168,
+  y: 120,
   externalKey: "demo:sunflower",
 });
 // Tonight's chapter: everyone but Mosaab has already checked in.

@@ -38,6 +38,10 @@ jest.mock("@/services/api/beside", () => ({
     state: jest.fn(),
     homebaseGarden: jest.fn(),
     plantStarterOak: jest.fn(),
+    buyDecoration: jest.fn(),
+    moveDecoration: jest.fn(),
+    moveStarterOak: jest.fn(),
+    returnDecoration: jest.fn(),
   },
 }))
 
@@ -83,10 +87,10 @@ beforeEach(() => {
   jest.mocked(besideApi.plantStarterOak).mockReset().mockResolvedValue(plantedGarden)
 })
 
-function openScreen(width = 390) {
+function openScreen(width = 390, params: { placeItemId?: string } = {}) {
   const props = {
-    navigation: { navigate: jest.fn() },
-    route: { key: "homebase", name: "HomeBase", params: { connectionId: base.id } },
+    navigation: { navigate: jest.fn(), setParams: jest.fn() },
+    route: { key: "homebase", name: "HomeBase", params: { connectionId: base.id, ...params } },
   } as unknown as AppStackScreenProps<"HomeBase">
   const screen = render(
     <SafeAreaProvider
@@ -228,4 +232,90 @@ it("offers a retry if the initial garden request fails", async () => {
   const screen = openScreen()
   fireEvent.press(await screen.findByText("Try again"))
   await screen.findByTestId("homebase-starter-oak")
+})
+
+describe("acorn shop in the meadow", () => {
+  const entry = (id: string, amount: number) => ({
+    id,
+    homebaseId: base.id,
+    userId: "alice",
+    amount,
+    kind: "check-in" as const,
+    milestoneId: null,
+    decorationId: null,
+    note: "Chapter 1",
+    createdAt: "2026-11-13T10:00:00.000Z",
+  })
+  const pennant = {
+    id: "d1",
+    homebaseId: base.id,
+    itemId: "rose-pennant",
+    price: 50,
+    purchasedByUserId: "bob",
+    x: 176,
+    y: 112,
+    externalKey: null,
+    createdAt: "2026-11-13T11:00:00.000Z",
+  }
+  const tap = (x: number, y: number) => act(() => canvasProps().onTap(x, y, 4))
+
+  it("shows the shared pool and buys a shop item on the spot a member taps", async () => {
+    jest
+      .mocked(besideApi.state)
+      .mockResolvedValue({ ...state, acornEntries: [entry("a", 20), entry("b", 12)] })
+    jest.mocked(besideApi.buyDecoration).mockResolvedValue({ entityId: "d9", duplicate: false })
+    const screen = openScreen(390, { placeItemId: "sunflower" })
+    await screen.findByTestId("place-item-panel")
+    expect(screen.getByTestId("homebase-acorns-value").props.children).toBe("32")
+    expect(canvasProps().plantingGuide?.length).toBeGreaterThan(0)
+    await tap(220, 146)
+    expect(screen.getByText("Choose a clear patch of lawn.")).toBeTruthy()
+    await tap(96, 94)
+    expect(canvasProps().preview).toMatchObject({ itemId: "sunflower", x: 96, y: 96 })
+    await act(async () => fireEvent.press(screen.getByTestId("place-item-confirm")))
+    expect(besideApi.buyDecoration).toHaveBeenCalledWith(
+      expect.objectContaining({ homebaseId: base.id, itemId: "sunflower", x: 96, y: 96 }),
+    )
+    expect(await screen.findByText("Sunflower is in the meadow. 22 acorns left.")).toBeTruthy()
+  })
+
+  it("moves a decoration for free, keeping clear of the starter oak, and returns it", async () => {
+    jest.mocked(besideApi.state).mockResolvedValue({ ...state, decorations: [pennant] })
+    jest.mocked(besideApi.homebaseGarden).mockResolvedValue(plantedGarden)
+    jest.mocked(besideApi.moveDecoration).mockResolvedValue({ entityId: "d1", duplicate: false })
+    jest
+      .mocked(besideApi.returnDecoration)
+      .mockResolvedValue({ entityId: base.id, duplicate: false })
+    const screen = openScreen()
+    await screen.findByTestId("homebase-starter-oak")
+    await tap(176, 100)
+    expect(screen.getByTestId("homebase-selected-decoration").props.children).toBe("Rose pennant")
+    fireEvent.press(screen.getByTestId("homebase-move-decoration"))
+    await screen.findByText("Move rose pennant")
+    await tap(112, 102) // next to the oak at 104, 104
+    expect(screen.getByText("Something already stands there.")).toBeTruthy()
+    await tap(48, 198)
+    await act(async () => fireEvent.press(screen.getByTestId("place-item-confirm")))
+    expect(besideApi.moveDecoration).toHaveBeenCalledWith("d1", { x: 48, y: 200 })
+    expect(await screen.findByText("Moved the rose pennant. Moving is free.")).toBeTruthy()
+
+    await tap(176, 100)
+    await act(async () => fireEvent.press(screen.getByTestId("homebase-return-decoration")))
+    expect(besideApi.returnDecoration).toHaveBeenCalledWith("d1")
+  })
+
+  it("moves the starter oak", async () => {
+    jest.mocked(besideApi.homebaseGarden).mockResolvedValue(plantedGarden)
+    jest
+      .mocked(besideApi.moveStarterOak)
+      .mockResolvedValue({ oak: { x: 48, y: 200, itemId: "oak-tree" } })
+    const screen = openScreen()
+    await screen.findByTestId("homebase-starter-oak")
+    await tap(104, 92)
+    fireEvent.press(screen.getByTestId("homebase-move-oak"))
+    await tap(48, 198)
+    await act(async () => fireEvent.press(screen.getByTestId("place-item-confirm")))
+    expect(besideApi.moveStarterOak).toHaveBeenCalledWith(base.id, { x: 48, y: 200 })
+    expect(canvasProps().items).toContainEqual(expect.objectContaining({ x: 48, y: 200 }))
+  })
 })

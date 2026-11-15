@@ -62,6 +62,8 @@ Other rules:
 
 ### Price tiers and rarity
 
+These prices and earning numbers were confirmed as good enough for the showcase.
+
 | Tier      | Price | Items                          | Limit          | For a full 4-person turnout |
 | --------- | ----: | ------------------------------ | -------------- | --------------------------- |
 | Common    |    10 | Sunflower, Blush tulip         | none           | a quarter of one milestone  |
@@ -89,14 +91,15 @@ the server enforces exactly what the app shows.
   both spend the last acorns.
 - Legendary items the base already owns show "Owned · Already in your meadow".
 
-### Buying, placing and returning
+### Buying, placing, moving and returning
 
 Buying and placing are one action: choose an item, tap open lawn, preview it,
 then **Buy for 50 acorns**. A separate inventory step adds UI without adding
 much to the experiment. Tapping a bought item shows its tier, who paid and the
 price, plus **Return**, which removes it and refunds the full price. This
 follows the brief's "unused decorations can be returned for a full refund",
-applied to placed items too. Moving items is not built yet.
+applied to placed items too. **Move** is free: any member can move any bought
+item or the starter oak to another open patch of lawn.
 
 ## How it fits the existing model
 
@@ -113,45 +116,58 @@ applied to placed items too. Moving items is not built yet.
   grants it on cooperative completion. In this experiment, a milestone with an
   item reward pays acorns too. If the team adopts currency, those per-milestone
   item rewards could be retired or kept for keepsakes.
-- **Commands**: `buyDecoration` and `returnDecoration` run through the shared
+- **Commands**: `buyDecoration`, `moveDecoration` and `returnDecoration` run through the shared
   domain engine like every other command, so the playground could use them
   without API changes.
 - **API**: `GET /api/v1/shop` returns tiers, prices and earning rules.
   `POST /api/v1/decorations` buys and places an item with an optional
-  `externalKey` for safe retries. `DELETE /api/v1/decorations/{id}` returns it.
+  `externalKey` for safe retries. `PATCH /api/v1/decorations/{id}` moves it
+  for free, and `DELETE /api/v1/decorations/{id}` returns it.
+  `PATCH /api/v1/homebases/{id}/garden/starter-oak` moves the starter oak.
   `GET /state` now includes `acornEntries` and `decorations`, filtered to the
   caller's home bases.
-- **Migration 007** (`007_acorns.sql`). It is numbered after PR #14's 005/006 so
-  the two branches can merge in either order. Its only overlap is the
-  `latestMigration` constant.
+- **Migration 006** (`006_acorns.sql`), right after PR #14's
+  `005_homebase_starter_oak.sql`.
 
 ## PR #14 (starter oak) and what I chose
 
-PR #14 is not merged, so this branch is built on `main` without it.
+PR #14 has landed and is merged into this branch.
 
 - **The starter oak stays free.** It is the onboarding gift that teaches
   placement before a group has earned anything. The **Meadow oak is sold in the
   shop** as an uncommon item (25 acorns). New bases start at 0 acorns, so the
-  free oak covers the first-session moment that a starting grant would
-  otherwise cover.
-- **Placement rules.** The app checks terrain, scenery, friends and the picnic
-  blanket with its existing `placementAt`. The API currently checks only meadow
-  bounds, the 8 px grid and spacing from other purchases, because terrain is
-  still app-only on `main`. Once #14 lands, `placementRejection` in
-  `packages/domain/src/acorns.ts` should call its shared
-  `checkStarterOakPlacement`-style rule. That would also let the starter oak
-  become a `homebase_decoration` with `price = 0`, folding the
-  `homebase_starter_oak` table into one model of what stands in the meadow.
+  free oak covers the first session that a starting grant would otherwise
+  cover. The oak panel now says "Your first oak is free. Buy more in the acorn
+  shop" and shows shop prices instead of "Preview".
+- **One placement rule for everything in the meadow.** #14's
+  `checkStarterOakPlacement` (terrain, picnic area, scenery) became
+  `checkMeadowPlacement(point, occupied)` in `packages/domain/src/garden.ts`.
+  It also keeps clear of whatever is already placed. The server applies it to
+  buying and moving decorations, including keeping clear of the starter oak,
+  and to planting and moving the oak, including keeping clear of decorations.
+  The app's guide dots and tap checks use the same function.
+- **The starter oak keeps its own table.** It lives outside the command
+  snapshot, so the API adds its spot to buy and move commands as a
+  server-only `reserved` list. Folding it into `homebase_decoration` with
+  `price = 0` would remove that seam, but would change #14's freshly merged
+  API, so I left it for later.
+- **Placement looks the same.** Buying and moving reuse #14's guide dots,
+  closer framing, **Suggest spot** and planting pulse, in a matching floating
+  panel.
 
 ## Showcase
 
+A narrated, human-paced recording of these steps is in
+`~/projects/beside-experiments/rewards-currency/rewards-currency-demo-paced.mp4`.
+
 1. Run the API against a disposable database and seed the demo:
    `API_URL=http://localhost:3093 node --experimental-strip-types apps/api/scripts/seed-acorns-demo.ts`.
-   It creates "Project Beside" with four members and some earned and spent
-   acorns (balance 42), plus tonight's Chapter 3, open, with everyone but
-   Mosaab checked in.
+   It creates "Project Beside" with four members, plants the free starter oak,
+   and buys a sunflower, leaving a balance of 42. Tonight's Chapter 3 is open,
+   with everyone but Mosaab checked in.
 2. Sign in as `mosaab@demo.beside.test` / `beside-demo-password`.
-3. Home base shows **42** acorns and the sunflower Nathanael bought.
+3. The home base shows **42** acorns. Tap the oak ("Starter oak · A free gift")
+   and the sunflower ("Common · Nathanael paid 10").
 4. **Shop**: commons and uncommons are affordable. Rare items show "8 more" and
    legendary items show "One per meadow". Tap **Rose pennant**: "You need 8 more
    acorns…" with **Earn acorns**.
@@ -159,19 +175,20 @@ PR #14 is not merged, so this branch is built on `main` without it.
    "+32 when all 4 make it · 3 of 4 in". Tap **I was there**: "Everyone made
    it! +32 bonus acorns" and "+2 acorns".
 6. **Spend them in the shop**: the balance is 76, and the pennant is now
-   affordable. **Choose a spot**, tap open lawn left of the path, then **Buy for
-   50 acorns**. The pennant stands in the meadow and 26 acorns remain.
-7. Tap the pennant: "Rare · Mosaab paid 50", with **Return**. The shop's history
-   lists every acorn, including the together bonus and the purchase.
+   affordable. **Choose a spot**. Tapping beside the oak is refused ("Something
+   already stands there"). Tap open lawn, then **Buy for 50**. The pennant
+   stands in the meadow and 26 acorns remain.
+7. Tap the pennant → **Move** → tap another spot → **Move here**. The balance
+   stays at 26. The pennant's card also offers **Return** for a full refund.
+8. The shop's history lists every acorn, including the together bonus and the
+   purchase.
 
 ## Known gaps
 
-- Server placement does not check terrain until PR #14's shared terrain lands
-  (see above).
-- Bought items cannot be moved yet. Return and rebuy instead.
-- Farming acorns by creating many open milestones is possible. The brief already
-  lists "avoiding rewards for merely splitting one session into many logs" as
-  open. A daily cap per activity would be the simplest guard.
+- Farming acorns by creating many open milestones is possible. There is
+  deliberately no daily cap for now; abuse will be addressed later. The brief
+  also lists "avoiding rewards for merely splitting one session into many logs"
+  as open.
 - Prices and earning rules live in code (`packages/rewards/src/shop.ts`), not
   in the database. Changing the economy needs a deploy, which suits an
   experiment.

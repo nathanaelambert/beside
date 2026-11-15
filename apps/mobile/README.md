@@ -67,6 +67,17 @@ The camera widens on compact screens only while placing or confirming an oak;
 **Recenter** returns to the regular meadow view. If another member plants
 first, the garden refreshes and explains why your preview was not saved.
 
+### Acorn shop (rewards-currency experiment)
+
+The acorn count next to the Home Base name is the base's shared pool. Check-ins
+earn acorns, and the count opens the **Shop**, where items are grouped by rarity
+with prices. Items the base cannot afford show how many acorns are missing.
+Choosing an affordable item opens the same marked-spot placement as the oak,
+with **Buy for N**. Tap anything in the meadow to see where it came from. Bought
+items and the starter oak can be moved for free, and bought items can be
+returned for a full refund. See
+[the design note](../../docs/experiments/rewards-currency.md).
+
 For the web version, run from the repository root:
 
 ```sh

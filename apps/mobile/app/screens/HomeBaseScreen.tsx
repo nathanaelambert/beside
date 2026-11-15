@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, View } from "react-native"
 import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
+import { shopListing } from "@beside/api-client/acorns"
 import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
+import { AcornAmount, AcornCount } from "@/components/AcornCount"
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
+import { PlaceItemPanel } from "@/components/pixel-world/PlaceItemPanel"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
-import { avatarAt, initialItems } from "@/components/pixel-world/scene"
+import {
+  avatarAt,
+  catalogue,
+  hitTest,
+  initialItems,
+  type WorldItem,
+} from "@/components/pixel-world/scene"
 import {
   oakAt,
   oakPlantingPulseMs,
@@ -20,6 +29,7 @@ import { RewardSprite } from "@/components/RewardSprite"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import { acornLabel, homebaseAcorns, tierFor } from "@/services/api/acorns"
 import { besideApi } from "@/services/api/beside"
 import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
@@ -29,6 +39,12 @@ const plantingFraming = { ...homeFraming, centerY: 110 }
 const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
+/** Buying a shop item, or moving something already in the meadow (moving is free). */
+type Placing =
+  | { kind: "buy"; itemId: string }
+  | { kind: "move"; itemId: string; decorationId: string }
+  | { kind: "move-oak"; itemId: string }
+const oakKey = "starter-oak"
 
 export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeBase">) {
   const { logout } = useAuth()
@@ -45,6 +61,28 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [savingOak, setSavingOak] = useState(false)
   const [plantedIn, setPlantedIn] = useState<string>()
   const plantingLock = useRef(false)
+  const [placing, setPlacing] = useState<Placing>()
+  const [placePosition, setPlacePosition] = useState<MeadowPoint>()
+  const [placeError, setPlaceError] = useState("")
+  const [savingPlace, setSavingPlace] = useState(false)
+  const [pulse, setPulse] = useState<WorldItem>()
+  const [notice, setNotice] = useState("")
+  const placeItemId = route.params?.placeItemId
+
+  useEffect(() => {
+    if (!placeItemId) return
+    setSelectedKey(undefined)
+    setNotice("")
+    setPlacePosition(undefined)
+    setPlaceError("")
+    setPlacing({ kind: "buy", itemId: placeItemId })
+  }, [placeItemId])
+
+  useEffect(() => {
+    if (!pulse) return
+    const timer = setTimeout(() => setPulse(undefined), oakPlantingPulseMs)
+    return () => clearTimeout(timer)
+  }, [pulse])
 
   useEffect(() => {
     if (!plantedIn) return
@@ -115,8 +153,55 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const position = editing ? planting?.position : undefined
   const justPlanted =
     oak && homebase && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined
+  const acorns = useMemo(
+    () => (data && homebase ? homebaseAcorns(data.state, homebase.id).balance : 0),
+    [data, homebase],
+  )
+  const decorations = useMemo(
+    () => data?.state.decorations.filter((row) => row.homebaseId === homebase?.id) ?? [],
+    [data, homebase],
+  )
+  const decorationItems = useMemo<WorldItem[]>(
+    () => decorations.map((row) => ({ key: row.id, itemId: row.itemId, x: row.x, y: row.y })),
+    [decorations],
+  )
+  const oakItem = useMemo(() => (oak ? oakAt(oak, oakKey) : undefined), [oak])
+  const placed = useMemo(
+    () => (oakItem ? [oakItem, ...decorationItems] : decorationItems),
+    [oakItem, decorationItems],
+  )
+  const placingItem = placing && homebase && data ? catalogue.get(placing.itemId) : undefined
+  const placingListing = placing?.kind === "buy" ? shopListing(placing.itemId) : null
+  // Everything already standing in the meadow, except whatever is being moved.
+  const occupied = useMemo(
+    () =>
+      placed.filter((item) =>
+        placing?.kind === "move"
+          ? item.key !== placing.decorationId
+          : placing?.kind === "move-oak"
+            ? item.key !== oakKey
+            : true,
+      ),
+    [placed, placing],
+  )
+  const guide = useMemo(
+    () =>
+      placingItem
+        ? starterOakGuidePoints(occupied)
+        : editing
+          ? starterOakGuidePoints(decorationItems)
+          : undefined,
+    [placingItem, editing, occupied, decorationItems],
+  )
+  const selectedDecoration = decorations.find((row) => row.id === selectedKey)
+  const selectedDecorationItem = selectedDecoration && catalogue.get(selectedDecoration.itemId)
+  const selectedOak = selectedKey === oakKey && oakItem
+  const buyerName = selectedDecoration
+    ? (data?.state.users.find((user) => user.id === selectedDecoration.purchasedByUserId)?.name ??
+      "Someone")
+    : ""
   const framing =
-    editing || justPlanted
+    editing || justPlanted || placingItem || pulse
       ? size.width < 600
         ? compactPlantingFraming
         : plantingFraming
@@ -131,11 +216,25 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
 
   function tapWorld(x: number, y: number, scale: number) {
     if (plantingLock.current) return
-    if (!editing || !homebase) {
-      setSelectedKey(avatarAt(x, y, scale, avatars)?.key)
+    if (placingItem) {
+      const { point, rejection } = starterOakTap(x, y, occupied)
+      setPlacePosition(rejection ? undefined : point)
+      setPlaceError(
+        rejection === "occupied"
+          ? "Something already stands there."
+          : rejection
+            ? "Choose a clear patch of lawn."
+            : "",
+      )
       return
     }
-    const { point, rejection } = starterOakTap(x, y)
+    if (!editing || !homebase) {
+      const hit = hitTest(placed, x, y, scale)
+      setSelectedKey(hit?.key ?? avatarAt(x, y, scale, avatars)?.key)
+      setNotice("")
+      return
+    }
+    const { point, rejection } = starterOakTap(x, y, decorationItems)
     setPlanting({ homebaseId: homebase.id, position: rejection ? undefined : point })
     setGardenError(
       rejection === "occupied"
@@ -149,7 +248,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   function suggestSpot() {
     if (!homebase || !editing || plantingLock.current) return
     // Offer a keyboard/screen-reader path without requiring a canvas gesture.
-    const points = [...starterOakGuidePoints()].sort(
+    const points = [...starterOakGuidePoints(decorationItems)].sort(
       (a, b) =>
         Math.hypot(a.x - framing.centerX, a.y - framing.centerY) -
         Math.hypot(b.x - framing.centerX, b.y - framing.centerY),
@@ -205,6 +304,93 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
     }
   }
 
+  function startPlacing(next: Placing) {
+    setSelectedKey(undefined)
+    setNotice("")
+    setPlacePosition(undefined)
+    setPlaceError("")
+    setPlacing(next)
+  }
+
+  function stopPlacing() {
+    setPlacing(undefined)
+    setPlacePosition(undefined)
+    setPlaceError("")
+    if (route.params?.placeItemId) navigation.setParams({ placeItemId: undefined })
+  }
+
+  function suggestPlace() {
+    if (!guide?.length || savingPlace) return
+    const points = [...guide].sort(
+      (a, b) =>
+        Math.hypot(a.x - framing.centerX, a.y - framing.centerY) -
+        Math.hypot(b.x - framing.centerX, b.y - framing.centerY),
+    )
+    const index = points.findIndex(
+      (point) => point.x === placePosition?.x && point.y === placePosition.y,
+    )
+    setCameraReset((value) => value + 1)
+    setPlacePosition(points[(index + 1) % points.length])
+    setPlaceError("")
+  }
+
+  async function confirmPlace() {
+    if (!placing || !placingItem || !placePosition || !homebase || savingPlace) return
+    setSavingPlace(true)
+    setPlaceError("")
+    try {
+      let key: string
+      if (placing.kind === "buy") {
+        const result = await besideApi.buyDecoration({
+          homebaseId: homebase.id,
+          itemId: placing.itemId,
+          ...placePosition,
+          externalKey: `buy:${placing.itemId}:${placePosition.x}:${placePosition.y}:${Date.now()}`,
+        })
+        key = result.entityId
+        setNotice(
+          `${placingItem.name} is in the meadow. ${acornLabel(acorns - (placingListing?.price ?? 0))} left.`,
+        )
+      } else if (placing.kind === "move") {
+        await besideApi.moveDecoration(placing.decorationId, placePosition)
+        key = placing.decorationId
+        setNotice(`Moved the ${placingItem.name.toLowerCase()}. Moving is free.`)
+      } else {
+        const garden = await besideApi.moveStarterOak(homebase.id, placePosition)
+        setData((current) =>
+          current?.homebase?.id === homebase.id ? { ...current, garden } : current,
+        )
+        key = oakKey
+        setNotice("Moved the starter oak. Moving is free.")
+      }
+      setPulse({ key: `pulse-${key}`, itemId: placing.itemId, ...placePosition })
+      stopPlacing()
+      setSelectedKey(key)
+      if (placing.kind !== "move-oak") setAttempt((value) => value + 1)
+    } catch (e) {
+      setPlaceError(e instanceof Error ? e.message : "We couldn’t save that. Please try again.")
+    } finally {
+      setSavingPlace(false)
+    }
+  }
+
+  async function giveBack() {
+    if (!selectedDecoration || savingPlace) return
+    setSavingPlace(true)
+    try {
+      await besideApi.returnDecoration(selectedDecoration.id)
+      setNotice(
+        `${selectedDecorationItem?.name ?? "It"} went back to the shop. ${acornLabel(selectedDecoration.price)} returned.`,
+      )
+      setSelectedKey(undefined)
+      setAttempt((value) => value + 1)
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "We couldn’t return that. Please try again.")
+    } finally {
+      setSavingPlace(false)
+    }
+  }
+
   async function signOut() {
     setLoggingOut(true)
     try {
@@ -236,12 +422,21 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             <Text text={loggingOut ? "Logging out…" : "Log out"} style={styles.smallText} />
           </Pressable>
         </View>
-        <Text
-          testID="homebase-name"
-          text={homebase?.name ?? "Home base"}
-          weight="semiBold"
-          style={styles.title}
-        />
+        <View style={styles.titleRow}>
+          <Text
+            testID="homebase-name"
+            text={homebase?.name ?? "Home base"}
+            weight="semiBold"
+            style={styles.title}
+          />
+          {homebase && (
+            <AcornCount
+              amount={acorns}
+              testID="homebase-acorns"
+              onPress={() => navigation.navigate("Shop", { connectionId: homebase.id })}
+            />
+          )}
+        </View>
         {!!members.length && <Text text={firstNamesLabel(members)} style={styles.subtitle} />}
       </View>
       <View
@@ -253,30 +448,42 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           <>
             <WorldCanvas
               {...size}
-              items={oak ? [...initialItems, oakAt(oak)] : initialItems}
+              items={[...initialItems, ...placed]}
               avatars={avatars}
-              selectedKey={selectedKey}
-              preview={position ? oakAt(position, "preview") : undefined}
-              showPlantingGuide={editing}
-              justPlanted={justPlanted}
+              selectedKey={editing || placingItem ? undefined : selectedKey}
+              preview={
+                position
+                  ? oakAt(position, "preview")
+                  : placingItem && placePosition
+                    ? { key: "preview", itemId: placingItem.id, ...placePosition }
+                    : undefined
+              }
+              plantingGuide={guide}
+              justPlanted={justPlanted ?? pulse}
               framing={framing}
               picnic="group"
               resetCamera={cameraReset}
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? "Tap an open patch of lawn to preview the oak, or use Suggest spot." : "Drag to explore. Tap a friend to see their name."}`}
+              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing || placingItem ? "Tap an open patch of lawn to preview it, or use Suggest spot." : "Drag to explore. Tap a friend or a decoration."}`}
             />
             <View
               pointerEvents="none"
               style={styles.worldLabel}
               testID={editing ? "oak-placement-guide" : undefined}
             >
-              <View style={[styles.dot, editing && styles.guideDot]} />
+              <View style={[styles.dot, (editing || !!placingItem) && styles.guideDot]} />
               <Text
-                text={editing ? "Marked spots are plantable" : "The meadow"}
+                text={
+                  editing
+                    ? "Marked spots are plantable"
+                    : placingItem
+                      ? "Marked spots are free"
+                      : "The meadow"
+                }
                 style={styles.labelText}
               />
             </View>
-            {!editing && (
+            {!editing && !placingItem && (
               <Pressable
                 testID="homebase-recenter"
                 accessibilityRole="button"
@@ -339,41 +546,126 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             </Pressable>
           </View>
         )}
-        <View style={styles.detail}>
-          {selected && (
+        {!!notice && (
+          <Text
+            testID="homebase-notice"
+            text={notice}
+            accessibilityLiveRegion="polite"
+            style={styles.success}
+          />
+        )}
+        {selectedDecoration && selectedDecorationItem ? (
+          <View style={styles.detail}>
             <View style={styles.thumbnail}>
-              <RewardSprite
-                item={{
-                  id: selected.key,
-                  name: selected.name,
-                  category: "Friends",
-                  artifact: selected.frames.idle,
-                }}
-                scale={3}
+              <RewardSprite item={selectedDecorationItem} scale={2} />
+            </View>
+            <View style={styles.detailText}>
+              <Text
+                testID="homebase-selected-decoration"
+                text={selectedDecorationItem.name}
+                weight="semiBold"
+                style={styles.sectionTitle}
+                accessibilityLiveRegion="polite"
+              />
+              <View style={styles.boughtRow}>
+                <Text
+                  text={`${tierFor(shopListing(selectedDecoration.itemId)?.rarity ?? "common").name} · ${buyerName.split(/\s+/)[0]} paid`}
+                  style={styles.description}
+                />
+                <AcornAmount amount={selectedDecoration.price} muted />
+              </View>
+            </View>
+            <View style={styles.itemActions}>
+              <Pressable
+                testID="homebase-move-decoration"
+                accessibilityRole="button"
+                accessibilityLabel={`Move ${selectedDecorationItem.name}`}
+                disabled={savingPlace}
+                style={({ pressed }) => [styles.smallButton, pressed && styles.pressed]}
+                onPress={() =>
+                  startPlacing({
+                    kind: "move",
+                    itemId: selectedDecoration.itemId,
+                    decorationId: selectedDecoration.id,
+                  })
+                }
+              >
+                <Text text="Move" style={styles.smallText} />
+              </Pressable>
+              <Pressable
+                testID="homebase-return-decoration"
+                accessibilityRole="button"
+                accessibilityLabel={`Return ${selectedDecorationItem.name} for ${acornLabel(selectedDecoration.price)}`}
+                disabled={savingPlace}
+                style={({ pressed }) => [styles.smallButton, pressed && styles.pressed]}
+                onPress={() => void giveBack()}
+              >
+                <Text text="Return" style={styles.smallText} />
+              </Pressable>
+            </View>
+          </View>
+        ) : selectedOak ? (
+          <View style={styles.detail}>
+            <View style={styles.thumbnail}>
+              <RewardSprite item={catalogue.get(selectedOak.itemId)!} scale={2} />
+            </View>
+            <View style={styles.detailText}>
+              <Text
+                testID="homebase-selected-oak"
+                text="Starter oak"
+                weight="semiBold"
+                style={styles.sectionTitle}
+                accessibilityLiveRegion="polite"
+              />
+              <Text text="A free gift for your home base." style={styles.description} />
+            </View>
+            <Pressable
+              testID="homebase-move-oak"
+              accessibilityRole="button"
+              accessibilityLabel="Move the starter oak"
+              style={({ pressed }) => [styles.smallButton, pressed && styles.pressed]}
+              onPress={() => startPlacing({ kind: "move-oak", itemId: selectedOak.itemId })}
+            >
+              <Text text="Move" style={styles.smallText} />
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.detail}>
+            {selected && (
+              <View style={styles.thumbnail}>
+                <RewardSprite
+                  item={{
+                    id: selected.key,
+                    name: selected.name,
+                    category: "Friends",
+                    artifact: selected.frames.idle,
+                  }}
+                  scale={3}
+                />
+              </View>
+            )}
+            <View style={styles.detailText}>
+              <Text
+                testID="homebase-selected-member"
+                text={selected?.name ?? "Your people, together"}
+                weight="semiBold"
+                style={styles.sectionTitle}
+                accessibilityLiveRegion="polite"
+              />
+              <Text
+                text={selected ? "Part of your home base." : "Tap a friend or a decoration."}
+                style={styles.description}
               />
             </View>
-          )}
-          <View style={styles.detailText}>
-            <Text
-              testID="homebase-selected-member"
-              text={selected?.name ?? "Your people, together"}
-              weight="semiBold"
-              style={styles.sectionTitle}
-              accessibilityLiveRegion="polite"
-            />
-            <Text
-              text={selected ? "Part of your home base." : "Tap a friend in the meadow."}
-              style={styles.description}
-            />
+            {homebase && (
+              <Text
+                testID="homebase-member-count"
+                text={`${members.length} members`}
+                style={styles.count}
+              />
+            )}
           </View>
-          {homebase && (
-            <Text
-              testID="homebase-member-count"
-              text={`${members.length} members`}
-              style={styles.count}
-            />
-          )}
-        </View>
+        )}
         <View style={styles.actions}>
           <Pressable
             testID="homebase-create-activity"
@@ -397,6 +689,15 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           >
             <Text text="Activities" weight="medium" style={styles.secondaryText} />
           </Pressable>
+          <Pressable
+            testID="homebase-shop"
+            accessibilityRole="button"
+            disabled={!homebase}
+            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+            onPress={() => homebase && navigation.navigate("Shop", { connectionId: homebase.id })}
+          >
+            <Text text="Shop" weight="medium" style={styles.secondaryText} />
+          </Pressable>
         </View>
       </View>
       {editing && (
@@ -412,13 +713,39 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           onSuggest={suggestSpot}
         />
       )}
+      {placing && placingItem && (
+        <PlaceItemPanel
+          item={placingItem}
+          title={
+            placing.kind === "buy"
+              ? `Buy ${placingItem.name.toLowerCase()}`
+              : placing.kind === "move"
+                ? `Move ${placingItem.name.toLowerCase()}`
+                : "Move the starter oak"
+          }
+          confirmText={
+            savingPlace
+              ? "Saving…"
+              : placing.kind === "buy"
+                ? `Buy for ${placingListing?.price ?? ""}`
+                : "Move here"
+          }
+          hasPreview={!!placePosition}
+          saving={savingPlace}
+          error={placeError}
+          onCancel={stopPlacing}
+          onConfirm={() => void confirmPlace()}
+          onSuggest={suggestPlace}
+        />
+      )}
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: "row", gap: 12 },
+  actions: { flexDirection: "row", gap: 10 },
   body: { color: world.text, fontSize: 14, lineHeight: 22 },
+  boughtRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 },
   count: { color: world.muted, fontSize: 11, lineHeight: 16 },
   description: { color: world.muted, fontSize: 12, lineHeight: 18 },
   detail: { alignItems: "center", flexDirection: "row", gap: 12, minHeight: 64 },
@@ -437,6 +764,7 @@ const styles = StyleSheet.create({
   },
   header: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 8 },
   headingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  itemActions: { flexDirection: "row", gap: 8 },
   labelText: { color: world.text, fontSize: 11, lineHeight: 16 },
   loading: {
     alignItems: "center",
@@ -490,12 +818,22 @@ const styles = StyleSheet.create({
     borderWidth: worldShape.border,
     justifyContent: "center",
     minHeight: worldShape.control,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   secondaryText: { color: world.text, fontSize: 14, lineHeight: 22 },
   sectionTitle: { color: world.ink, fontSize: 18, lineHeight: 24 },
+  smallButton: {
+    backgroundColor: world.panel,
+    borderColor: world.line,
+    borderRadius: worldShape.radius,
+    borderWidth: worldShape.border,
+    justifyContent: "center",
+    minHeight: 40,
+    paddingHorizontal: 12,
+  },
   smallText: { color: world.text, fontSize: 13, lineHeight: 20 },
   subtitle: { color: world.muted, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  success: { color: world.forest, fontSize: 13, lineHeight: 20 },
   thumbnail: {
     alignItems: "center",
     backgroundColor: world.meadow,
@@ -506,7 +844,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 64,
   },
-  title: { color: world.ink, fontSize: 27, lineHeight: 34 },
+  title: { color: world.ink, flexShrink: 1, fontSize: 27, lineHeight: 34 },
+  titleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
   world: { backgroundColor: world.canvas, flex: 1, overflow: "hidden" },
   worldLabel: {
     alignItems: "center",
