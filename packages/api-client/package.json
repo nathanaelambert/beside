@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./precursors": "./src/precursors.ts"
+    "./precursors": "./src/precursors.ts",
+    "./garden": "./src/garden.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",

@@ -485,6 +485,9 @@ const originalItems: RewardItem[] = [
   },
 ];
 
+// The eight everyday decorations, without the precursor items below.
+export const decorationItems: readonly RewardItem[] = originalItems;
+
 // Precursor items (a Christmas tree and four cottage stages) follow the originals.
 // Their rules live in recipes.ts.
 export const rewardItems: RewardItem[] = [...originalItems, ...precursorItems];

@@ -33,6 +33,11 @@ describe("public API contract without a database", () => {
     await SwaggerParser.validate(structuredClone(body));
     assert.match(body.openapi, /^3\./);
     assert.ok(body.paths["/api/v1/logs"].post);
+    assert.ok(body.paths["/api/v1/homebases/{homebaseId}/garden"].get.security);
+    assert.ok(
+      body.paths["/api/v1/homebases/{homebaseId}/garden/starter-oak"].post
+        .security,
+    );
     assert.ok(body.paths["/api/v1/auth/register"].post);
     assert.equal(body.components.schemas.CreateLog.additionalProperties, false);
     assert.ok(
@@ -549,6 +554,49 @@ describe(
         },
         400,
       );
+    });
+    it("shares one starter oak with members and rejects invalid, concurrent, and unrelated placements", async () => {
+      const base = await create(alice, "homebases", {
+        name: "Starter oak garden",
+      });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const path = `/api/v1/homebases/${base.id}/garden`;
+      const server = app.getHttpServer();
+      const get = (session: Session) =>
+        request(server).get(path).set(auth(session));
+      const plant = (session: Session, x: number, y: number) =>
+        request(server)
+          .post(`${path}/starter-oak`)
+          .set(auth(session))
+          .send({ x, y });
+      await request(server).get(path).expect(401);
+      await get(stranger).expect(404);
+      await plant(stranger, 104, 104).expect(404);
+      await get(alice).expect(200, { oak: null });
+      await plant(alice, 224, 144).expect(400);
+      await plant(alice, 144, 104).expect(400);
+      await plant(alice, 104, 105).expect(400);
+      await plant(alice, 288, 104).expect(400);
+      await request(server)
+        .post(`${path}/starter-oak`)
+        .set(auth(alice))
+        .send({ x: 104, y: 104, itemId: "pine-tree" })
+        .expect(400);
+      const results = await Promise.all([
+        plant(alice, 104, 104),
+        plant(bob, 184, 104),
+      ]);
+      assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);
+      const garden = results.find(({ status }) => status === 200)!.body;
+      assert.equal(garden.oak.itemId, "oak-tree");
+      await get(bob).expect(200, garden);
+      await plant(alice, garden.oak.x, garden.oak.y).expect(200, garden);
+      await get(stranger).expect(404);
+      await request(server)
+        .delete(`/api/v1/homebases/${base.id}`)
+        .set(auth(alice))
+        .expect(200);
+      await get(bob).expect(404);
     });
     it("records immediate attendance at server time and replays it without another log", async () => {
       const activity = await create(alice, "activities", {

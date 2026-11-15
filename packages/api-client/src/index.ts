@@ -14,10 +14,12 @@ import type {
   CreateMilestoneInput,
   CreateSubjectInput,
   HomebaseRewards,
+  HomebaseGarden,
   LoginInput,
   MutationResult,
   RegisterInput,
   Session,
+  PlantStarterOakInput,
   UpdateActivityInput,
   UpdateMilestoneInput,
 } from "@beside/domain/api";
@@ -125,6 +127,18 @@ export class BesideClient {
   }
   garden() {
     return this.request<GardenObject[]>("/garden");
+  }
+  homebaseGarden(homebaseId: string) {
+    return this.request<HomebaseGarden>(
+      `/homebases/${encodeURIComponent(homebaseId)}/garden`,
+    );
+  }
+  plantStarterOak(homebaseId: string, position: PlantStarterOakInput) {
+    return this.request<HomebaseGarden>(
+      `/homebases/${encodeURIComponent(homebaseId)}/garden/starter-oak`,
+      "POST",
+      position,
+    );
   }
   createHomebase(name: string) {
     return this.request<ApiHomebase>("/homebases", "POST", { name });

@@ -13,6 +13,10 @@ Start with the [working concept brief](product/concept-brief.md) for the product
 
 - [Shared backend API](../apps/api/README.md): NestJS, Neon/PostgreSQL, Vercel deployment, authentication, OpenAPI, and first-pass limitations.
 
+- [Architecture overview](architecture/README.md): index of the pages below, with Mermaid diagrams GitHub renders.
+- [Current architecture](architecture/current-architecture.md) and [data flows](architecture/data-flows.md): what runs today, scanned from `main` on 2026-11-14.
+- [Target architecture](architecture/target-architecture.md): Vercel Pro (recommended) and an AWS alternative.
+- [Target schema](architecture/schema/ERD.md) and [implementation plan](architecture/schema/IMPLEMENTATION-PLAN.md): data model, whiteboard additions and PRs 0–8.
 - [Entity relationship draft](architecture/entities.md): the 2026-10-20 model from `docs/entities`, preserved as written, including open logging-policy questions.
 - [Implemented playground model](architecture/playground-model.md): milestones, home-base rewards, milestone-zero participation, schedule policies, and compatibility decisions. These prototype choices differ from parts of the entity draft.
 - [Playground model](../apps/playground/README.md): a runnable conceptual experiment with working ownership/participation assumptions, five rendered ERDs, and a [reference SQL shape](../apps/playground/schema.sql). These prototype choices are not final product decisions.
