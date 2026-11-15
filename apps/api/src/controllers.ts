@@ -155,6 +155,24 @@ export class DomainController {
       input.plantStarterOakSchema.parse(body),
     );
   }
+  @Patch("homebases/:homebaseId/garden/starter-oak")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiBody({ schema: ref("PlantStarterOak") })
+  @ApiOkResponse({ schema: ref("HomebaseGarden") })
+  @ApiOperation({
+    summary: "Move the planted starter oak to another clear patch of lawn",
+  })
+  moveStarterOak(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+    @Body() body: unknown,
+  ) {
+    return this.garden.move(
+      request.actor.id,
+      homebaseId,
+      input.plantStarterOakSchema.parse(body),
+    );
+  }
   @Post("homebases")
   @ApiBody({ schema: ref("CreateHomebase") })
   @ApiCreatedResponse({ schema: ref("Homebase") })
@@ -453,6 +471,27 @@ export class DomainController {
       type: "buyDecoration",
       actorId: request.actor.id,
       ...input.buyDecorationSchema.parse(body),
+    });
+  }
+  @Patch("decorations/:decorationId")
+  @ApiParam({ name: "decorationId", type: String })
+  @ApiBody({ schema: ref("MoveDecoration") })
+  @ApiOkResponse({ schema: ref("Mutation") })
+  @ApiOperation({
+    summary: "Move a decoration to another clear patch of lawn (free)",
+    description:
+      "Any member can move any decoration. The same meadow rule as buying applies, including keeping clear of the starter oak. Moving to the current spot is a no-op reported as a duplicate.",
+  })
+  moveDecoration(
+    @Req() request: AuthenticatedRequest,
+    @Param("decorationId") decorationId: string,
+    @Body() body: unknown,
+  ) {
+    return this.domain.command({
+      type: "moveDecoration",
+      actorId: request.actor.id,
+      decorationId,
+      ...input.moveDecorationSchema.parse(body),
     });
   }
   @Delete("decorations/:decorationId")

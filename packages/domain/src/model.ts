@@ -15,6 +15,7 @@ import {
   buyDecoration,
   detachAcorns,
   earnAcorns,
+  moveDecoration,
   returnDecoration,
 } from "./acorns.ts";
 
@@ -1104,6 +1105,7 @@ export function execute(
           x: command.x,
           y: command.y,
           externalKey,
+          reserved: command.reserved,
         },
         now,
       );
@@ -1117,6 +1119,37 @@ export function execute(
         `${db.users.find((u) => u.id === command.actorId)?.name} bought ${db.rewardItems.find((i) => i.id === decoration.itemId)?.name} for ${decoration.price} acorns.`,
         people,
         base.id,
+        "activity",
+      );
+      break;
+    }
+    case "moveDecoration": {
+      const decoration = requireValue(
+        db.decorations.find((row) => row.id === command.decorationId),
+        "Decoration is missing.",
+      );
+      const people = members(db, decoration.homebaseId);
+      if (!people.includes(command.actorId))
+        throw new Error("Decoration is not accessible.");
+      entityId = decoration.id;
+      if (
+        !moveDecoration(
+          db,
+          decoration,
+          { x: command.x, y: command.y },
+          command.reserved,
+        )
+      )
+        return { db: database, entityId, duplicate: true };
+      emit(
+        db,
+        command.actorId,
+        "decoration.moved",
+        "homebase",
+        decoration.homebaseId,
+        `${db.users.find((u) => u.id === command.actorId)?.name} moved ${db.rewardItems.find((i) => i.id === decoration.itemId)?.name}.`,
+        people,
+        decoration.homebaseId,
         "activity",
       );
       break;

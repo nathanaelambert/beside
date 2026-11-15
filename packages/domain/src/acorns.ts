@@ -1,4 +1,5 @@
 import { earning, shopListing } from "@beside/rewards/shop";
+import { checkMeadowPlacement, type MeadowPoint } from "./garden.ts";
 import type {
   AcornEntry,
   AcornEntryKind,
@@ -9,10 +10,6 @@ import type {
 
 // Experiment: a shared acorn pool per home base. Milestones earn acorns and the
 // shop sells catalog items at tiered prices. See docs/experiments/rewards-currency.md.
-
-export const meadowBounds = { width: 288, height: 240, grid: 8 } as const;
-// Two decorations cannot share a patch: the same spacing the app uses for scenery.
-export const decorationSpacing = { x: 22, y: 18 } as const;
 
 export const acornBalance = (
   db: Pick<Database, "acornEntries">,
@@ -143,34 +140,30 @@ export function earnAcorns(
   return { earned, together };
 }
 
+/**
+ * The shared meadow rule (terrain, picnic, scenery) plus everything already
+ * placed in this home base: its other decorations and any `reserved` spots,
+ * such as the starter oak, which is stored outside the command snapshot.
+ */
 export function placementRejection(
   db: Pick<Database, "decorations">,
   homebaseId: string,
-  x: number,
-  y: number,
+  point: MeadowPoint,
+  reserved: readonly MeadowPoint[] = [],
+  ignoreDecorationId?: string,
 ): string | null {
-  const { width, height, grid } = meadowBounds;
-  if (
-    !Number.isInteger(x) ||
-    !Number.isInteger(y) ||
-    x % grid !== 0 ||
-    y % grid !== 0 ||
-    x < 16 ||
-    x > width - 16 ||
-    y < 32 ||
-    y > height - 8
-  )
-    return "Choose a spot inside the meadow.";
-  if (
-    db.decorations.some(
-      (row) =>
-        row.homebaseId === homebaseId &&
-        Math.abs(row.x - x) < decorationSpacing.x &&
-        Math.abs(row.y - y) < decorationSpacing.y,
-    )
-  )
-    return "That spot is already taken.";
-  return null;
+  const occupied = [
+    ...db.decorations.filter(
+      (row) => row.homebaseId === homebaseId && row.id !== ignoreDecorationId,
+    ),
+    ...reserved,
+  ];
+  const rejection = checkMeadowPlacement(point, occupied);
+  return rejection === "occupied"
+    ? "That spot is already taken."
+    : rejection
+      ? "Choose a clear patch of lawn."
+      : null;
 }
 
 export function purchaseRejection(
@@ -203,12 +196,13 @@ export function buyDecoration(
     x: number;
     y: number;
     externalKey: string | null;
+    reserved?: readonly MeadowPoint[];
   },
   now: string,
 ): Decoration {
   const rejection =
     purchaseRejection(db, input.homebaseId, input.itemId) ??
-    placementRejection(db, input.homebaseId, input.x, input.y);
+    placementRejection(db, input.homebaseId, input, input.reserved);
   if (rejection) throw new Error(rejection);
   const listing = shopListing(input.itemId)!;
   const decoration: Decoration = {
@@ -237,6 +231,27 @@ export function buyDecoration(
     now,
   );
   return decoration;
+}
+
+/** Moving is free: only the placement rule applies. */
+export function moveDecoration(
+  db: Database,
+  decoration: Decoration,
+  point: MeadowPoint,
+  reserved: readonly MeadowPoint[] = [],
+) {
+  if (decoration.x === point.x && decoration.y === point.y) return false;
+  const rejection = placementRejection(
+    db,
+    decoration.homebaseId,
+    point,
+    reserved,
+    decoration.id,
+  );
+  if (rejection) throw new Error(rejection);
+  decoration.x = point.x;
+  decoration.y = point.y;
+  return true;
 }
 
 /** Return a decoration to the shop for a full refund of what was paid. */

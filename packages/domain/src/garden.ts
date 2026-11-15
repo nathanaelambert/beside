@@ -38,8 +38,20 @@ export const initialMeadowItems = [
   { key: "tulip-south", itemId: "pink-tulip", x: 112, y: 202 },
 ];
 
-/** Keep the shared gathering area clear regardless of the current avatar count. */
-export function checkStarterOakPlacement({ x, y }: MeadowPoint) {
+// Two things standing in the meadow keep at least this far apart.
+export const meadowSpacing = { x: 22, y: 18 } as const;
+
+export type MeadowRejection = "off-grid" | "terrain" | "occupied";
+
+/**
+ * One placement rule for everything that stands in the meadow: the starter oak
+ * and bought decorations. `occupied` lists the other things already placed.
+ * Keeps the shared gathering area clear regardless of the current avatar count.
+ */
+export function checkMeadowPlacement(
+  { x, y }: MeadowPoint,
+  occupied: readonly MeadowPoint[] = [],
+): MeadowRejection | null {
   if (
     !Number.isInteger(x) ||
     !Number.isInteger(y) ||
@@ -69,14 +81,28 @@ export function checkStarterOakPlacement({ x, y }: MeadowPoint) {
     )
   )
     return "occupied";
+  if (
+    occupied.some(
+      (item) =>
+        Math.abs(item.x - x) < meadowSpacing.x &&
+        Math.abs(item.y - y) < meadowSpacing.y,
+    )
+  )
+    return "occupied";
 
   return null;
 }
 
-export function starterOakPlacements(): MeadowPoint[] {
+export const checkStarterOakPlacement = checkMeadowPlacement;
+
+export function meadowPlacements(
+  occupied: readonly MeadowPoint[] = [],
+): MeadowPoint[] {
   const points: MeadowPoint[] = [];
   for (let y = 0; y < WORLD_HEIGHT; y += meadowGridSize)
     for (let x = 0; x < WORLD_WIDTH; x += meadowGridSize)
-      if (!checkStarterOakPlacement({ x, y })) points.push({ x, y });
+      if (!checkMeadowPlacement({ x, y }, occupied)) points.push({ x, y });
   return points;
 }
+
+export const starterOakPlacements = () => meadowPlacements();

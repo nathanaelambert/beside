@@ -175,8 +175,8 @@ describe("acorn rules in the shared command engine", () => {
           actorId: "ana",
           homebaseId: base,
           itemId: "owl-statue",
-          x: 200,
-          y: 200,
+          x: 208,
+          y: 184,
         }),
       /already has this legendary item/,
     );
@@ -185,6 +185,51 @@ describe("acorn rules in the shared command engine", () => {
     const purchase = db.acornEntries.find((row) => row.kind === "purchase")!;
     assert.equal(purchase.decorationId, null);
     assert.equal(purchase.note, "Watchful owl");
+    parseDatabase(db);
+  });
+
+  it("moves decorations for free under the shared meadow rule", () => {
+    const flower = run({
+      type: "buyDecoration",
+      actorId: "ana",
+      homebaseId: base,
+      itemId: "sunflower",
+      x: 96,
+      y: 96,
+    });
+    const balance = acornBalance(db, base);
+    const oak = { x: 176, y: 112 };
+    const move = (x: number, y: number, reserved = [oak]) =>
+      run({
+        type: "moveDecoration",
+        actorId: "ben",
+        decorationId: flower,
+        x,
+        y,
+        reserved,
+      });
+    assert.throws(() => move(220, 144), /clear patch of lawn/); // the pond
+    assert.throws(() => move(176, 104), /already taken/); // next to the oak
+    assert.throws(
+      () =>
+        run({
+          type: "buyDecoration",
+          actorId: "ana",
+          homebaseId: base,
+          itemId: "pink-tulip",
+          x: 104,
+          y: 104,
+        }),
+      /already taken/,
+    );
+    move(48, 200);
+    const moved = db.decorations.find((row) => row.id === flower)!;
+    assert.deepEqual([moved.x, moved.y], [48, 200]);
+    assert.equal(acornBalance(db, base), balance);
+    assert.ok(db.events.some((event) => event.type === "decoration.moved"));
+    const events = db.events.length;
+    move(48, 200);
+    assert.equal(db.events.length, events, "moving in place changes nothing");
     parseDatabase(db);
   });
 
@@ -308,6 +353,10 @@ describe(
         .expect(200);
       assert.ok(spec.paths["/api/v1/decorations"].post);
       assert.ok(spec.paths["/api/v1/decorations/{decorationId}"].delete);
+      assert.ok(spec.paths["/api/v1/decorations/{decorationId}"].patch);
+      assert.ok(
+        spec.paths["/api/v1/homebases/{homebaseId}/garden/starter-oak"].patch,
+      );
       assert.equal(
         spec.components.schemas.BuyDecoration.additionalProperties,
         false,
@@ -373,7 +422,7 @@ describe(
       assert.match(taken.message, /already taken/);
       // With 10 acorns left, two members racing for 10-acorn items: only one wins.
       const results = await Promise.all([
-        buy(alice, { itemId: "pink-tulip", x: 200, y: 200 }),
+        buy(alice, { itemId: "pink-tulip", x: 208, y: 184 }),
         buy(bob, { itemId: "sunflower", x: 48, y: 200 }),
       ]);
       assert.deepEqual(results.map((r) => r.status).sort(), [201, 400]);
@@ -392,6 +441,62 @@ describe(
         .set(auth(bob))
         .expect(200);
       assert.equal(await balance(alice), decoration!.price);
+    });
+
+    it("moves decorations and the starter oak for free, keeping them apart", async () => {
+      const before = await balance(alice);
+      const [decoration] = (await state(alice)).decorations;
+      const oakPath = `/api/v1/homebases/${baseId}/garden/starter-oak`;
+      const moveTo = (session: Session, x: number, y: number) =>
+        request(server())
+          .patch(`/api/v1/decorations/${decoration!.id}`)
+          .set(auth(session))
+          .send({ x, y });
+      await request(server())
+        .patch(oakPath)
+        .set(auth(alice))
+        .send({ x: 104, y: 104 })
+        .expect(404);
+      await request(server())
+        .post(oakPath)
+        .set(auth(alice))
+        .send({ x: 104, y: 104 })
+        .expect(200);
+      const { body: nearOak } = await moveTo(bob, 112, 104).expect(400);
+      assert.match(nearOak.message, /already taken/);
+      await moveTo(bob, 176, 112).expect(200);
+      await moveTo(stranger, 176, 120).expect(400);
+      const { body: onDecoration } = await request(server())
+        .patch(oakPath)
+        .set(auth(bob))
+        .send({ x: 176, y: 104 })
+        .expect(400);
+      assert.match(onDecoration.message, /occupied/);
+      await request(server())
+        .patch(oakPath)
+        .set(auth(bob))
+        .send({ x: 40, y: 104 })
+        .expect(200);
+      const { body: onOak } = await buy(alice, {
+        itemId: "pink-tulip",
+        x: 40,
+        y: 104,
+      }).expect(400);
+      assert.match(onOak.message, /already taken/);
+      const snapshot = await state(alice);
+      const moved = snapshot.decorations.find(
+        (row) => row.id === decoration!.id,
+      )!;
+      assert.deepEqual([moved.x, moved.y], [176, 112]);
+      assert.equal(await balance(alice), before, "moving is free");
+      assert.ok(
+        snapshot.events.some((event) => event.type === "decoration.moved"),
+      );
+      const { body: garden } = await request(server())
+        .get(`/api/v1/homebases/${baseId}/garden`)
+        .set(auth(alice))
+        .expect(200);
+      assert.deepEqual(garden.oak, { x: 40, y: 104, itemId: "oak-tree" });
     });
 
     it("keeps other home bases out of the pool", async () => {

@@ -2,10 +2,35 @@ import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import { execute } from "@beside/domain/model";
 import { settleExpiredMilestones } from "@beside/domain/expiry";
 import { stateForUser } from "@beside/domain/view";
-import type { Command } from "@beside/domain/types";
+import type { Command, Database } from "@beside/domain/types";
+import type { PoolClient } from "pg";
 import { DatabaseService } from "./db/database.service.ts";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
 import { createHomebase, joinHomebase } from "./homebases.ts";
+
+/**
+ * The starter oak lives outside the command snapshot. Buying or moving a
+ * decoration must still keep clear of it, so the server adds its spot here.
+ */
+async function withReservedSpots(
+  client: PoolClient,
+  db: Database,
+  command: Command,
+): Promise<Command> {
+  if (command.type !== "buyDecoration" && command.type !== "moveDecoration")
+    return command;
+  const homebaseId =
+    command.type === "buyDecoration"
+      ? command.homebaseId
+      : db.decorations.find((row) => row.id === command.decorationId)
+          ?.homebaseId;
+  if (!homebaseId) return command;
+  const { rows } = await client.query<{ x: number; y: number }>(
+    "SELECT x, y FROM homebase_starter_oak WHERE homebase_id = $1",
+    [homebaseId],
+  );
+  return { ...command, reserved: rows };
+}
 
 @Injectable()
 export class DomainService {
@@ -29,7 +54,10 @@ export class DomainService {
       const before = await loadDatabase(client);
       let result: ReturnType<typeof execute>;
       try {
-        result = execute(before, command);
+        result = execute(
+          before,
+          await withReservedSpots(client, before, command),
+        );
       } catch (error) {
         throw new BadRequestException(
           error instanceof Error ? error.message : "Invalid command.",

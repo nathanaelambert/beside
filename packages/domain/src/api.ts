@@ -97,6 +97,10 @@ export const buyDecorationSchema = z.strictObject({
     .optional()
     .describe("Reuse when retrying so one purchase is never charged twice."),
 });
+export const moveDecorationSchema = z.strictObject({
+  x: z.int().describe("New bottom-centre anchor, multiple of 8."),
+  y: z.int().describe("New bottom-centre anchor, multiple of 8."),
+});
 const rarity = z.enum(rarityOrder as [string, ...string[]]);
 export const shopSchema = z.object({
   currency: z.object({
@@ -173,4 +177,5 @@ export type UpdateActivityInput = z.input<typeof updateActivitySchema>;
 export type UpdateMilestoneInput = z.input<typeof updateMilestoneSchema>;
 export type CreateLogInput = z.input<typeof createLogSchema>;
 export type BuyDecorationInput = z.input<typeof buyDecorationSchema>;
+export type MoveDecorationInput = z.input<typeof moveDecorationSchema>;
 export type Shop = z.infer<typeof shopSchema>;

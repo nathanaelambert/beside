@@ -7,8 +7,9 @@ import {
 } from "@nestjs/common";
 import type { HomebaseGarden, PlantStarterOakInput } from "@beside/domain/api";
 import {
-  checkStarterOakPlacement,
+  checkMeadowPlacement,
   starterOakItemId,
+  type MeadowPoint,
 } from "@beside/domain/garden";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "./db/database.service.ts";
@@ -34,13 +35,7 @@ export class GardenService {
         throw new ConflictException(
           "This home base already has its starter oak.",
         );
-      const rejection = checkStarterOakPlacement(position);
-      if (rejection)
-        throw new BadRequestException(
-          rejection === "occupied"
-            ? "That spot is occupied."
-            : "Choose a clear patch of lawn.",
-        );
+      await this.checkSpot(client, homebaseId, position);
       await client.query(
         "INSERT INTO homebase_starter_oak (homebase_id, x, y) VALUES ($1, $2, $3)",
         [homebaseId, x, y],
@@ -49,6 +44,44 @@ export class GardenService {
         oak: { x, y, itemId: starterOakItemId },
       } satisfies HomebaseGarden;
     });
+  }
+
+  /** Moving the starter oak is free, like moving any decoration. */
+  move(userId: string, homebaseId: string, position: PlantStarterOakInput) {
+    const { x, y } = position;
+    return this.database.transaction(true, async (client) => {
+      const garden = await this.read(client, userId, homebaseId);
+      if (!garden.oak)
+        throw new NotFoundException("Plant the starter oak first.");
+      if (garden.oak.x === x && garden.oak.y === y) return garden;
+      await this.checkSpot(client, homebaseId, position);
+      await client.query(
+        "UPDATE homebase_starter_oak SET x = $2, y = $3 WHERE homebase_id = $1",
+        [homebaseId, x, y],
+      );
+      return {
+        oak: { x, y, itemId: starterOakItemId },
+      } satisfies HomebaseGarden;
+    });
+  }
+
+  // The same meadow rule as bought decorations, which the oak must keep clear of.
+  private async checkSpot(
+    client: PoolClient,
+    homebaseId: string,
+    position: MeadowPoint,
+  ) {
+    const { rows } = await client.query<MeadowPoint>(
+      "SELECT x, y FROM homebase_decoration WHERE homebase_id = $1",
+      [homebaseId],
+    );
+    const rejection = checkMeadowPlacement(position, rows);
+    if (rejection)
+      throw new BadRequestException(
+        rejection === "occupied"
+          ? "That spot is occupied."
+          : "Choose a clear patch of lawn.",
+      );
   }
 
   private async read(

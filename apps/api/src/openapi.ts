@@ -28,6 +28,7 @@ export const schemas = {
   CreateLog: api.createLogSchema,
   ShareLog: api.shareLogSchema,
   BuyDecoration: api.buyDecorationSchema,
+  MoveDecoration: api.moveDecorationSchema,
   Shop: api.shopSchema,
   AcornEntry: databaseSchema.shape.acornEntries.unwrap().element,
   Decoration: databaseSchema.shape.decorations.unwrap().element,

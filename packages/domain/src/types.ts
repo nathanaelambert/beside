@@ -295,6 +295,16 @@ export type Command =
       x: number;
       y: number;
       externalKey?: string | null;
+      // Filled in by the server, never from client input: e.g. the starter oak.
+      reserved?: { x: number; y: number }[];
+    }
+  | {
+      type: "moveDecoration";
+      actorId: string;
+      decorationId: string;
+      x: number;
+      y: number;
+      reserved?: { x: number; y: number }[];
     }
   | { type: "returnDecoration"; actorId: string; decorationId: string }
   | {

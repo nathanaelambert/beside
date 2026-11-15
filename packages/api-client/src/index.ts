@@ -10,6 +10,7 @@ import type {
   ApiHomebase,
   ApiState,
   BuyDecorationInput,
+  MoveDecorationInput,
   CreateActivityInput,
   CreateLogInput,
   CreateMilestoneInput,
@@ -227,6 +228,20 @@ export class BesideClient {
   }
   buyDecoration(input: BuyDecorationInput) {
     return this.request<MutationResult>("/decorations", "POST", input);
+  }
+  moveDecoration(decorationId: string, position: MoveDecorationInput) {
+    return this.request<MutationResult>(
+      `/decorations/${encodeURIComponent(decorationId)}`,
+      "PATCH",
+      position,
+    );
+  }
+  moveStarterOak(homebaseId: string, position: PlantStarterOakInput) {
+    return this.request<HomebaseGarden>(
+      `/homebases/${encodeURIComponent(homebaseId)}/garden/starter-oak`,
+      "PATCH",
+      position,
+    );
   }
   returnDecoration(decorationId: string) {
     return this.request<MutationResult>(
