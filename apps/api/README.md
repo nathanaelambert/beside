@@ -183,18 +183,19 @@ implemented yet. Non-log creation requests are not idempotent.
 ## Precursor rewards (experiment)
 
 Some rewards build on an item already in the home base's garden: a Christmas
-tree decorates a Meadow oak, and a cottage goes up in four stages. Earned items
-become `garden_object` rows (migration 007). An upgrade changes its precursor
-object in place. Planning an upgrade with no free precursor returns 400 with
-what it needs, and upgrades can only be the reward of a one-off schedule.
-`GET /api/v1/homebases/{id}/rewards` lists each item's status (`place`,
-`ready`, `queued`, `locked`), and `GET /api/v1/garden` lists the objects.
-`db:migrate` also syncs the code-owned catalog and plants rewards earned before
-migration 007.
+tree decorates a Meadow oak (the planner picks which, the starter oak
+included), and a cottage goes up in four stages. Everything in a garden is a
+`garden_object` (migration 007, which also folds in PR #14's starter oak).
+Earned items arrive unplaced; members place them or move anything with
+`POST /api/v1/garden/{objectId}/place`, using PR #14's placement rule extended
+to keep clear of other objects. Upgrades take `buildOnId` when planned; with
+nothing free to build on, planning returns 400 with what it needs.
+`GET /api/v1/homebases/{id}/rewards` lists each item's status and the
+precursors it could build on. `db:migrate` also syncs the code-owned catalog.
 
-For a local showcase, `scripts/precursor-demo.ts` registers two demo members
-and plans milestones against a running API (`setup`, `friend`, `cottage`). See
-[the design note](../../docs/experiments/rewards-precursors.md).
+For a local showcase, `scripts/precursor-demo.ts` registers two demo members,
+plants the starter oak and plans milestones against a running API (`setup`,
+`friend`, `cottage`). See [the design note](../../docs/experiments/rewards-precursors.md).
 
 ## Recurring milestones and missed deadlines
 

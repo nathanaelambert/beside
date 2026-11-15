@@ -493,7 +493,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         )}
       </View>
       <View style={styles.dock}>
-        {!editing && !!gardenError && (
+        {!editing && !placingNow && !!gardenError && (
           <Text text={gardenError} accessibilityRole="alert" style={styles.error} />
         )}
         {!!data?.garden && (
