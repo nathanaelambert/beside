@@ -3,6 +3,7 @@ import { initialMeadowItems } from "@beside/api-client/garden"
 import {
   archipelagoBounds,
   archipelagoLayout,
+  focusedIslandLayers,
   hitTestIslands,
   islandPoint,
   onIsland,
@@ -158,4 +159,29 @@ it("varies terrain props without changing the shared meadow or planting rules", 
       .map((d) => [d.key, d.x, d.y, d.source.type === "art" ? d.source.art : undefined])
   expect(positions(a)).not.toEqual(positions(b))
   expect(positions(a)).toEqual(positions(build("family")))
+})
+
+it("shows the signed-in avatar only on the focused blanket, and only on the boat during travel", () => {
+  const world = layers()
+  const scene = buildHomeScene({
+    avatars: avatarsForMembers([
+      { id: "you", name: "Mosaab" },
+      { id: "sam", name: "Sam" },
+    ]),
+    items: [],
+  })
+  world.forEach((island) => {
+    island.drawables = scene.drawables
+  })
+  const present = (world: IslandLayer[]) =>
+    world
+      .filter((layer) => layer.drawables.some((d) => d.key === "avatar-you"))
+      .map((layer) => layer.key)
+  expect(present(focusedIslandLayers(world, "family", "you", false))).toEqual(["family"])
+  expect(present(focusedIslandLayers(world, "family", "you", true))).toEqual([])
+  expect(
+    focusedIslandLayers(world, "family", "you", true).every((layer) =>
+      layer.drawables.some((d) => d.key === "avatar-sam"),
+    ),
+  ).toBe(true)
 })
