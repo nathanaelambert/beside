@@ -377,7 +377,10 @@ export function IsoWorldCanvas({
   const focused = islands.find((island) => island.key === focusIslandKey) ?? islands[0]!
   const bounds = useMemo(() => archipelagoBounds(islands, islands.length > 1 ? 88 : 0), [islands])
   const ratio = PixelRatio.get()
-  const widest = zoomStops(ratio, islands.length > 1)[0]!
+  // Close enough while sailing that the boat reads (about 25 pt long), yet wide enough to
+  // see both shores of a channel.
+  const stops = zoomStops(ratio, islands.length > 1)
+  const sailing = stops.find((stop) => stop >= 2 / 3 - 0.001) ?? stops[0]!
   const props = useMemo(() => (islands.length > 1 ? seaProps(islands) : []), [islands])
   const cameraX = useSharedValue(0)
   const cameraY = useSharedValue(0)
@@ -452,7 +455,7 @@ export function IsoWorldCanvas({
     const into = Math.max(0, (t - 0.86) / 0.14)
     const easeOut = 1 - Math.pow(1 - out, 3)
     const easeIn = 1 - Math.pow(1 - into, 3)
-    const wide = widest
+    const wide = sailing
     const raw =
       t < 0.14
         ? departure.value.zoom + (wide - departure.value.zoom) * easeOut

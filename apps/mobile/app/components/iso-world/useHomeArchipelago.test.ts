@@ -47,7 +47,8 @@ beforeEach(() => {
 it("loads every garden and scopes members, cottages and rewards to each base", async () => {
   const { result } = renderHook(() => useHomeArchipelago("you", undefined, 0))
   await waitFor(() => expect(result.current.busy).toBe(false))
-  expect(result.current.islands.map((i) => i.homebase.id)).toEqual(["project", "family", "crew"])
+  // Membership order, not focus order: islands keep their places on the map.
+  expect(result.current.islands.map((i) => i.homebase.id)).toEqual(["family", "project", "crew"])
   expect(jest.mocked(besideApi.homebaseGarden).mock.calls.map(([id]) => id)).toEqual([
     "family",
     "project",

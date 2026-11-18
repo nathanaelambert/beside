@@ -40,11 +40,11 @@ export const islandPalettes: IslandPalette[] = [
     },
   },
   {
-    // Spring blossom: fresh greens and a plum gingham.
-    name: "blossom",
+    // Spring: fresh greens and a teal gingham.
+    name: "spring",
     swap: {
       ...tones(palette.grass, ["#5a8a43", "#69994c", "#78a856", "#8bb862", "#a2c972"]),
-      ...tones(palette.blanket, ["#4f2a44", "#874a72", "#c890b0", "#f5e6cf"]),
+      ...tones(palette.blanket, ["#24505a", "#3f8088", "#8cc4bd", "#f5e6cf"]),
     },
   },
 ]

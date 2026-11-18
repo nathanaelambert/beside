@@ -19,7 +19,7 @@ type ArchipelagoData = {
   bases: ApiHomebase[]
   state: ApiState
   gardens: Record<string, HomebaseGarden | undefined>
-  /** Keep positions fixed for the session, even after arriving at another island. */
+  /** Membership order: islands keep fixed places on the map, wherever you open. */
   order: string[]
 }
 
@@ -70,15 +70,8 @@ export function useHomeArchipelago(
             bases,
             state,
             gardens: previous?.gardens ?? {},
-            order:
-              previous &&
-              previous.order.length === bases.length &&
-              previous.order.every((id) => bases.some((b) => b.id === id))
-                ? previous.order
-                : [
-                    ...(base ? [base.id] : []),
-                    ...bases.filter((b) => b.id !== base?.id).map((b) => b.id),
-                  ],
+            // Membership order, so every island keeps its place on the map between visits.
+            order: bases.map((b) => b.id),
           }))
           const gardens = await Promise.all(
             bases.map(async (base) => {
@@ -118,7 +111,7 @@ export function useHomeArchipelago(
     if (!data) return []
     const offsets = archipelagoLayout(data.order)
     const multiple = data.bases.length > 1
-    // API order (not layout order), so each island keeps its colours whichever one you open on.
+    // Your oldest island keeps the original colours; the others get their own.
     const palettes = multiple ? assignIslandPalettes(data.bases.map((base) => base.id)) : {}
     const serverNow = Date.parse(data.state.serverTime ?? "")
     const now = Number.isFinite(serverNow) ? serverNow : Date.now()
