@@ -1,6 +1,6 @@
 import type { ScreenPoint } from "./projection"
 import { isoToScreen, screenToIso, type MapFrame } from "./projection"
-import { hitTest, type Drawable } from "./scene"
+import { hitTest, opaqueAt, type Drawable } from "./scene"
 import type { TileMap } from "./tilemap"
 
 export interface IslandLayer {
@@ -76,6 +76,7 @@ export function hitTestIslands(
   point: ScreenPoint,
   minSize: number,
   showSigns = false,
+  signScale = 1,
 ) {
   const ordered = [...islands].sort((a, b) => b.offset.y - a.offset.y)
   for (const island of ordered) {
@@ -85,14 +86,43 @@ export function hitTestIslands(
     const onSign =
       showSigns &&
       sign &&
-      x >= sign.x &&
-      x <= sign.x + sign.width &&
-      y >= sign.y &&
-      y <= sign.y + sign.height
+      x >= sign.baseX + (sign.x - sign.baseX) * signScale &&
+      x <= sign.baseX + (sign.x + sign.width - sign.baseX) * signScale &&
+      y >= sign.baseY + (sign.y - sign.baseY) * signScale &&
+      y <= sign.baseY + (sign.y + sign.height - sign.baseY) * signScale
     const hit = hitTest(island.drawables, x, y, minSize)
-    if (onSign || hit || onIsland(island, point)) return { islandKey: island.key, x, y, hit }
+    if (
+      onSign ||
+      hit ||
+      onIsland(island, point) ||
+      island.drawables.some((drawable) => opaqueAt(drawable, x, y))
+    )
+      return { islandKey: island.key, x, y, hit }
   }
   return { x: point.x, y: point.y }
+}
+
+/** Only the focused island has the signed-in member; during a voyage they are on the boat. */
+export function focusedIslandLayers(
+  layers: IslandLayer[],
+  focusedKey: string | undefined,
+  userId: string | undefined,
+  travelling: boolean,
+  preview?: Drawable,
+) {
+  return layers.map((layer) => {
+    const focused = layer.key === focusedKey
+    const hideSelf = layers.length > 1 && (!focused || travelling)
+    const drawables = hideSelf
+      ? layer.drawables.filter((drawable) => drawable.key !== `avatar-${userId}`)
+      : layer.drawables
+    if (focused && preview)
+      return {
+        ...layer,
+        drawables: [...drawables, preview].sort((a, b) => a.depth - b.depth || a.baseX - b.baseX),
+      }
+    return drawables === layer.drawables ? layer : { ...layer, drawables }
+  })
 }
 
 /** Zoom is points/art pixel, with an integer number of device pixels for every texel. */

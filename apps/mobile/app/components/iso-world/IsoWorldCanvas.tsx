@@ -1,21 +1,27 @@
 import { memo, useEffect, useMemo, useRef } from "react"
-import { StyleSheet } from "react-native"
+import { PixelRatio, StyleSheet } from "react-native"
 import { Canvas, Group, Image, ImageShader, Path, Rect } from "@shopify/react-native-skia"
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler"
 import {
+  cancelAnimation,
+  Easing,
   runOnJS,
   useDerivedValue,
   useReducedMotion,
   useSharedValue,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated"
 
+import { archipelagoBounds, hitTestIslands, islandPoint, type IslandLayer } from "./archipelago"
 import type { Bitmap } from "./bitmap"
 import { paintGround, SEA_TILE, seaTile, waterGlints } from "./paint"
 import { isoToScreen, type MapFrame } from "./projection"
-import { hitTest, type Drawable, type HitTarget } from "./scene"
+import { type Drawable, type HitTarget } from "./scene"
 import { artImage, bitmapImage, sampling } from "./skia"
 import type { TileMap } from "./tilemap"
+import { voyagePoint, type VoyagePath } from "./voyage"
+import { Boat } from "./VoyageBoat"
 import type { Avatar } from "../pixel-world/avatars"
 
 // Kept out of JSX: the i18n test reads quoted tx props as translation keys.
@@ -170,28 +176,148 @@ function Guide({
   return <Path path={path} color="#fff4cf" opacity={opacity} antiAlias={false} />
 }
 
-export interface IsoWorldCanvasProps {
+export interface CanvasVoyage {
+  key: string
+  path: VoyagePath
+  avatar: Avatar
+  destination: { x: number; y: number }
+  arrivalZoom: number
+}
+
+type SceneProps =
+  | { islands: IslandLayer[]; map?: never; frame?: never; drawables?: never }
+  | { islands?: never; map: TileMap; frame: MapFrame; drawables: Drawable[] }
+
+export type IsoWorldCanvasProps = SceneProps & {
   width: number
   height: number
-  map: TileMap
-  frame: MapFrame
-  /** Sorted back to front. */
-  drawables: Drawable[]
-  /** Art pixels per point. */
+  /** Points per art pixel; always an integer number of device pixels. */
   zoom: number
-  /** Tile-space point the camera centres on. */
   focus: { u: number; v: number }
-  /** Increment to re-centre the camera on `focus`. */
+  focusIslandKey?: string
   resetCamera?: number
   selectedKey?: string
-  /** Tiles to mark as available (planting guide). */
   guideTiles?: { col: number; row: number }[]
-  /** The tile currently previewed for placement. */
   previewTile?: { col: number; row: number }
   interactive?: boolean
   accessibilityLabel?: string
-  onTap?: (result: { hit?: HitTarget; x: number; y: number }) => void
+  voyage?: CanvasVoyage
+  onArrival?: () => void
+  onTap?: (result: { islandKey?: string; hit?: HitTarget; x: number; y: number }) => void
   onPinch?: (direction: 1 | -1) => void
+}
+
+function IslandSign({
+  sign,
+  tick,
+  visible,
+  zoom,
+  ratio,
+  focused,
+}: {
+  sign: Drawable
+  tick: SharedValue<number>
+  visible: SharedValue<number>
+  zoom: SharedValue<number>
+  ratio: number
+  focused: boolean
+}) {
+  const fixedZoom = Math.max(1, Math.floor(ratio)) / ratio
+  const transform = useDerivedValue(() => [
+    { translateX: sign.baseX },
+    { translateY: sign.baseY },
+    { scale: fixedZoom / zoom.value },
+  ])
+  const local = useMemo(
+    () => ({
+      ...sign,
+      x: sign.x - sign.baseX,
+      y: sign.y - sign.baseY,
+      baseX: 0,
+      baseY: 0,
+      top: sign.top - sign.baseY,
+    }),
+    [sign],
+  )
+  return (
+    <Group opacity={visible} transform={transform}>
+      <DrawableNode drawable={local} tick={tick} />
+      {focused && <Marker x={0} top={local.top} tick={tick} />}
+    </Group>
+  )
+}
+
+const IslandNodes = memo(function IslandNodes({
+  island,
+  tick,
+  selectedKey,
+  guideTiles,
+  previewTile,
+  signs,
+  signZoom,
+  ratio,
+  focused,
+}: {
+  island: IslandLayer
+  tick: SharedValue<number>
+  selectedKey?: string
+  guideTiles?: { col: number; row: number }[]
+  previewTile?: { col: number; row: number }
+  signs: SharedValue<number>
+  signZoom: SharedValue<number>
+  ratio: number
+  focused: boolean
+}) {
+  const { map, frame, drawables, offset, sign } = island
+  const ground = groundFor(map, frame)
+  const glints = useMemo(() => waterGlints(map, frame), [map, frame])
+  const guidePath = useMemo(
+    () => (guideTiles ?? []).map(({ col, row }) => diamondPath(frame, col, row, 0, 0.18)).join(""),
+    [guideTiles, frame],
+  )
+  const previewPath = previewTile
+    ? diamondPath(frame, previewTile.col, previewTile.row, 0, 0.06)
+    : ""
+  const selected = focused ? drawables.find((d) => d.key === selectedKey) : undefined
+  return (
+    <Group transform={[{ translateX: offset.x }, { translateY: offset.y }]}>
+      <Image
+        image={bitmapImage(ground)}
+        x={0}
+        y={0}
+        width={frame.width}
+        height={frame.height}
+        sampling={sampling}
+      />
+      {glints.map(({ x, y, phase }) => (
+        <Glint key={`${x}-${y}`} x={x} y={y} phase={phase} tick={tick} />
+      ))}
+      {!!guidePath && <Guide path={guidePath} tick={tick} />}
+      {!!previewPath && <Guide path={previewPath} tick={tick} strong />}
+      {drawables.map((drawable) => (
+        <DrawableNode key={drawable.key} drawable={drawable} tick={tick} />
+      ))}
+      {selected && <Marker x={selected.baseX} top={selected.top} tick={tick} />}
+      {sign && (
+        <IslandSign
+          sign={sign}
+          tick={tick}
+          visible={signs}
+          zoom={signZoom}
+          ratio={ratio}
+          focused={focused}
+        />
+      )}
+    </Group>
+  )
+})
+
+function clampAxis(value: number, viewport: number, min: number, max: number, zoom: number) {
+  "worklet"
+  const extent = (max - min) * zoom
+  return viewport >= extent
+    ? (viewport - extent) / 2 - min * zoom
+    : Math.min(-min * zoom, Math.max(viewport - max * zoom, value))
 }
 
 export function IsoWorldCanvas({
@@ -200,8 +326,10 @@ export function IsoWorldCanvas({
   map,
   frame,
   drawables,
+  islands: suppliedIslands,
   zoom,
   focus,
+  focusIslandKey,
   resetCamera = 0,
   selectedKey,
   guideTiles,
@@ -210,116 +338,176 @@ export function IsoWorldCanvas({
   accessibilityLabel,
   onTap,
   onPinch,
+  voyage,
+  onArrival,
 }: IsoWorldCanvasProps) {
-  const ground = groundFor(map, frame)
-  const glints = useMemo(() => waterGlints(map, frame), [map, frame])
+  const islands = useMemo(
+    () =>
+      suppliedIslands ?? [
+        { key: "single", map: map!, frame: frame!, drawables: drawables!, offset: { x: 0, y: 0 } },
+      ],
+    [suppliedIslands, map, frame, drawables],
+  )
+  const ordered = useMemo(() => [...islands].sort((a, b) => a.offset.y - b.offset.y), [islands])
+  const focused = islands.find((island) => island.key === focusIslandKey) ?? islands[0]!
+  const bounds = useMemo(() => archipelagoBounds(islands, islands.length > 1 ? 88 : 0), [islands])
+  const ratio = PixelRatio.get()
   const cameraX = useSharedValue(0)
   const cameraY = useSharedValue(0)
   const startX = useSharedValue(0)
   const startY = useSharedValue(0)
   const tick = useSharedValue(0)
+  const progress = useSharedValue(0)
+  const departure = useSharedValue({ x: 0, y: 0, zoom })
   const reduceMotion = useReducedMotion()
   const lastZoom = useRef(zoom)
+  const destination = islandPoint(focused, focus.u, focus.v)
+  const focusX = destination.x
+  const focusY = destination.y
+  const minX = bounds.x
+  const minY = bounds.y
+  const maxX = bounds.x + bounds.width
+  const maxY = bounds.y + bounds.height
 
-  const clampAxis = (value: number, viewport: number, extent: number) => {
-    "worklet"
-    return viewport >= extent
-      ? Math.round((viewport - extent) / 2)
-      : Math.min(0, Math.max(viewport - extent, value))
-  }
-
-  // Centre on the focus point when mounted or asked to recentre.
   useEffect(() => {
-    const p = isoToScreen(frame, focus.u, focus.v)
-    cameraX.value = clampAxis(Math.round(width / 2 - p.x * zoom), width, frame.width * zoom)
-    cameraY.value = clampAxis(Math.round(height / 2 - p.y * zoom), height, frame.height * zoom)
+    if (voyage) return
+    cameraX.value = clampAxis(width / 2 - focusX * zoom, width, minX, maxX, zoom)
+    cameraY.value = clampAxis(height / 2 - focusY * zoom, height, minY, maxY, zoom)
     lastZoom.current = zoom
+    // Zoom is handled separately so manual zoom preserves the viewport's centre.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetCamera, width, height, frame])
+  }, [resetCamera, width, height, focusX, focusY])
 
-  // Zooming keeps whatever is in the middle of the view in the middle.
   useEffect(() => {
     const previous = lastZoom.current
-    if (previous === zoom) return
+    if (previous === zoom || voyage) return
     const cx = (width / 2 - cameraX.value) / previous
     const cy = (height / 2 - cameraY.value) / previous
-    cameraX.value = clampAxis(Math.round(width / 2 - cx * zoom), width, frame.width * zoom)
-    cameraY.value = clampAxis(Math.round(height / 2 - cy * zoom), height, frame.height * zoom)
+    cameraX.value = clampAxis(width / 2 - cx * zoom, width, minX, maxX, zoom)
+    cameraY.value = clampAxis(height / 2 - cy * zoom, height, minY, maxY, zoom)
     lastZoom.current = zoom
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom])
 
   useEffect(() => {
+    if (!voyage) return
+    departure.value = {
+      x: (width / 2 - cameraX.value) / zoom,
+      y: (height / 2 - cameraY.value) / zoom,
+      zoom,
+    }
+    progress.value = 0
+    progress.value = withTiming(1, { duration: 3000, easing: Easing.linear }, (finished) => {
+      if (finished && onArrival) runOnJS(onArrival)()
+    })
+    return () => cancelAnimation(progress)
+    // Keep a running voyage independent of viewport renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voyage?.key])
+
+  useEffect(() => {
     if (reduceMotion) return
-    // A slow, stepped clock: the canvas only redraws when a frame actually changes.
     const id = setInterval(() => {
       tick.value = tick.value + 1
     }, 125)
     return () => clearInterval(id)
   }, [reduceMotion, tick])
 
+  const boatProgress = useDerivedValue(() =>
+    Math.max(0, Math.min(1, (progress.value - 0.14) / 0.72)),
+  )
+  const camera = useDerivedValue(() => {
+    if (!voyage) return { x: cameraX.value, y: cameraY.value, zoom }
+    const t = progress.value
+    const boat = voyagePoint(voyage.path, boatProgress.value)
+    // Step zoom through integer device-pixel scales even while the camera follows the boat.
+    const out = Math.min(1, t / 0.14)
+    const into = Math.max(0, (t - 0.86) / 0.14)
+    const easeOut = 1 - Math.pow(1 - out, 3)
+    const easeIn = 1 - Math.pow(1 - into, 3)
+    const wide = 1 / ratio
+    const scale =
+      Math.max(
+        1,
+        Math.round(
+          (t < 0.14
+            ? departure.value.zoom + (wide - departure.value.zoom) * easeOut
+            : wide + (voyage.arrivalZoom - wide) * easeIn) * ratio,
+        ),
+      ) / ratio
+    const x =
+      t < 0.14
+        ? departure.value.x + (boat.x - departure.value.x) * easeOut
+        : boat.x + (voyage.destination.x - boat.x) * easeIn
+    const y =
+      t < 0.14
+        ? departure.value.y + (boat.y - departure.value.y) * easeOut
+        : boat.y + (voyage.destination.y - boat.y) * easeIn
+    return {
+      x: clampAxis(width / 2 - x * scale, width, minX, maxX, scale),
+      y: clampAxis(height / 2 - y * scale, height, minY, maxY, scale),
+      zoom: scale,
+    }
+  })
   const transform = useDerivedValue(() => [
-    { translateX: Math.round(cameraX.value) },
-    { translateY: Math.round(cameraY.value) },
-    { scale: zoom },
+    { translateX: Math.round(camera.value.x * ratio) / ratio },
+    { translateY: Math.round(camera.value.y * ratio) / ratio },
+    { scale: camera.value.zoom },
   ])
-
-  const extentX = frame.width * zoom
-  const extentY = frame.height * zoom
+  const signZoom = useDerivedValue(() => camera.value.zoom)
+  const signs = useDerivedValue<number>(() => (camera.value.zoom <= 1 ? 1 : 0))
+  const enabled = interactive && !voyage
   const pan = Gesture.Pan()
     .minDistance(8)
-    .enabled(interactive)
+    .enabled(enabled)
     .onStart(() => {
       startX.value = cameraX.value
       startY.value = cameraY.value
     })
     .onUpdate((e) => {
-      cameraX.value = clampAxis(startX.value + e.translationX, width, extentX)
-      cameraY.value = clampAxis(startY.value + e.translationY, height, extentY)
+      cameraX.value = clampAxis(startX.value + e.translationX, width, minX, maxX, zoom)
+      cameraY.value = clampAxis(startY.value + e.translationY, height, minY, maxY, zoom)
     })
-  const handleTap = (x: number, y: number) => {
-    const hit = hitTest(drawables, x, y, 44 / zoom)
-    onTap?.({ hit, x, y })
-  }
+  const handleTap = (x: number, y: number) =>
+    onTap?.(
+      hitTestIslands(
+        islands,
+        { x, y },
+        44 / zoom,
+        zoom <= 1,
+        Math.max(1, Math.floor(ratio)) / ratio / zoom,
+      ),
+    )
   const tap = Gesture.Tap()
     .maxDistance(8)
-    .enabled(interactive)
+    .enabled(enabled)
     .onEnd((e, success) => {
       if (success)
         runOnJS(handleTap)(
-          (e.x - Math.round(cameraX.value)) / zoom,
-          (e.y - Math.round(cameraY.value)) / zoom,
+          (e.x - Math.round(cameraX.value * ratio) / ratio) / zoom,
+          (e.y - Math.round(cameraY.value * ratio) / ratio) / zoom,
         )
     })
   const pinch = Gesture.Pinch()
-    .enabled(interactive && !!onPinch)
+    .enabled(enabled && !!onPinch)
     .onEnd((e) => {
       if (!onPinch) return
       if (e.scale > 1.2) runOnJS(onPinch)(1)
       else if (e.scale < 0.83) runOnJS(onPinch)(-1)
     })
-
-  const selected = drawables.find((d) => d.key === selectedKey)
-  const guidePath = useMemo(
-    () => (guideTiles ?? []).map(({ col, row }) => diamondPath(frame, col, row, 0, 0.18)).join(""),
-    [guideTiles, frame],
-  )
-  const previewPath = previewTile
-    ? diamondPath(frame, previewTile.col, previewTile.row, 0, 0.06)
-    : ""
   const sea = bitmapImage(seaTile())
-
+  // Cover even very wide viewports at the minimum device-pixel zoom.
+  const seaMargin = Math.max(width, height) * ratio + 128
   return (
     <GestureHandlerRootView style={styles.fill}>
       <GestureDetector gesture={Gesture.Race(pinch, Gesture.Exclusive(pan, tap))}>
         <Canvas style={styles.fill} accessibilityLabel={accessibilityLabel}>
           <Group transform={transform} antiAlias={false}>
-            {/* Open water continues past the island so wide or tall screens never show a bare edge. */}
             <Rect
-              x={-frame.width}
-              y={-frame.height}
-              width={frame.width * 3}
-              height={frame.height * 3}
+              x={minX - seaMargin}
+              y={minY - seaMargin}
+              width={bounds.width + seaMargin * 2}
+              height={bounds.height + seaMargin * 2}
             >
               <ImageShader
                 image={sea}
@@ -329,23 +517,21 @@ export function IsoWorldCanvas({
                 sampling={sampling}
               />
             </Rect>
-            <Image
-              image={bitmapImage(ground)}
-              x={0}
-              y={0}
-              width={frame.width}
-              height={frame.height}
-              sampling={sampling}
-            />
-            {glints.map(({ x, y, phase }) => (
-              <Glint key={`${x}-${y}`} x={x} y={y} phase={phase} tick={tick} />
+            {ordered.map((island) => (
+              <IslandNodes
+                key={island.key}
+                island={island}
+                tick={tick}
+                focused={island.key === focused.key}
+                selectedKey={selectedKey}
+                guideTiles={island.key === focused.key ? guideTiles : undefined}
+                previewTile={island.key === focused.key ? previewTile : undefined}
+                signs={signs}
+                signZoom={signZoom}
+                ratio={ratio}
+              />
             ))}
-            {!!guidePath && <Guide path={guidePath} tick={tick} />}
-            {!!previewPath && <Guide path={previewPath} tick={tick} strong />}
-            {drawables.map((drawable) => (
-              <DrawableNode key={drawable.key} drawable={drawable} tick={tick} />
-            ))}
-            {selected && <Marker x={selected.baseX} top={selected.top} tick={tick} />}
+            {voyage && <Boat path={voyage.path} progress={boatProgress} avatar={voyage.avatar} />}
           </Group>
         </Canvas>
       </GestureDetector>

@@ -265,7 +265,7 @@ export function sortDrawables(drawables: Drawable[]) {
   return [...drawables].sort((a, b) => a.depth - b.depth || a.baseX - b.baseX)
 }
 
-function opaqueAt(d: Drawable, x: number, y: number) {
+export function opaqueAt(d: Drawable, x: number, y: number) {
   const px = Math.floor(x - d.x)
   const py = Math.floor(y - d.y)
   if (px < 0 || py < 0 || px >= d.width || py >= d.height) return false
