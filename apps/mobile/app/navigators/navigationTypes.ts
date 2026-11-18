@@ -19,6 +19,7 @@ export type DemoTabParamList = {
 export type AppStackParamList = {
   Welcome: undefined
   Login: undefined
+  Register: undefined
   HomeBase: { connectionId?: string } | undefined
   Activities: { connectionId: string }
   ActivityCreate: { connectionId: string }

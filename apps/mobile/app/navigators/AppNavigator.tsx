@@ -22,6 +22,7 @@ import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { HomeBaseScreen } from "@/screens/HomeBaseScreen"
 import { LoginScreen } from "@/screens/LoginScreen"
 import { PixelWorldScreen } from "@/screens/PixelWorldScreen"
+import { RegisterScreen } from "@/screens/RegisterScreen"
 import { RewardItemsScreen } from "@/screens/RewardItemsScreen"
 import { WelcomeScreen } from "@/screens/WelcomeScreen"
 import { useAppTheme } from "@/theme/context"
@@ -93,6 +94,7 @@ const AppStack = () => {
       ) : (
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
         </>
       )}
 
