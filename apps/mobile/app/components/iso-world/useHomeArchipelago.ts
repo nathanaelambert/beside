@@ -10,6 +10,7 @@ import { loadString, saveString } from "@/utils/storage"
 import { archipelagoLayout, type IslandLayer } from "./archipelago"
 import { islandSign, islandVariantSeed, JETTY, jetty } from "./archipelagoProps"
 import { homeActivities, homeRewards } from "./homeWorld"
+import { assignIslandPalettes, recolorTerrain } from "./islandPalettes"
 import { buildHomeScene, sortDrawables, spriteDrawable } from "./scene"
 import { avatarsForMembers } from "../pixel-world/avatars"
 import { oakAt } from "../pixel-world/starterOak"
@@ -117,6 +118,8 @@ export function useHomeArchipelago(
     if (!data) return []
     const offsets = archipelagoLayout(data.order)
     const multiple = data.bases.length > 1
+    // API order (not layout order), so each island keeps its colours whichever one you open on.
+    const palettes = multiple ? assignIslandPalettes(data.bases.map((base) => base.id)) : {}
     const serverNow = Date.parse(data.state.serverTime ?? "")
     const now = Number.isFinite(serverNow) ? serverNow : Date.now()
     return data.order.flatMap((id) => {
@@ -136,19 +139,26 @@ export function useHomeArchipelago(
         items: garden?.oak ? [...initialMeadowItems, oakAt(garden.oak)] : initialMeadowItems,
         variantSeed: multiple ? islandVariantSeed(id) : 0,
       })
+      const palette = palettes[id] ?? 0
+      // Signs hang over each island's north corner, out in the channel above it.
+      const signAt = { u: 0, v: 0, lift: 8 }
       const layer: IslandLayer = {
         key: id,
         map: scene.map,
         frame: scene.frame,
         offset: offsets[id]!,
+        palette,
         drawables: multiple
           ? sortDrawables([
-              ...scene.drawables,
+              ...recolorTerrain(scene.drawables, palette),
               spriteDrawable(scene.frame, "jetty", jetty(), { ...JETTY, lift: 0 }),
             ])
           : scene.drawables,
         sign: multiple
-          ? spriteDrawable(scene.frame, "sign", islandSign(homebase.name), { u: 4, v: 4, lift: 96 })
+          ? spriteDrawable(scene.frame, "sign", islandSign(homebase.name), signAt)
+          : undefined,
+        signHere: multiple
+          ? spriteDrawable(scene.frame, "sign-here", islandSign(homebase.name, true), signAt)
           : undefined,
       }
       return [{ homebase, members, avatars, activities, garden, scene, layer }]

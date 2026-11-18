@@ -11,6 +11,10 @@ export interface IslandLayer {
   /** Top-left of the map frame in sea art pixels. */
   offset: ScreenPoint
   sign?: Drawable
+  /** The same sign with a "you are here" pennant, shown on the focused island. */
+  signHere?: Drawable
+  /** Index into islandPalettes: the island's grass and blanket colours. */
+  palette?: number
 }
 
 export const ISLAND_SIZE = { width: 552, height: 348 }
@@ -28,7 +32,7 @@ export function archipelagoLayout(ids: readonly string[]): Record<string, Screen
     ids.map((id, index) => {
       const n = seed(id)
       if (index) y += ISLAND_SIZE.height + 96 + (n % 33)
-      return [id, { x: index === 0 ? 0 : (index % 2 ? 116 : 0) + ((n >>> 8) % 25) - 12, y }]
+      return [id, { x: index === 0 ? 0 : (index % 2 ? 176 : 0) + ((n >>> 8) % 25) - 12, y }]
     }),
   )
 }
@@ -129,7 +133,23 @@ export function focusedIslandLayers(
 export function zoomStops(pixelRatio: number, multipleIslands: boolean) {
   const ratio = Math.max(1, pixelRatio)
   const first = multipleIslands ? 1 : Math.ceil(ratio)
-  return Array.from({ length: Math.floor(4 * ratio) - first + 1 }, (_, i) => (first + i) / ratio)
+  const stops = Array.from(
+    { length: Math.floor(4 * ratio) - first + 1 },
+    (_, i) => (first + i) / ratio,
+  )
+  // Low-density screens (most desktop browsers) can't reach a whole-archipelago view in whole
+  // device pixels, so they also get a few sub-pixel stops. Phones (2×, 3×) never need them.
+  if (!multipleIslands) return stops
+  return [...[1 / 3, 1 / 2, 2 / 3].filter((zoom) => zoom < stops[0]! - 0.001), ...stops]
+}
+
+/**
+ * Points per sign pixel. Signs keep this size at every world zoom so the names stay readable
+ * from far out: about 1.3 pt per pixel, rounded to whole device pixels.
+ */
+export function signScale(pixelRatio: number) {
+  const ratio = Math.max(1, pixelRatio)
+  return Math.max(2, Math.round(ratio * 1.34)) / ratio
 }
 
 export function stepZoom(zoom: number, direction: 1 | -1, stops: readonly number[]) {
@@ -144,4 +164,57 @@ export function snapZoom(zoom: number, stops: readonly number[]) {
     (best, stop) => (Math.abs(stop - zoom) < Math.abs(best - zoom) ? stop : best),
     stops[0]!,
   )
+}
+
+export interface SeaProp {
+  key: string
+  kind: "rock" | "buoy"
+  /** Waterline anchor in sea art pixels. */
+  x: number
+  y: number
+  seed: number
+}
+
+/**
+ * A few things in the open water so the channels between islands read as sea, not empty
+ * background: rocks (some with a resting gull) out to the west of each channel, where the
+ * boat never goes, and a buoy marking each channel near the jetties on the east.
+ */
+export function seaProps(islands: readonly Pick<IslandLayer, "key" | "frame" | "offset">[]) {
+  const ordered = [...islands].sort((a, b) => a.offset.y - b.offset.y)
+  const props: SeaProp[] = []
+  ordered.slice(1).forEach((lower, index) => {
+    const upper = ordered[index]!
+    const n = seed(`${upper.key}|${lower.key}`)
+    const r = (shift: number) => ((n >>> shift) % 1000) / 1000
+    // The upper island's south corner and the lower island's north corner bound the channel.
+    const southCorner = islandPoint(upper, 18, 15)
+    const north = islandPoint(lower, 0, 0)
+    const midX = (southCorner.x + north.x) / 2
+    const midY = (southCorner.y + 14 + north.y) / 2
+    props.push(
+      {
+        key: `rock-${index}-a`,
+        kind: "rock",
+        x: Math.round(midX - 230 - r(0) * 40),
+        y: Math.round(midY - 10 + r(4) * 20),
+        seed: 0.5 + r(8) * 0.5,
+      },
+      {
+        key: `rock-${index}-b`,
+        kind: "rock",
+        x: Math.round(midX - 185 - r(12) * 20),
+        y: Math.round(midY + 22 + r(16) * 10),
+        seed: r(20) * 0.4,
+      },
+      {
+        key: `buoy-${index}`,
+        kind: "buoy",
+        x: Math.round(midX + 170 + r(24) * 30),
+        y: Math.round(midY - 6 + r(2) * 12),
+        seed: r(6),
+      },
+    )
+  })
+  return props
 }

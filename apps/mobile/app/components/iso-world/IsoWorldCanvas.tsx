@@ -13,8 +13,19 @@ import {
   type SharedValue,
 } from "react-native-reanimated"
 
-import { archipelagoBounds, hitTestIslands, islandPoint, type IslandLayer } from "./archipelago"
+import {
+  archipelagoBounds,
+  hitTestIslands,
+  islandPoint,
+  seaProps,
+  signScale,
+  zoomStops,
+  type IslandLayer,
+  type SeaProp,
+} from "./archipelago"
+import { buoy, seaRock } from "./archipelagoProps"
 import type { Bitmap } from "./bitmap"
+import { recolor } from "./islandPalettes"
 import { paintGround, SEA_TILE, seaTile, waterGlints } from "./paint"
 import { isoToScreen, type MapFrame } from "./projection"
 import { type Drawable, type HitTarget } from "./scene"
@@ -28,10 +39,34 @@ import type { Avatar } from "../pixel-world/avatars"
 const repeat = "repeat" as const
 
 const grounds = new WeakMap<TileMap, Bitmap>()
-function groundFor(map: TileMap, frame: MapFrame) {
+function groundFor(map: TileMap, frame: MapFrame, palette = 0) {
   let ground = grounds.get(map)
   if (!ground) grounds.set(map, (ground = paintGround(map, frame)))
-  return ground
+  return recolor(ground, palette)
+}
+
+/** Rocks sit still; buoys bob between two frames, out of step with each other. */
+function SeaPropNode({ prop, tick }: { prop: SeaProp; tick: SharedValue<number> }) {
+  const frames = prop.kind === "buoy" ? [buoy(0), buoy(1)] : [seaRock(prop.seed)]
+  const phase = Math.floor(prop.seed * 8)
+  const up = useDerivedValue(() => (Math.floor((tick.value + phase) / 6) % 2 === 1 ? 1 : 0))
+  const down = useDerivedValue(() => 1 - up.value)
+  return (
+    <>
+      {frames.map((sprite, index) => (
+        <Image
+          key={index}
+          image={bitmapImage(sprite.bitmap)}
+          x={prop.x - sprite.anchorX}
+          y={prop.y - sprite.anchorY}
+          width={sprite.bitmap.width}
+          height={sprite.bitmap.height}
+          sampling={sampling}
+          opacity={frames.length === 1 ? 1 : index ? up : down}
+        />
+      ))}
+    </>
+  )
 }
 
 // A pixel-stepped ellipse, flattened 3:1 to sit on the iso ground plane.
@@ -213,16 +248,14 @@ function IslandSign({
   visible,
   zoom,
   ratio,
-  focused,
 }: {
   sign: Drawable
   tick: SharedValue<number>
   visible: SharedValue<number>
   zoom: SharedValue<number>
   ratio: number
-  focused: boolean
 }) {
-  const fixedZoom = Math.max(1, Math.floor(ratio)) / ratio
+  const fixedZoom = signScale(ratio)
   const transform = useDerivedValue(() => [
     { translateX: sign.baseX },
     { translateY: sign.baseY },
@@ -242,7 +275,6 @@ function IslandSign({
   return (
     <Group opacity={visible} transform={transform}>
       <DrawableNode drawable={local} tick={tick} />
-      {focused && <Marker x={0} top={local.top} tick={tick} />}
     </Group>
   )
 }
@@ -268,8 +300,10 @@ const IslandNodes = memo(function IslandNodes({
   ratio: number
   focused: boolean
 }) {
-  const { map, frame, drawables, offset, sign } = island
-  const ground = groundFor(map, frame)
+  const { map, frame, drawables, offset } = island
+  // The island you're on shows its sign with the "you are here" pennant.
+  const sign = focused ? (island.signHere ?? island.sign) : island.sign
+  const ground = groundFor(map, frame, island.palette)
   const glints = useMemo(() => waterGlints(map, frame), [map, frame])
   const guidePath = useMemo(
     () => (guideTiles ?? []).map(({ col, row }) => diamondPath(frame, col, row, 0, 0.18)).join(""),
@@ -298,16 +332,7 @@ const IslandNodes = memo(function IslandNodes({
         <DrawableNode key={drawable.key} drawable={drawable} tick={tick} />
       ))}
       {selected && <Marker x={selected.baseX} top={selected.top} tick={tick} />}
-      {sign && (
-        <IslandSign
-          sign={sign}
-          tick={tick}
-          visible={signs}
-          zoom={signZoom}
-          ratio={ratio}
-          focused={focused}
-        />
-      )}
+      {sign && <IslandSign sign={sign} tick={tick} visible={signs} zoom={signZoom} ratio={ratio} />}
     </Group>
   )
 })
@@ -352,6 +377,8 @@ export function IsoWorldCanvas({
   const focused = islands.find((island) => island.key === focusIslandKey) ?? islands[0]!
   const bounds = useMemo(() => archipelagoBounds(islands, islands.length > 1 ? 88 : 0), [islands])
   const ratio = PixelRatio.get()
+  const widest = zoomStops(ratio, islands.length > 1)[0]!
+  const props = useMemo(() => (islands.length > 1 ? seaProps(islands) : []), [islands])
   const cameraX = useSharedValue(0)
   const cameraY = useSharedValue(0)
   const startX = useSharedValue(0)
@@ -425,16 +452,13 @@ export function IsoWorldCanvas({
     const into = Math.max(0, (t - 0.86) / 0.14)
     const easeOut = 1 - Math.pow(1 - out, 3)
     const easeIn = 1 - Math.pow(1 - into, 3)
-    const wide = 1 / ratio
-    const scale =
-      Math.max(
-        1,
-        Math.round(
-          (t < 0.14
-            ? departure.value.zoom + (wide - departure.value.zoom) * easeOut
-            : wide + (voyage.arrivalZoom - wide) * easeIn) * ratio,
-        ),
-      ) / ratio
+    const wide = widest
+    const raw =
+      t < 0.14
+        ? departure.value.zoom + (wide - departure.value.zoom) * easeOut
+        : wide + (voyage.arrivalZoom - wide) * easeIn
+    // Whole device pixels per art pixel where the screen can; low-density screens go below one.
+    const scale = raw * ratio >= 1 ? Math.round(raw * ratio) / ratio : raw
     const x =
       t < 0.14
         ? departure.value.x + (boat.x - departure.value.x) * easeOut
@@ -469,15 +493,7 @@ export function IsoWorldCanvas({
       cameraY.value = clampAxis(startY.value + e.translationY, height, minY, maxY, zoom)
     })
   const handleTap = (x: number, y: number) =>
-    onTap?.(
-      hitTestIslands(
-        islands,
-        { x, y },
-        44 / zoom,
-        zoom <= 1,
-        Math.max(1, Math.floor(ratio)) / ratio / zoom,
-      ),
-    )
+    onTap?.(hitTestIslands(islands, { x, y }, 44 / zoom, zoom <= 1, signScale(ratio) / zoom))
   const tap = Gesture.Tap()
     .maxDistance(8)
     .enabled(enabled)
@@ -517,6 +533,9 @@ export function IsoWorldCanvas({
                 sampling={sampling}
               />
             </Rect>
+            {props.map((prop) => (
+              <SeaPropNode key={prop.key} prop={prop} tick={tick} />
+            ))}
             {ordered.map((island) => (
               <IslandNodes
                 key={island.key}

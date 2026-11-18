@@ -7,6 +7,8 @@ import {
   hitTestIslands,
   islandPoint,
   onIsland,
+  seaProps,
+  signScale,
   snapZoom,
   stepZoom,
   zoomStops,
@@ -100,8 +102,11 @@ describe("island hit testing", () => {
 describe("crisp zoom", () => {
   it.each([1, 2, 2.625, 3, 3.5])("steps integer device pixels at density %s", (ratio) => {
     const stops = zoomStops(ratio, true)
-    expect(stops[0]).toBe(1 / ratio)
-    for (const zoom of stops) expect(zoom * ratio).toBeCloseTo(Math.round(zoom * ratio))
+    // Every density can zoom out to a third of a point, where the archipelago fits on a phone.
+    expect(stops[0]).toBeLessThanOrEqual(1 / 3 + 0.001)
+    // At or above one device pixel per art pixel, every stop is a whole number of them.
+    for (const zoom of stops.filter((z) => z * ratio >= 1))
+      expect(zoom * ratio).toBeCloseTo(Math.round(zoom * ratio))
     for (let i = 0; i < stops.length - 1; i++) {
       expect(stepZoom(stops[i]!, 1, stops)).toBe(stops[i + 1])
       expect(stepZoom(stops[i + 1]!, -1, stops)).toBe(stops[i])
@@ -187,4 +192,19 @@ it("shows the signed-in avatar only on the focused blanket, and only on the boat
       layer.drawables.some((d) => d.key === "avatar-sam"),
     ),
   ).toBe(true)
+})
+
+describe("sea props and signs", () => {
+  it("keeps open-water props off every island", () => {
+    const world = layers(["a", "b", "c", "d"])
+    const props = seaProps(world)
+    expect(props).toHaveLength(9)
+    for (const prop of props)
+      for (const island of world) expect(onIsland(island, prop, 0.6)).toBe(false)
+  })
+
+  it("draws signs at a readable size on every density", () => {
+    for (const ratio of [1, 2, 3]) expect(signScale(ratio)).toBeGreaterThanOrEqual(1.3)
+    expect(signScale(3) * 3).toBe(Math.round(signScale(3) * 3))
+  })
 })
