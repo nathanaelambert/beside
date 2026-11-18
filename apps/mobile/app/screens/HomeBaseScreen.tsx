@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, PixelRatio, Pressable, StatusBar, StyleSheet, View } from "react-native"
 import { ApiError } from "@beside/api-client"
 import { type MeadowPoint } from "@beside/api-client/garden"
@@ -57,6 +57,11 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const { data, islands, focused, focusIsland, updateGarden, busy, error, setError } =
     useHomeArchipelago(user?.id, route.params?.connectionId, attempt)
   const homebase = focused?.homebase
+  useEffect(() => {
+    setSelected(undefined)
+    setPlanting(undefined)
+    setGardenError("")
+  }, [homebase?.id])
   const members = focused?.members ?? []
   const avatars = focused?.avatars ?? []
   const activities = focused?.activities ?? []

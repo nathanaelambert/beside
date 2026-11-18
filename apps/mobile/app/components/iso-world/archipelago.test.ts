@@ -87,10 +87,13 @@ describe("island hit testing", () => {
     expect(hitTestIslands(world, { x: 50, y: 400 }, 22).islandKey).toBeUndefined()
   })
   it("accepts signs only at the zoom levels where they are shown", () => {
-    world[2]!.sign = { ...avatar, x: 180, y: -40, width: 90, height: 20 }
+    world[2]!.sign = { ...avatar, x: 180, y: -40, width: 90, height: 20, baseX: 225, baseY: -20 }
     const point = { x: world[2]!.offset.x + 190, y: world[2]!.offset.y - 30 }
     expect(hitTestIslands(world, point, 22, true).islandKey).toBe("friends")
     expect(hitTestIslands(world, point, 22, false).islandKey).toBeUndefined()
+    const enlarged = { x: world[2]!.offset.x + 120, y: world[2]!.offset.y - 60 }
+    expect(hitTestIslands(world, enlarged, 22, true, 3).islandKey).toBe("friends")
+    expect(hitTestIslands(world, enlarged, 22, true).islandKey).toBeUndefined()
   })
 })
 
