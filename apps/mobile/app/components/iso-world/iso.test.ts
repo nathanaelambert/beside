@@ -1,19 +1,16 @@
 import type { ApiState } from "@beside/api-client"
-import { checkStarterOakPlacement, initialMeadowItems } from "@beside/api-client/garden"
+import {
+  checkMeadowPlacement,
+  checkStarterOakPlacement,
+  initialMeadowItems,
+} from "@beside/api-client/garden"
 
 import { bitmapToPixelArt } from "./bitmap"
-import { homeActivities, homeRewards, plantableTiles, plantingTap, tileCentre } from "./homeWorld"
+import { homeActivities, plantableTiles, plantingTap, tileCentre } from "./homeWorld"
 import { paintGround } from "./paint"
 import { isoToScreen, mapFrame, screenToIso } from "./projection"
 import { house } from "./props"
-import {
-  buildActivityScene,
-  buildHomeScene,
-  hitTest,
-  homeFrame,
-  HOUSE_LOTS,
-  REWARD_LOTS,
-} from "./scene"
+import { buildActivityScene, buildHomeScene, hitTest, homeFrame, HOUSE_LOTS } from "./scene"
 import { meadowTileMap, tileAt } from "./tilemap"
 import { avatarsForMembers } from "../pixel-world/avatars"
 
@@ -68,10 +65,9 @@ describe("meadow tile map", () => {
     }
   })
 
-  it("keeps cottage and reward lots off land anyone could plant on", () => {
-    for (const [col, row] of [...HOUSE_LOTS, ...REWARD_LOTS])
+  it("keeps cottage lots off land anyone could plant on", () => {
+    for (const [col, row] of HOUSE_LOTS)
       expect(checkStarterOakPlacement(tileCentre(col, row))).not.toBeNull()
-    for (const [col, row] of REWARD_LOTS) expect(tileAt(map, col, row)?.kind).toBe("forest")
   })
 
   it("keeps cottages clear of the meadow's decorations", () => {
@@ -109,8 +105,7 @@ describe("home scene", () => {
   const avatars = avatarsForMembers(members)
   const scene = buildHomeScene({
     avatars,
-    items: initialMeadowItems,
-    rewards: [{ id: "r1", itemId: "sunflower" }],
+    items: [...initialMeadowItems, { key: "reward-r1", itemId: "sunflower", x: 104, y: 104 }],
     activities: [
       { id: "a1", name: "Read together", open: true },
       { id: "a2", name: "Walk" },
@@ -197,8 +192,36 @@ describe("home data", () => {
       { id: "b", name: "Later", open: true },
     ])
   })
+})
 
-  it("shows only decorations the home base has earned", () => {
-    expect(homeRewards(state, "h1").map((r) => r.id)).toEqual(["r1", "r2"])
+describe("shared island placement", () => {
+  it("uses the same occupancy for tile taps, suggestions and API validation", () => {
+    const first = plantableTiles()[0]!
+    const occupied = [tileCentre(first.col, first.row)]
+    expect(plantableTiles(occupied)).not.toContainEqual(first)
+    const p = isoToScreen(homeFrame, first.col + 0.5, first.row + 0.5)
+    expect(plantingTap(homeFrame, p.x, p.y, occupied).rejection).toBe("occupied")
+    for (const { col, row } of plantableTiles(occupied)) {
+      const at = tileCentre(col, row)
+      expect(checkMeadowPlacement(at, occupied)).toBeNull()
+      expect(tileAt(meadowTileMap(), col, row)?.kind).toBe("grass")
+    }
+  })
+
+  it("keeps legacy 8-pixel anchors exact and renders more than eight saved rewards", () => {
+    const items = Array.from({ length: 10 }, (_, index) => ({
+      key: `reward-${index}`,
+      itemId: "sunflower",
+      x: 80 + index * 8,
+      y: 104,
+    }))
+    const scene = buildHomeScene({ avatars: [], items })
+    expect(scene.drawables.filter((d) => d.key.startsWith("reward-"))).toHaveLength(10)
+    for (const item of items) {
+      const d = scene.drawables.find((d) => d.key === item.key)!
+      const expected = isoToScreen(scene.frame, item.x / 16, item.y / 16)
+      expect(d.baseX).toBe(Math.round(expected.x))
+      expect(d.baseY).toBe(Math.round(expected.y))
+    }
   })
 })

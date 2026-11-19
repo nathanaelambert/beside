@@ -11,10 +11,10 @@ import {
   WorldSchedulePanel,
 } from "@/components/ActivityWorld"
 import { PixelArtSprite } from "@/components/BesideMark"
-import { MilestoneReward, RewardChip, RewardLanded } from "@/components/MilestoneReward"
 import { homeActivities } from "@/components/iso-world/homeWorld"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { buildActivityScene, roofForIndex } from "@/components/iso-world/scene"
+import { MilestoneReward, RewardChip, RewardLanded } from "@/components/MilestoneReward"
 import { avatarsForMembers } from "@/components/pixel-world/avatars"
 import { catalogue } from "@/components/pixel-world/scene"
 import { RewardChangeSheet } from "@/components/RewardChangeSheet"
