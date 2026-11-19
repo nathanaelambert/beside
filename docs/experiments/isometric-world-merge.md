@@ -69,37 +69,3 @@ or data conversion is needed for this projection.
 
 A placement rejected because another member occupied its preview refreshes the
 shared garden without closing the editor or hiding the reason for rejection.
-
-## Verification (local, 2026-11-19)
-
-| Command | Result |
-| --- | --- |
-| `pnpm install --frozen-lockfile` | Exit 0; lockfile unchanged. Skia postinstall completed with missing-source-directory warnings while installing native artifacts. No native build was run. |
-| `pnpm --filter @beside/domain check-types` | Exit 0. |
-| `pnpm --filter @beside/api-client check-types` | Exit 0. |
-| `pnpm --filter @beside/api check-types` | Exit 0. |
-| `pnpm --filter playground check-types` | Exit 0; Next route type generation succeeded. |
-| `pnpm --filter mobile check-types` | Exit 0. |
-| `pnpm --filter playground lint` | Exit 0; no warnings. |
-| `pnpm --filter mobile test --runInBand` | Exit 0; 18 suites, 118 tests passed, no snapshots. |
-| `pnpm --filter @beside/api-client test` | Exit 0; 5 passed, 0 skipped. |
-| `pnpm --filter playground test` | Exit 0; 52 passed, 0 skipped. |
-| `createdb beside_iso_merge_20261119` | Exit 0; local PostgreSQL was available. |
-| `DATABASE_URL=postgresql:///beside_iso_merge_20261119 TEST_DATABASE_URL=postgresql:///beside_iso_merge_20261119 pnpm --filter @beside/api db:migrate` | Exit 0; applied 001, 002, 003, 004, 005, 008 in order. |
-| `DATABASE_URL=postgresql:///beside_iso_merge_20261119 TEST_DATABASE_URL=postgresql:///beside_iso_merge_20261119 pnpm --filter @beside/api test` | Exit 0; 24 tests, 3 suites passed, 0 skipped. |
-| `pnpm --filter mobile exec expo export --platform web` | Exit 0; exported `apps/mobile/dist`, one web bundle. |
-| ESLint on the edited mobile screens/helpers/tests with `--fix` | Exit 0 after formatting/import fixes. |
-| `git diff --check` | Exit 0. |
-
-Intermediate mobile checks exposed and corrected a missing disabled-control style,
-obsolete flat-camera assertions, and invalid test-fixture enum values. An initial
-`pnpm --filter mobile test -- --runInBand` exited 1 because the extra separator made
-Jest treat `--runInBand` as a test pattern; the corrected command above ran the full
-suite. The final regression tests cover waiting, preview, confirmation, memory,
-movement, invalid terrain, shared occupancy, stale occupancy after a race, activity
-links/cottages, old coordinate anchors and rendering more than eight rewards.
-
-No native iOS/Android build or interactive simulator/browser test was performed.
-Native Skia rendering and live pan/pinch gestures are therefore not visually
-verified; the web bundle, scene/projection tests and mocked screen interactions
-are verified. The throwaway PostgreSQL database is removed after verification.
