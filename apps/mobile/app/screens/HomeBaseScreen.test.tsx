@@ -292,15 +292,15 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   const first = canvasProps().previewTile!
   const firstPoint = tileCentre(first.col, first.row)
   expect(checkMeadowPlacement(firstPoint, [plantedGarden.oak])).toBeNull()
-  expect(canvasProps().drawables.find((d) => d.key === "placement-preview")).toMatchObject({
+  expect(canvasProps().drawables!.find((d) => d.key === "placement-preview")).toMatchObject({
     opacity: 0.72,
     hit: undefined,
   })
-  expect(canvasProps().drawables.some((d) => d.key === "reward-earned")).toBe(false)
+  expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(false)
 
   // A tap on water clears the preview and cannot submit a placement.
-  const pond = canvasProps().map.tiles.find((t) => t.kind === "water")!
-  const wet = isoToScreen(canvasProps().frame, pond.col + 0.5, pond.row + 0.5)
+  const pond = canvasProps().map!.tiles.find((t) => t.kind === "water")!
+  const wet = isoToScreen(canvasProps().frame!, pond.col + 0.5, pond.row + 0.5)
   act(() => canvasProps().onTap!({ ...wet }))
   expect(canvasProps().previewTile).toBeUndefined()
   fireEvent.press(screen.getByTestId("confirm-reward-placement"))
@@ -312,7 +312,7 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   expect(screen.getByText("Earned for “Finish Dune” · Book club")).toBeTruthy()
   expect(screen.getByText(/with Alice and Bob/)).toBeTruthy()
   expect(screen.queryByTestId("homebase-reward-waiting")).toBeNull()
-  expect(canvasProps().drawables.some((d) => d.key === "reward-earned")).toBe(true)
+  expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(true)
 
   // Tapping a saved prop restores its story; moving removes its old footprint.
   act(() => canvasProps().onTap!({ x: 0, y: 0 }))
@@ -325,7 +325,7 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   )
   fireEvent.press(screen.getByTestId("homebase-move-reward"))
   expect(canvasProps().guideTiles).toContainEqual(first)
-  expect(canvasProps().drawables.some((d) => d.key === "reward-earned")).toBe(false)
+  expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(false)
   fireEvent.press(screen.getByTestId("suggest-reward-spot"))
   const moved = canvasProps().previewTile!
   expect(moved).not.toEqual(first)
@@ -346,7 +346,7 @@ it("uses saved reward occupancy when offering oak tiles", async () => {
   const screen = openScreen()
   fireEvent.press(await screen.findByTestId("start-planting-oak"))
   expect(canvasProps().guideTiles).not.toContainEqual(first)
-  const p = isoToScreen(canvasProps().frame, first.col + 0.5, first.row + 0.5)
+  const p = isoToScreen(canvasProps().frame!, first.col + 0.5, first.row + 0.5)
   act(() => canvasProps().onTap!(p))
   expect(screen.getByText("That spot is occupied.")).toBeTruthy()
   expect(canvasProps().previewTile).toBeUndefined()

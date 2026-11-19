@@ -11,9 +11,13 @@ export interface Sprite {
   anchorY: number
 }
 
-type Point = [number, number]
+export type Point = [number, number]
 
-function fillPolygon(bitmap: Bitmap, points: Point[], color: (x: number, y: number) => string) {
+export function fillPolygon(
+  bitmap: Bitmap,
+  points: Point[],
+  color: (x: number, y: number) => string,
+) {
   const xs = points.map((p) => p[0])
   const ys = points.map((p) => p[1])
   const minX = Math.floor(Math.min(...xs))
