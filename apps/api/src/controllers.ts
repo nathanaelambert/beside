@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -28,6 +29,7 @@ import { AuthGuard, AuthService, type AuthenticatedRequest } from "./auth.ts";
 import { DatabaseService } from "./db/database.service.ts";
 import { DomainService } from "./domain.service.ts";
 import { GardenService } from "./garden.service.ts";
+import { RewardsService } from "./rewards.service.ts";
 import { list, ref } from "./openapi.ts";
 
 @ApiTags("Health")
@@ -103,6 +105,7 @@ export class DomainController {
   constructor(
     @Inject(DomainService) private readonly domain: DomainService,
     @Inject(GardenService) private readonly garden: GardenService,
+    @Inject(RewardsService) private readonly rewardPlans: RewardsService,
   ) {}
   @Get("state")
   @ApiOkResponse({ schema: ref("State") })
@@ -147,6 +150,57 @@ export class DomainController {
       homebaseId,
       input.plantStarterOakSchema.parse(body),
     );
+  }
+  @Put("homebases/:homebaseId/garden/rewards/:rewardId")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiParam({ name: "rewardId", type: String })
+  @ApiBody({ schema: ref("PlaceReward") })
+  @ApiOkResponse({ schema: ref("HomebaseGarden") })
+  @ApiOperation({
+    summary: "Place or move an earned reward in the meadow",
+    description:
+      "Any member can place a reward once everyone completed its milestone (409 before that), and move it later. Uses the starter oak's lawn rules; the oak and other placed rewards count as occupied. Retrying the same position is safe.",
+  })
+  placeReward(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+    @Param("rewardId") rewardId: string,
+    @Body() body: unknown,
+  ) {
+    return this.garden.placeReward(
+      request.actor.id,
+      homebaseId,
+      rewardId,
+      input.placeRewardSchema.parse(body),
+    );
+  }
+  @Get("homebases/:homebaseId/reward-agreements")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiOkResponse({ schema: list("RewardAgreement") })
+  @ApiOperation({
+    summary: "Who agreed to each reward's current item",
+    description:
+      "Every reward is worth the same, so the group agreeing is the only check on a choice. Picking or changing an item agrees to it automatically; agreements to an earlier item are not returned.",
+  })
+  rewardAgreements(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+  ) {
+    return this.rewardPlans.agreements(request.actor.id, homebaseId);
+  }
+  @Put("rewards/:rewardId/agreement")
+  @ApiParam({ name: "rewardId", type: String })
+  @ApiOkResponse({ schema: list("RewardAgreement") })
+  @ApiOperation({
+    summary: "Agree that a reward fits its milestone",
+    description:
+      "Only people on the reward's roster can agree (403 otherwise). Idempotent. Returns this reward's current agreements. To disagree, change the milestone's itemId instead.",
+  })
+  agreeToReward(
+    @Req() request: AuthenticatedRequest,
+    @Param("rewardId") rewardId: string,
+  ) {
+    return this.rewardPlans.agree(request.actor.id, rewardId);
   }
   @Post("homebases")
   @ApiBody({ schema: ref("CreateHomebase") })

@@ -25,6 +25,7 @@ import {
 import { SchedulingService } from "./scheduling.service.ts";
 import { DomainService } from "./domain.service.ts";
 import { GardenService } from "./garden.service.ts";
+import { RewardsService } from "./rewards.service.ts";
 import { SwaggerAssetsController } from "./swagger-assets.controller.ts";
 import { openApiSchema, ref, schemas } from "./openapi.ts";
 
@@ -88,6 +89,7 @@ class ApiExceptionFilter implements ExceptionFilter {
     DatabaseService,
     DomainService,
     GardenService,
+    RewardsService,
     SchedulingService,
     AuthService,
     AuthGuard,
@@ -118,7 +120,7 @@ export function configureApp(app: INestApplication) {
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean),
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   });
   app.useGlobalFilters(new ApiExceptionFilter());

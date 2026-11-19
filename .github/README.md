@@ -3,15 +3,21 @@
 [`ci-and-deploy.yml`](workflows/ci-and-deploy.yml) checks pull requests and pushes
 to `main`. It runs type checks, playground lint, all model/client/API tests, and
 real PostgreSQL integration tests against an isolated PostgreSQL 17 service.
-Pull requests also build the API and playground without production credentials.
+Pull requests also build the API and playground, and export the mobile web app,
+without production credentials.
 
-After checks pass on `main`, separate jobs deploy `beside-api` and
-`beside-playground`. Each job pulls the existing Vercel project's settings,
-builds once on the runner, and deploys the artifact with `--prebuilt`. The API
+After checks pass on `main`, separate jobs deploy `beside-api`,
+`beside-playground` and `beside-mobile` (the Expo web build of `apps/mobile`).
+Each job pulls the existing Vercel project's settings, builds once on the
+runner, and deploys the artifact with `--prebuilt`. The API
 job runs database migrations using the production environment pulled from
 Vercel. Readiness, authentication, OpenAPI and Swagger assets are checked after
-deployment. Main runs are queued to preserve deployment order. Pull requests,
-including forks, never run the deployment jobs or receive deployment tokens.
+deployment. For the mobile web app, the check loads the page, its bundle and
+`canvaskit.wasm`, follows a deep link, and confirms the bundle calls the
+production API (the build takes `EXPO_PUBLIC_BESIDE_API_URL` from the
+`beside-mobile` project's Production environment). Main runs are queued to
+preserve deployment order. Pull requests, including forks, never run the
+deployment jobs or receive deployment tokens.
 
 The Vercel projects do not need a native Git repository connection. The
 repository remains owned by `nathanaelambert`. The showcase website's existing
@@ -27,12 +33,13 @@ outcomes between runs. See [recurring milestones and hosting limits](../apps/api
 
 Under **Settings → Secrets and variables → Actions**, configure:
 
-| Kind     | Name                           | Value                                                                              |
-| -------- | ------------------------------ | ---------------------------------------------------------------------------------- |
-| Secret   | `VERCEL_TOKEN`                 | Vercel token with deployment access to both projects under `mosaab-emams-projects` |
-| Variable | `VERCEL_ORG_ID`                | `team_cfmfVTW3QoSHrmq8KkT7uW5v`                                                    |
-| Variable | `VERCEL_API_PROJECT_ID`        | `prj_fnnuQluUtQGZ5dGj4spOFFOgHweZ`                                                 |
-| Variable | `VERCEL_PLAYGROUND_PROJECT_ID` | `prj_FeJYSHclzSmwfdOxwhxnyccgs3pq`                                                 |
+| Kind     | Name                           | Value                                                                                   |
+| -------- | ------------------------------ | --------------------------------------------------------------------------------------- |
+| Secret   | `VERCEL_TOKEN`                 | Vercel token with deployment access to all three projects under `mosaab-emams-projects` |
+| Variable | `VERCEL_ORG_ID`                | `team_cfmfVTW3QoSHrmq8KkT7uW5v`                                                         |
+| Variable | `VERCEL_API_PROJECT_ID`        | `prj_fnnuQluUtQGZ5dGj4spOFFOgHweZ`                                                      |
+| Variable | `VERCEL_PLAYGROUND_PROJECT_ID` | `prj_FeJYSHclzSmwfdOxwhxnyccgs3pq`                                                      |
+| Variable | `VERCEL_MOBILE_PROJECT_ID`     | `prj_IEVMowaHCRpbutSRKzsq9cZTdHhx`                                                      |
 
 Create a dedicated deployment token at https://vercel.com/account/settings/tokens
 and scope it to the `mosaab-emams-projects` team. Store it as the repository’s

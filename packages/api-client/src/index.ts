@@ -19,6 +19,8 @@ import type {
   RegisterInput,
   Session,
   PlantStarterOakInput,
+  PlaceRewardInput,
+  RewardAgreement,
   UpdateActivityInput,
   UpdateMilestoneInput,
 } from "@beside/domain/api";
@@ -127,6 +129,29 @@ export class BesideClient {
       `/homebases/${encodeURIComponent(homebaseId)}/garden/starter-oak`,
       "POST",
       position,
+    );
+  }
+  /** Place or move an earned reward in the home base's meadow. */
+  placeReward(
+    homebaseId: string,
+    rewardId: string,
+    position: PlaceRewardInput,
+  ) {
+    return this.request<HomebaseGarden>(
+      `/homebases/${encodeURIComponent(homebaseId)}/garden/rewards/${encodeURIComponent(rewardId)}`,
+      "PUT",
+      position,
+    );
+  }
+  rewardAgreements(homebaseId: string) {
+    return this.request<RewardAgreement[]>(
+      `/homebases/${encodeURIComponent(homebaseId)}/reward-agreements`,
+    );
+  }
+  agreeToReward(rewardId: string) {
+    return this.request<RewardAgreement[]>(
+      `/rewards/${encodeURIComponent(rewardId)}/agreement`,
+      "PUT",
     );
   }
   createHomebase(name: string) {

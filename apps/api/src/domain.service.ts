@@ -6,6 +6,7 @@ import type { Command } from "@beside/domain/types";
 import { DatabaseService } from "./db/database.service.ts";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
 import { createHomebase, joinHomebase } from "./homebases.ts";
+import { recordRewardProposals } from "./rewards.service.ts";
 
 @Injectable()
 export class DomainService {
@@ -35,7 +36,15 @@ export class DomainService {
           error instanceof Error ? error.message : "Invalid command.",
         );
       }
-      if (!result.duplicate) await persistChanges(client, before, result.db);
+      if (!result.duplicate) {
+        await persistChanges(client, before, result.db);
+        await recordRewardProposals(
+          client,
+          before,
+          result.db,
+          () => command.actorId,
+        );
+      }
       return { entityId: result.entityId, duplicate: result.duplicate };
     });
   }

@@ -34,10 +34,28 @@ export const plantStarterOakSchema = z.strictObject({
     .max(WORLD_HEIGHT - 1)
     .multipleOf(meadowGridSize),
 });
+export const placeRewardSchema = plantStarterOakSchema;
+export const rewardPlacementSchema = plantStarterOakSchema.extend({
+  rewardId: id,
+  itemId: id,
+  placedByUserId: id.nullable(),
+  placedAt: z.iso.datetime(),
+});
 export const homebaseGardenSchema = z.strictObject({
   oak: plantStarterOakSchema
     .extend({ itemId: z.literal(starterOakItemId) })
     .nullable(),
+  rewards: z
+    .array(rewardPlacementSchema)
+    .describe("Earned rewards standing in the meadow, oldest first."),
+});
+export const rewardAgreementSchema = z.object({
+  rewardId: id,
+  userId: id,
+  itemId: id.describe(
+    "The item this person agreed to. Counts only while it matches the reward's current item.",
+  ),
+  agreedAt: z.iso.datetime(),
 });
 const hasChanges = (value: object) =>
   Object.values(value).some((field) => field !== undefined);
@@ -123,6 +141,9 @@ export type MutationResult = z.infer<typeof mutationSchema>;
 export type ApiHomebase = z.infer<typeof homebaseSchema>;
 export type HomebaseGarden = z.infer<typeof homebaseGardenSchema>;
 export type PlantStarterOakInput = z.input<typeof plantStarterOakSchema>;
+export type PlaceRewardInput = z.input<typeof placeRewardSchema>;
+export type RewardPlacement = z.infer<typeof rewardPlacementSchema>;
+export type RewardAgreement = z.infer<typeof rewardAgreementSchema>;
 export type RegisterInput = z.input<typeof registerSchema>;
 export type LoginInput = z.input<typeof loginSchema>;
 export type CreateSubjectInput = z.input<typeof createSubjectSchema>;

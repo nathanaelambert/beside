@@ -1,1 +1,1 @@
-export const latestMigration = "005_homebase_starter_oak.sql";
+export const latestMigration = "008_reward_agreements_and_placements.sql";
