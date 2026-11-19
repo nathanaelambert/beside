@@ -61,14 +61,17 @@ pnpm dev --filter=beside-showcase
 # Model playground: http://localhost:3002
 pnpm dev --filter=playground
 
-# Mobile: starts Expo for a development client
-pnpm dev --filter=mobile
+# Mobile: builds/opens the development client on an iOS 27 iPhone simulator
+pnpm start
 ```
 
 Native mobile development needs the appropriate platform tooling: Xcode and an
 iOS simulator on macOS, or Android Studio and an emulator/device for Android.
-Build and install a development client before connecting to the Expo server; see
-the [mobile README](apps/mobile/README.md) for build instructions.
+The default mobile command builds and installs the iOS development client before
+starting Expo. `pnpm dev --filter=mobile` uses the same iOS 27 workflow.
+Use `pnpm android` explicitly for Android, or `pnpm --filter mobile start:metro`
+for just the server. See the [mobile README](apps/mobile/README.md#local-ios-development)
+for prerequisites and device overrides.
 
 For a browser preview of the mobile reward screen:
 

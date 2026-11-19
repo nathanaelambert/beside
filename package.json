@@ -2,6 +2,9 @@
   "name": "beside",
   "private": true,
   "scripts": {
+    "start": "pnpm --filter mobile ios",
+    "ios": "pnpm --filter mobile ios",
+    "android": "pnpm --filter mobile android",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",

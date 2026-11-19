@@ -180,10 +180,15 @@ Use Node.js 24 or newer and the pnpm version specified in `package.json`.
 
 ```sh
 pnpm install
+pnpm start # Mobile: builds/opens an iOS 27 iPhone simulator on macOS
 pnpm dev --filter=beside-showcase
 pnpm dev --filter=mobile
 pnpm dev --filter=playground
 ```
+
+Mobile defaults to iOS 27. `pnpm ios` uses the same workflow; Android remains
+available explicitly with `pnpm android`. See the [mobile setup](apps/mobile/README.md#local-ios-development)
+for prerequisites, device overrides, and the Metro-only command.
 
 To run the mobile app in a browser without a simulator, use these commands from the repository root:
 
