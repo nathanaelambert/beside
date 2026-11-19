@@ -67,7 +67,9 @@ jobs:
           pnpm --filter playground test
       - name: Check production builds for pull requests
         if: github.event_name == 'pull_request'
-        run: pnpm exec turbo run build --filter=@beside/api --filter=playground
+        run: |
+          pnpm exec turbo run build --filter=@beside/api --filter=playground
+          EXPO_PUBLIC_BESIDE_API_URL=https://beside-api.vercel.app pnpm --filter mobile bundle:web
 
   deploy:
     name: Deploy ${{ matrix.app }}
@@ -85,6 +87,9 @@ jobs:
           - app: playground
             project_id: ${{ vars.VERCEL_PLAYGROUND_PROJECT_ID }}
             production_url: https://beside-playground.vercel.app
+          - app: mobile
+            project_id: ${{ vars.VERCEL_MOBILE_PROJECT_ID }}
+            production_url: https://beside-mobile.vercel.app
     env:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ matrix.project_id }}
