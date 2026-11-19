@@ -80,7 +80,7 @@ export const houseSprite = (roof: RoofColor, lit: boolean) =>
 
 // --- Building blocks -------------------------------------------------------------------------
 
-function spriteDrawable(
+export function spriteDrawable(
   frame: MapFrame,
   key: string,
   sprite: Sprite,
@@ -207,8 +207,10 @@ export function terrainDrawables(
   map: TileMap,
   frame: MapFrame,
   reserved: Set<string> = new Set(),
+  variantSeed = 0,
 ): Drawable[] {
   const result: Drawable[] = []
+  const salt = Math.floor(variantSeed * 1000000)
   map.tiles.forEach((tile, index) => {
     if (!isRaised(tile)) return
     const block = blockFor(map, frame, index)
@@ -227,13 +229,13 @@ export function terrainDrawables(
     })
     if (tile.kind !== "forest" || reserved.has(`${tile.col},${tile.row}`)) return
     const front = tile.row === map.rows - 1 || tile.col === map.cols - 1
-    const roll = tile.seed
-    const jitterU = (hash(tile.col, tile.row, 51) - 0.5) * 0.3
-    const jitterV = (hash(tile.col, tile.row, 52) - 0.5) * 0.3
+    const roll = variantSeed ? hash(tile.col, tile.row, salt) : tile.seed
+    const jitterU = (hash(tile.col, tile.row, 51 + salt) - 0.5) * 0.3
+    const jitterV = (hash(tile.col, tile.row, 52 + salt) - 0.5) * 0.3
     const at = { u: tile.col + 0.5 + jitterU, v: tile.row + 0.5 + jitterV, lift: tile.lift }
     const key = `prop-${tile.col}-${tile.row}`
     if (!front && roll < 0.78) {
-      const itemId = hash(tile.col, tile.row, 53) > 0.45 ? "pine-tree" : "oak-tree"
+      const itemId = hash(tile.col, tile.row, 53 + salt) > 0.45 ? "pine-tree" : "oak-tree"
       const tree = itemDrawable(frame, map, key, itemId, at.u, at.v, { hit: undefined })
       if (tree) result.push(tree)
     } else if (roll < 0.86 || (front && roll < 0.5)) {
@@ -263,7 +265,7 @@ export function sortDrawables(drawables: Drawable[]) {
   return [...drawables].sort((a, b) => a.depth - b.depth || a.baseX - b.baseX)
 }
 
-function opaqueAt(d: Drawable, x: number, y: number) {
+export function opaqueAt(d: Drawable, x: number, y: number) {
   const px = Math.floor(x - d.x)
   const py = Math.floor(y - d.y)
   if (px < 0 || py < 0 || px >= d.width || py >= d.height) return false
@@ -318,6 +320,7 @@ export interface HomeActivity {
 }
 
 export interface HomeSceneInput {
+  variantSeed?: number
   avatars: Avatar[]
   /** Decorations in meadow pixels (bottom-centre anchors). */
   items: { key: string; itemId: string; x: number; y: number }[]
@@ -344,15 +347,18 @@ export function houseLots(activities: HomeActivity[]) {
  */
 export const homeAvatarY = (y: number) => 135 + (y - 147) / 2
 
-export function buildHomeScene({ avatars, items, activities = [] }: HomeSceneInput) {
+export function buildHomeScene({
+  avatars,
+  items,
+  activities = [],
+  variantSeed = 0,
+}: HomeSceneInput) {
   const map = meadowTileMap()
   const frame = homeFrame
   const houses = houseLots(activities)
-  const reserved = new Set([
-    ...houses.map(({ col, row }) => `${col},${row}`),
-  ])
+  const reserved = new Set([...houses.map(({ col, row }) => `${col},${row}`)])
   const drawables: Drawable[] = [
-    ...terrainDrawables(map, frame, reserved),
+    ...terrainDrawables(map, frame, reserved, variantSeed),
     ...items.flatMap((item) => {
       const { u, v } = meadowToIso(item.x, item.y)
       return itemDrawable(frame, map, item.key, item.itemId, u, v) ?? []

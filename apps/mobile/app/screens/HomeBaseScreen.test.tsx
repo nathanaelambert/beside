@@ -1,4 +1,5 @@
 import type { EffectCallback } from "react"
+import { useReducedMotion } from "react-native-reanimated"
 import { ApiError, type ApiHomebase, type ApiState } from "@beside/api-client"
 import { checkMeadowPlacement } from "@beside/api-client/garden"
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native"
@@ -21,7 +22,7 @@ jest.mock("@react-navigation/native", () => ({
 jest.mock("react-native-reanimated", () => ({
   __esModule: true,
   default: { View: jest.requireActual("react-native").View },
-  useReducedMotion: () => true,
+  useReducedMotion: jest.fn(() => true),
   useSharedValue: (value: number) => ({ value }),
   useAnimatedStyle: (build: () => unknown) => build(),
   withTiming: (value: number) => value,
@@ -34,7 +35,10 @@ jest.mock("@/components/iso-world/IsoWorldCanvas", () => ({
 }))
 jest.mock("@/components/BesideMark", () => ({ PixelArtSprite: () => null }))
 jest.mock("@/components/RewardSprite", () => ({ RewardSprite: () => null }))
-jest.mock("@/context/AuthContext", () => ({ useAuth: () => ({ logout: jest.fn() }) }))
+jest.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ user: { id: "alice" }, logout: jest.fn() }),
+}))
+jest.mock("@/utils/storage", () => ({ loadString: () => null, saveString: jest.fn() }))
 jest.mock("@/services/api/beside", () => ({
   besideApi: {
     homebases: jest.fn(),
@@ -79,6 +83,7 @@ const roster = "Our garden, an island garden. 2 members: Alice Green, Bob Brown.
 
 beforeEach(() => {
   jest.clearAllMocks()
+  jest.mocked(useReducedMotion).mockReturnValue(true)
   jest.mocked(besideApi.homebases).mockResolvedValue([base])
   jest.mocked(besideApi.state).mockResolvedValue(state)
   jest.mocked(besideApi.homebaseGarden).mockReset().mockResolvedValue({ oak: null, rewards: [] })
@@ -92,7 +97,7 @@ function openScreen(width = 390, linked?: { rewardId: string; place?: boolean })
     navigation,
     route: { key: "homebase", name: "HomeBase", params: { connectionId: base.id, ...linked } },
   } as unknown as AppStackScreenProps<"HomeBase">
-  const screen = render(
+  const view = (connectionId = base.id, link = linked) => (
     <SafeAreaProvider
       initialMetrics={{
         frame: { x: 0, y: 0, width, height: 844 },
@@ -100,14 +105,27 @@ function openScreen(width = 390, linked?: { rewardId: string; place?: boolean })
       }}
     >
       <ThemeProvider>
-        <HomeBaseScreen {...props} />
+        <HomeBaseScreen {...props} route={{ ...props.route, params: { connectionId, ...link } }} />
       </ThemeProvider>
-    </SafeAreaProvider>,
+    </SafeAreaProvider>
   )
+  const screen = render(view())
   fireEvent(screen.getByTestId("homebase-world"), "layout", {
     nativeEvent: { layout: { x: 0, y: 0, width, height: 400 } },
   })
-  return Object.assign(screen, { navigation })
+  return Object.assign(screen, {
+    navigation,
+    switchRoute: (connectionId: string, link?: { rewardId: string; place?: boolean }) => {
+      screen.rerender(view(connectionId, link))
+      fireEvent(screen.getByTestId("homebase-world"), "layout", {
+        nativeEvent: { layout: { x: 0, y: 0, width, height: 400 } },
+      })
+    },
+    layoutWorld: () =>
+      fireEvent(screen.getByTestId("homebase-world"), "layout", {
+        nativeEvent: { layout: { x: 0, y: 0, width, height: 400 } },
+      }),
+  })
 }
 
 const canvasProps = () => jest.mocked(IsoWorldCanvas).mock.calls.at(-1)![0]
@@ -292,15 +310,15 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   const first = canvasProps().previewTile!
   const firstPoint = tileCentre(first.col, first.row)
   expect(checkMeadowPlacement(firstPoint, [plantedGarden.oak])).toBeNull()
-  expect(canvasProps().drawables.find((d) => d.key === "placement-preview")).toMatchObject({
+  expect(canvasProps().drawables!.find((d) => d.key === "placement-preview")).toMatchObject({
     opacity: 0.72,
     hit: undefined,
   })
-  expect(canvasProps().drawables.some((d) => d.key === "reward-earned")).toBe(false)
+  expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(false)
 
   // A tap on water clears the preview and cannot submit a placement.
-  const pond = canvasProps().map.tiles.find((t) => t.kind === "water")!
-  const wet = isoToScreen(canvasProps().frame, pond.col + 0.5, pond.row + 0.5)
+  const pond = canvasProps().map!.tiles.find((t) => t.kind === "water")!
+  const wet = isoToScreen(canvasProps().frame!, pond.col + 0.5, pond.row + 0.5)
   act(() => canvasProps().onTap!({ ...wet }))
   expect(canvasProps().previewTile).toBeUndefined()
   fireEvent.press(screen.getByTestId("confirm-reward-placement"))
@@ -312,7 +330,7 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   expect(screen.getByText("Earned for “Finish Dune” · Book club")).toBeTruthy()
   expect(screen.getByText(/with Alice and Bob/)).toBeTruthy()
   expect(screen.queryByTestId("homebase-reward-waiting")).toBeNull()
-  expect(canvasProps().drawables.some((d) => d.key === "reward-earned")).toBe(true)
+  expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(true)
 
   // Tapping a saved prop restores its story; moving removes its old footprint.
   act(() => canvasProps().onTap!({ x: 0, y: 0 }))
@@ -325,7 +343,7 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   )
   fireEvent.press(screen.getByTestId("homebase-move-reward"))
   expect(canvasProps().guideTiles).toContainEqual(first)
-  expect(canvasProps().drawables.some((d) => d.key === "reward-earned")).toBe(false)
+  expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(false)
   fireEvent.press(screen.getByTestId("suggest-reward-spot"))
   const moved = canvasProps().previewTile!
   expect(moved).not.toEqual(first)
@@ -346,7 +364,7 @@ it("uses saved reward occupancy when offering oak tiles", async () => {
   const screen = openScreen()
   fireEvent.press(await screen.findByTestId("start-planting-oak"))
   expect(canvasProps().guideTiles).not.toContainEqual(first)
-  const p = isoToScreen(canvasProps().frame, first.col + 0.5, first.row + 0.5)
+  const p = isoToScreen(canvasProps().frame!, first.col + 0.5, first.row + 0.5)
   act(() => canvasProps().onTap!(p))
   expect(screen.getByText("That spot is occupied.")).toBeTruthy()
   expect(canvasProps().previewTile).toBeUndefined()
@@ -385,4 +403,226 @@ it("refreshes shared occupancy after a placement race without closing the reward
   fireEvent.press(screen.getByTestId("suggest-reward-spot"))
   expect(canvasProps().previewTile).toBeDefined()
   expect(canvasProps().previewTile).not.toEqual(tile)
+})
+
+const secondBase: ApiHomebase = { ...base, id: "other", name: "Other island" }
+const archipelagoState: ApiState = {
+  ...earnedState,
+  activities: [
+    ...earnedState.activities,
+    {
+      ...earnedState.activities[0]!,
+      id: "other-read",
+      connectionId: secondBase.id,
+      name: "Other book club",
+    },
+  ],
+  milestones: [
+    ...earnedState.milestones,
+    {
+      ...earnedState.milestones[0]!,
+      id: "other-finished",
+      activityId: "other-read",
+      rewardId: "other-earned",
+    },
+  ],
+  rewards: [
+    ...earnedState.rewards,
+    {
+      ...earnedState.rewards[0]!,
+      id: "other-earned",
+      homebaseId: secondBase.id,
+      itemId: "pink-tulip",
+    },
+  ],
+}
+function mockArchipelago() {
+  jest.mocked(besideApi.homebases).mockResolvedValue([base, secondBase])
+  jest.mocked(besideApi.state).mockResolvedValue(archipelagoState)
+  jest
+    .mocked(besideApi.homebaseGarden)
+    .mockImplementation(async (id) => (id === base.id ? plantedGarden : { oak: null, rewards: [] }))
+}
+
+it("accepts the canvas's single-island key when selecting and planting", async () => {
+  const screen = openScreen()
+  fireEvent.press(await screen.findByTestId("start-planting-oak"))
+  const tile = plantableTiles()[0]!
+  const point = isoToScreen(canvasProps().frame!, tile.col + 0.5, tile.row + 0.5)
+  act(() => canvasProps().onTap!({ ...point, islandKey: "single" }))
+  expect(canvasProps().previewTile).toEqual(tile)
+  await act(async () => fireEvent.press(screen.getByTestId("confirm-starter-oak")))
+  expect(besideApi.plantStarterOak).toHaveBeenCalledWith(base.id, tileCentre(tile.col, tile.row))
+})
+
+it("cancels a departure preview while sailing and places only the destination's reward", async () => {
+  mockArchipelago()
+  jest.mocked(useReducedMotion).mockReturnValue(false)
+  jest.mocked(besideApi.placeReward).mockImplementation(async (_id, rewardId, position) => ({
+    oak: null,
+    rewards: [{ ...rewardPlacement(position), rewardId, itemId: "pink-tulip" }],
+  }))
+  const screen = openScreen()
+  fireEvent.press(await screen.findByTestId("homebase-place-reward"))
+  expect(screen.getByTestId("place-reward-panel")).toBeTruthy()
+  const departurePreview = canvasProps().previewTile!
+  act(() => canvasProps().onTap!({ islandKey: secondBase.id, x: 0, y: 0 }))
+  expect(canvasProps().voyage).toBeDefined()
+  expect(screen.queryByTestId("place-reward-panel")).toBeNull()
+  expect(canvasProps().previewTile).toBeUndefined()
+  expect(
+    canvasProps().islands!.every(
+      (island) => !island.drawables.some((d) => d.key === "placement-preview"),
+    ),
+  ).toBe(true)
+  fireEvent.press(screen.getByTestId("homebase-place-reward"))
+  expect(besideApi.placeReward).not.toHaveBeenCalled()
+  act(() => canvasProps().onArrival!())
+  screen.layoutWorld()
+  expect(screen.getByTestId("homebase-name").props.children).toBe(secondBase.name)
+  expect(canvasProps().focusIslandKey).toBe(secondBase.id)
+  expect(screen.getByText("Blush tulip is waiting")).toBeTruthy()
+  expect(screen.queryByTestId("place-reward-panel")).toBeNull()
+  fireEvent.press(screen.getByTestId("homebase-place-reward"))
+  const tile = canvasProps().previewTile!
+  expect(checkMeadowPlacement(tileCentre(tile.col, tile.row))).toBeNull()
+  expect(canvasProps().guideTiles).toContainEqual(departurePreview)
+  await act(async () => fireEvent.press(screen.getByTestId("confirm-reward-placement")))
+  expect(besideApi.placeReward).toHaveBeenCalledWith(
+    secondBase.id,
+    "other-earned",
+    tileCentre(tile.col, tile.row),
+  )
+  expect(
+    canvasProps()
+      .islands!.find((i) => i.key === base.id)!
+      .drawables.some((d) => d.key === "reward-other-earned"),
+  ).toBe(false)
+})
+
+it("uses each island's saved oak and rewards when moving a destination reward", async () => {
+  mockArchipelago()
+  const placedTile = plantableTiles([plantedGarden.oak])[0]!
+  const saved = {
+    ...rewardPlacement(tileCentre(placedTile.col, placedTile.row)),
+    rewardId: "other-earned",
+    itemId: "pink-tulip",
+  }
+  jest
+    .mocked(besideApi.homebaseGarden)
+    .mockImplementation(async (id) =>
+      id === base.id ? { oak: null, rewards: [] } : { ...plantedGarden, rewards: [saved] },
+    )
+  const screen = openScreen()
+  await screen.findByTestId("homebase-place-reward")
+  fireEvent.press(screen.getByRole("button", { name: "Sail to Other island" }))
+  screen.layoutWorld()
+  expect(screen.queryByTestId("homebase-reward-waiting")).toBeNull()
+  act(() =>
+    canvasProps().onTap!({
+      islandKey: secondBase.id,
+      x: 0,
+      y: 0,
+      hit: { type: "item", id: "reward-other-earned", itemId: "pink-tulip" },
+    }),
+  )
+  fireEvent.press(screen.getByTestId("homebase-move-reward"))
+  expect(canvasProps().guideTiles).toContainEqual(placedTile)
+  for (const tile of canvasProps().guideTiles!)
+    expect(checkMeadowPlacement(tileCentre(tile.col, tile.row), [plantedGarden.oak])).toBeNull()
+  expect(
+    canvasProps()
+      .islands!.find((i) => i.key === secondBase.id)!
+      .drawables.some((d) => d.key === "reward-other-earned"),
+  ).toBe(false)
+})
+
+it.each([false, true])(
+  "isolates a pending reward save when a route switches islands (failure: %s)",
+  async (fail) => {
+    mockArchipelago()
+    let resolve!: (garden: typeof plantedGarden) => void
+    let reject!: (error: Error) => void
+    jest.mocked(besideApi.placeReward).mockReturnValue(
+      new Promise((done, failed) => {
+        resolve = done
+        reject = failed
+      }),
+    )
+    const screen = openScreen()
+    fireEvent.press(await screen.findByTestId("homebase-place-reward"))
+    const tile = canvasProps().previewTile!
+    fireEvent.press(screen.getByTestId("confirm-reward-placement"))
+    expect(besideApi.placeReward).toHaveBeenCalledWith(
+      base.id,
+      "earned",
+      tileCentre(tile.col, tile.row),
+    )
+    screen.switchRoute(secondBase.id)
+    expect(screen.queryByTestId("place-reward-panel")).toBeNull()
+    await act(async () => {
+      if (fail) reject(new ApiError(400, "A is occupied"))
+      else
+        resolve({
+          ...plantedGarden,
+          rewards: [rewardPlacement(tileCentre(tile.col, tile.row))],
+        } as typeof plantedGarden)
+    })
+    expect(screen.queryByText("A is occupied")).toBeNull()
+    expect(screen.queryByText("Try again")).toBeNull()
+    expect(screen.queryByTestId("homebase-reward-memory")).toBeNull()
+    expect(screen.getByText("Blush tulip is waiting")).toBeTruthy()
+    expect(canvasProps().focus).toEqual({ u: 8.6, v: 9.3 })
+    expect(canvasProps().previewTile).toBeUndefined()
+    expect(
+      canvasProps()
+        .islands!.find((i) => i.key === secondBase.id)!
+        .drawables.some((d) => d.key === "reward-earned"),
+    ).toBe(false)
+    expect(besideApi.placeReward).toHaveBeenCalledTimes(1)
+  },
+)
+
+it("does not publish an old oak conflict or refresh error on a newly selected island", async () => {
+  mockArchipelago()
+  jest.mocked(besideApi.homebaseGarden).mockResolvedValue({ oak: null, rewards: [] })
+  jest.mocked(besideApi.plantStarterOak).mockRejectedValue(new ApiError(409, "Already planted"))
+  const screen = openScreen()
+  fireEvent.press(await screen.findByTestId("start-planting-oak"))
+  fireEvent.press(screen.getByTestId("suggest-oak-spot"))
+  let reject!: (error: Error) => void
+  jest.mocked(besideApi.homebaseGarden).mockReturnValue(
+    new Promise((_done, failed) => {
+      reject = failed
+    }),
+  )
+  await act(async () => fireEvent.press(screen.getByTestId("confirm-starter-oak")))
+  expect(screen.getByText("Someone already planted the shared oak.")).toBeTruthy()
+  screen.switchRoute(secondBase.id)
+  await act(async () => reject(new ApiError(404, "Unavailable")))
+  expect(screen.queryByText("Someone already planted the shared oak.")).toBeNull()
+  expect(screen.queryByText("Try again")).toBeNull()
+  expect(screen.getByTestId("start-planting-oak")).toBeTruthy()
+})
+
+it("waits for the linked reward's island before consuming a new route's placement link", async () => {
+  mockArchipelago()
+  const screen = openScreen()
+  await screen.findByTestId("homebase-place-reward")
+  screen.switchRoute(secondBase.id, { rewardId: "other-earned", place: true })
+  await screen.findByTestId("place-reward-panel")
+  expect(screen.getByText(/Earned for “Finish Dune” · Other book club/)).toBeTruthy()
+  expect(
+    screen.navigation.setParams.mock.calls.filter(([params]) => "rewardId" in params),
+  ).toHaveLength(1)
+  jest.mocked(besideApi.placeReward).mockImplementation(async (_baseId, rewardId, position) => ({
+    oak: null,
+    rewards: [{ ...rewardPlacement(position), rewardId, itemId: "pink-tulip" }],
+  }))
+  await act(async () => fireEvent.press(screen.getByTestId("confirm-reward-placement")))
+  expect(besideApi.placeReward).toHaveBeenCalledWith(
+    secondBase.id,
+    "other-earned",
+    expect.any(Object),
+  )
 })

@@ -6,6 +6,9 @@ import { attendanceMilestones } from "@/services/api/attendance"
 import { CELL, screenToIso, type MapFrame } from "./projection"
 import type { HomeActivity } from "./scene"
 
+/** The picnic blanket and the cottages beside it. */
+export const homeFocus = { u: 8.6, v: 9.3 }
+
 /** Activities of one home base, oldest first, so each keeps its cottage as new ones arrive. */
 export function homeActivities(state: ApiState, homebaseId: string, now: number): HomeActivity[] {
   return state.activities
