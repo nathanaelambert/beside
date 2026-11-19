@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 
 const [app, origin] = process.argv.slice(2);
-assert.ok(app === "api" || app === "playground", "Choose api or playground.");
+assert.ok(
+  ["api", "playground", "mobile"].includes(app),
+  "Choose api, playground or mobile.",
+);
 const base = new URL(origin);
 assert.equal(base.protocol, "https:");
 
@@ -43,6 +46,25 @@ if (app === "api") {
   }
   const unauthorized = await read("/api/v1/state", 401);
   assert.equal(unauthorized.headers.get("cache-control"), "no-store");
+} else if (app === "mobile") {
+  const page = await read("/");
+  assert.match(page.headers.get("content-type"), /text\/html/);
+  const html = await page.text();
+  assert.match(html, /<title>Beside<\/title>/);
+  const script = html.match(
+    /<script src="(\/_expo\/static\/js\/web\/[^"]+\.js)"/,
+  )?.[1];
+  assert.ok(script, "index.html should load the Expo web bundle");
+  const bundle = await (await read(script)).text();
+  // A missing EXPO_PUBLIC_BESIDE_API_URL silently falls back to localhost.
+  assert.ok(
+    bundle.includes("https://beside-api.vercel.app"),
+    "the web bundle should call the production API",
+  );
+  const wasm = await read("/canvaskit.wasm");
+  assert.match(wasm.headers.get("content-type"), /application\/wasm/);
+  // Deep links rewrite to the app shell.
+  assert.match(await (await read("/HomeBase")).text(), /<div id="root">/);
 } else {
   const page = await read("/");
   assert.match(page.headers.get("content-type"), /text\/html/);
