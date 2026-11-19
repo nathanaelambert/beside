@@ -8,7 +8,7 @@ import { loadDatabase } from "../src/db/storage.ts";
 import { parseDatabase } from "@beside/domain/validation";
 import { schemas } from "../src/openapi.ts";
 import type { Session, ApiState } from "@beside/domain/api";
-import { meadowPlacements } from "@beside/domain/garden";
+import { checkMeadowPlacement, meadowPlacements } from "@beside/domain/garden";
 
 describe("public API contract without a database", () => {
   let app: Awaited<ReturnType<typeof createApp>>;
@@ -729,7 +729,14 @@ describe(
       await agree(alice).expect(200);
 
       // Nothing lands before everyone completes the milestone.
-      const [spot, other] = meadowPlacements();
+      // The island stores the same meadow pixels, choosing 16px tile centres.
+      const centres = meadowPlacements().filter(
+        ({ x, y }) => x % 16 === 8 && y % 16 === 8,
+      );
+      const spot = centres[0]!;
+      const other = centres.find(
+        (point) => !checkMeadowPlacement(point, [spot]),
+      )!;
       await place(alice, spot!.x, spot!.y).expect(409);
       await create(
         alice,

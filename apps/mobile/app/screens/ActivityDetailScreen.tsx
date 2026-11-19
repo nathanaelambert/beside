@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, RefreshControl, View, ViewStyle } from "react-native"
 import type { ApiState, MilestoneSchedule, RewardAgreement } from "@beside/api-client"
 import type { RewardItem } from "@beside/rewards"
@@ -11,6 +11,9 @@ import {
   WorldSchedulePanel,
 } from "@/components/ActivityWorld"
 import { PixelArtSprite } from "@/components/BesideMark"
+import { homeActivities } from "@/components/iso-world/homeWorld"
+import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
+import { buildActivityScene, roofForIndex } from "@/components/iso-world/scene"
 import { MilestoneReward, RewardChip, RewardLanded } from "@/components/MilestoneReward"
 import { avatarsForMembers } from "@/components/pixel-world/avatars"
 import { catalogue } from "@/components/pixel-world/scene"
@@ -282,6 +285,29 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   }
   const confirmedAttendee = currentOccurrence && confirmed[currentOccurrence.id]
   if (confirmedAttendee) currentAttendance.add(confirmedAttendee)
+  const roofIndex =
+    data && activity
+      ? homeActivities(data, activity.connectionId, now).findIndex((a) => a.id === activityId)
+      : 0
+  const attendeeKey = memberAvatars
+    .filter((avatar) => currentAttendance.has(avatar.key))
+    .map((avatar) => avatar.key)
+    .join(",")
+  const lit = !!currentOccurrence
+  const plot = useMemo(
+    () =>
+      buildActivityScene({
+        roof: roofForIndex(roofIndex),
+        lit,
+        attendees: memberAvatars.filter((avatar) => attendeeKey.split(",").includes(avatar.key)),
+      }),
+    // memberAvatars is rebuilt every render; the attendee keys capture what is drawn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [roofIndex, lit, attendeeKey, data],
+  )
+  const [plotWidth, setPlotWidth] = useState(0)
+  const plotZoom = plotWidth >= plot.frame.width * 3 ? 3 : plotWidth >= plot.frame.width * 2 ? 2 : 1
+  const plotHeight = Math.min(plot.frame.height * plotZoom, 240)
 
   async function logAttendance(milestoneId: string) {
     if (!user || submittingRef.current) return
@@ -409,6 +435,36 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 onDismiss={() => setLanded(undefined)}
               />
             )}
+            <View
+              testID="activity-plot"
+              style={[$plot, { height: plotHeight || 200 }]}
+              onLayout={(event) => setPlotWidth(event.nativeEvent.layout.width)}
+            >
+              {plotWidth > 0 && (
+                <IsoWorldCanvas
+                  width={plotWidth}
+                  height={plotHeight}
+                  map={plot.map}
+                  frame={plot.frame}
+                  drawables={plot.drawables}
+                  zoom={plotZoom}
+                  focus={{ u: 2.2, v: 1.6 }}
+                  interactive={false}
+                  accessibilityLabel={`${activity.name} cottage. ${currentAttendance.size} of ${memberAvatars.length} friends here.`}
+                />
+              )}
+              <View pointerEvents="none" style={$plotLabel}>
+                <Text
+                  testID="activity-plot-caption"
+                  text={
+                    currentOccurrence
+                      ? `${currentAttendance.size} of ${memberAvatars.length} here · lights on`
+                      : "Lights off until the next session"
+                  }
+                  style={$plotLabelText}
+                />
+              </View>
+            </View>
             {currentOccurrence && renderMilestone(currentOccurrence, true)}
             {otherOpen.length > 0 && (
               <View style={$milestoneList}>
@@ -522,6 +578,21 @@ const $addReward: ViewStyle = {
   borderColor: world.line,
   borderRadius: worldShape.radius,
 }
+const $plot: ViewStyle = {
+  backgroundColor: world.sea,
+  borderRadius: worldShape.radius,
+  overflow: "hidden",
+}
+const $plotLabel: ViewStyle = {
+  position: "absolute",
+  left: 10,
+  top: 10,
+  backgroundColor: world.panel,
+  borderRadius: worldShape.smallRadius,
+  paddingHorizontal: 10,
+  paddingVertical: 5,
+}
+const $plotLabelText = { color: world.text, fontSize: 11, lineHeight: 16 }
 const $section: ViewStyle = { borderTopWidth: 1, borderColor: world.line, paddingTop: 16, gap: 8 }
 const $active: ViewStyle = {
   backgroundColor: world.panel,

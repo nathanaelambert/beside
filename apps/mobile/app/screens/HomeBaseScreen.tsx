@@ -5,25 +5,29 @@ import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
+import { PixelArtSprite } from "@/components/BesideMark"
+import { cottageArt } from "@/components/iso-world/cottageArt"
 import {
+  homeActivities,
   nextSuggestion,
-  placementGuide,
-  placementTap,
   rewardKey,
-} from "@/components/pixel-world/placement"
+  plantableTiles,
+  plantingTap,
+} from "@/components/iso-world/homeWorld"
+import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
+import { meadowToIso } from "@/components/iso-world/projection"
+import {
+  buildHomeScene,
+  catalogue,
+  itemDrawable,
+  sortDrawables,
+  type HitTarget,
+} from "@/components/iso-world/scene"
+import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlaceRewardPanel } from "@/components/pixel-world/PlaceRewardPanel"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
-import {
-  avatarAt,
-  catalogue,
-  hitTest,
-  initialItems,
-  type WorldItem,
-} from "@/components/pixel-world/scene"
-import { oakAt, oakPlantingPulseMs } from "@/components/pixel-world/starterOak"
-import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
-import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
+import { initialItems, type WorldItem } from "@/components/pixel-world/scene"
+import { oakAt } from "@/components/pixel-world/starterOak"
 import { RewardSprite } from "@/components/RewardSprite"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
@@ -33,9 +37,7 @@ import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { firstName, namesLabel, rewardMemory, rewardsToPlace } from "@/utils/rewardChoice"
 
-const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
-const plantingFraming = { ...homeFraming, centerY: 110 }
-const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
+const homeFocus = { u: 8.6, v: 9.3 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
 // Equal-value rewards: every decoration in the home base was earned and remembers why.
@@ -43,7 +45,7 @@ type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGard
 // shared placement rule.
 const wildTrees = initialItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees")
 type PlacementTarget = { kind: "oak" } | { kind: "reward"; rewardId: string; itemId: string }
-const friends = { x: homeFraming.centerX, y: 92 }
+const friends = { x: homeFocus.u * 16, y: homeFocus.v * 16 }
 const placedRewards = (garden?: HomebaseGarden) => garden?.rewards ?? []
 
 function placementMessage(rejection: string | null) {
@@ -63,6 +65,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [loggingOut, setLoggingOut] = useState(false)
   const [selectedKey, setSelectedKey] = useState<string>()
   const [cameraReset, setCameraReset] = useState(0)
+  const [zoom, setZoom] = useState<number>()
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [planting, setPlanting] = useState<{
     homebaseId: string
@@ -71,19 +74,11 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   }>()
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
-  // What just landed (the oak or an earned reward), for the planting pulse and framing.
-  const [landed, setLanded] = useState<{ homebaseId: string; item: WorldItem }>()
   const [focus, setFocus] = useState<MeadowPoint>()
   const plantingLock = useRef(false)
   // Read the latest deep-link params inside the loader without re-running it.
   const params = useRef(route.params)
   params.current = route.params
-
-  useEffect(() => {
-    if (!landed) return
-    const timer = setTimeout(() => setLanded(undefined), oakPlantingPulseMs)
-    return () => clearTimeout(timer)
-  }, [landed])
 
   useFocusEffect(
     useCallback(() => {
@@ -92,7 +87,6 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setBusy(true)
       setError("")
       setPlanting(undefined)
-      setLanded(undefined)
       setGardenError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
         .then(async ([bases, state]) => {
@@ -153,22 +147,13 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const editing = !!target && !!data?.garden && !busy && (target.kind === "reward" || canPlant)
   const movingId = editing && target?.kind === "reward" ? target.rewardId : undefined
   const position = editing ? planting?.position : undefined
-  const justPlanted =
-    landed && homebase && landed.homebaseId === homebase.id ? landed.item : undefined
-  const framing = {
-    ...(editing || justPlanted
-      ? size.width < 600
-        ? compactPlantingFraming
-        : plantingFraming
-      : homeFraming),
-    ...(focus && !editing ? { centerX: focus.x, centerY: focus.y - 16 } : {}),
-  }
   // Everything already standing except what is being placed, as the API sees it.
   const occupied = useMemo(
     () => [...(oak ? [oak] : []), ...placements.filter((p) => p.rewardId !== movingId)],
     [oak, placements, movingId],
   )
-  const guide = useMemo(() => (editing ? placementGuide(occupied) : []), [editing, occupied])
+  const guideTiles = useMemo(() => (editing ? plantableTiles(occupied) : []), [editing, occupied])
+  const guide = guideTiles.map(({ col, row }) => ({ x: col * 16 + 8, y: row * 16 + 8 }))
   const worldItems = useMemo<WorldItem[]>(
     () => [
       ...wildTrees,
@@ -181,6 +166,37 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   )
   const previewItemId = target?.kind === "reward" ? target.itemId : oakAt({ x: 0, y: 0 }).itemId
   const placingItem = target?.kind === "reward" ? catalogue.get(target.itemId) : undefined
+
+  const activities = useMemo(() => {
+    if (!data?.homebase) return []
+    const serverNow = Date.parse(data.state.serverTime ?? "")
+    return homeActivities(
+      data.state,
+      data.homebase.id,
+      Number.isFinite(serverNow) ? serverNow : Date.now(),
+    )
+  }, [data])
+  const scene = useMemo(() => {
+    const built = buildHomeScene({ avatars, items: worldItems, activities })
+    if (!position) return built
+    const { u, v } = meadowToIso(position.x, position.y)
+    const preview = itemDrawable(built.frame, built.map, "placement-preview", previewItemId, u, v, {
+      opacity: 0.72,
+      hit: undefined,
+    })
+    return preview ? { ...built, drawables: sortDrawables([...built.drawables, preview]) } : built
+  }, [avatars, worldItems, activities, position, previewItemId])
+  const currentZoom = zoom ?? (size.width >= 700 ? 3 : 2)
+  const changeZoom = (direction: 1 | -1) =>
+    setZoom(Math.max(1, Math.min(4, currentZoom + direction)))
+  const selectedHouse = scene.houses.find((h) => `house-${h.activity.id}` === selectedKey)
+  const houseArt = selectedHouse
+    ? cottageArt(scene.houses.indexOf(selectedHouse), !!selectedHouse.activity.open)
+    : undefined
+
+  function openActivity(activityId: string) {
+    navigation.navigate("ActivityDetail", { activityId })
+  }
 
   function rewardStory(state: ApiState, rewardId: string) {
     const { milestone, activity } = rewardMemory(state, rewardId)
@@ -216,7 +232,10 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
     setPlanting({
       homebaseId,
       target: { kind: "reward", rewardId, itemId },
-      position: nextSuggestion(placementGuide(others), friends),
+      position: nextSuggestion(
+        plantableTiles(others).map(({ col, row }) => ({ x: col * 16 + 8, y: row * 16 + 8 })),
+        friends,
+      ),
     })
   }
 
@@ -238,13 +257,17 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const linkedReward = useRef(openLinkedReward)
   linkedReward.current = openLinkedReward
 
-  function tapWorld(x: number, y: number, scale: number) {
+  function tapWorld({ hit, x, y }: { hit?: HitTarget; x: number; y: number }) {
     if (plantingLock.current) return
     if (!editing || !homebase || !target) {
-      setSelectedKey(avatarAt(x, y, scale, avatars)?.key ?? hitTest(worldItems, x, y, scale)?.key)
+      if (hit?.type === "house" && selectedKey === `house-${hit.id}`) openActivity(hit.id)
+      else
+        setSelectedKey(
+          hit?.type === "avatar" ? hit.id : hit?.type === "house" ? `house-${hit.id}` : hit?.id,
+        )
       return
     }
-    const { point, rejection } = placementTap(x, y, occupied)
+    const { point, rejection } = plantingTap(scene.frame, x, y, occupied)
     setPlanting({ homebaseId: homebase.id, target, position: rejection ? undefined : point })
     setGardenError(placementMessage(rejection))
   }
@@ -252,7 +275,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   function suggestSpot() {
     if (!homebase || !editing || !target || plantingLock.current) return
     // Offer a keyboard/screen-reader path without requiring a canvas gesture.
-    const next = nextSuggestion(guide, { x: framing.centerX, y: framing.centerY }, position)
+    const next = nextSuggestion(guide, friends, position)
     if (!next) return
     setCameraReset((value) => value + 1)
     setPlanting({ homebaseId: homebase.id, target, position: next })
@@ -270,18 +293,30 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         current?.homebase?.id === homebase.id ? { ...current, garden } : current,
       )
       const key = rewardKey(target.rewardId)
-      setLanded({ homebaseId: homebase.id, item: { key, itemId: target.itemId, ...position } })
       setPlanting(undefined)
       setSelectedKey(key)
-      // Settle the camera on the new reward, so it stays in view after the pulse.
+      // Keep the confirmed reward in view.
       setFocus(position)
+      setCameraReset((value) => value + 1)
     } catch (e) {
       setGardenError(
         e instanceof ApiError && (e.status === 400 || e.status === 409)
           ? e.message
           : "We couldn’t place it. Try again.",
       )
-      if (e instanceof ApiError && e.status === 400) setAttempt((value) => value + 1)
+      if (e instanceof ApiError && e.status === 400) {
+        // Another member may have occupied this spot. Refresh the guide without
+        // closing the editor or losing the reason the placement was refused.
+        setPlanting((current) => current && { ...current, position: undefined })
+        try {
+          const garden = await besideApi.homebaseGarden(homebase.id)
+          setData((current) =>
+            current?.homebase?.id === homebase.id ? { ...current, garden } : current,
+          )
+        } catch {
+          setGardenError("We couldn’t refresh free spots. Cancel and try again.")
+        }
+      }
     } finally {
       setSavingOak(false)
       plantingLock.current = false
@@ -321,8 +356,10 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setData((current) =>
         current?.homebase?.id === homebase.id ? { ...current, garden } : current,
       )
-      setLanded({ homebaseId: homebase.id, item: oakAt(position, homebase.id) })
       setPlanting(undefined)
+      setSelectedKey("starter-oak")
+      setFocus(position)
+      setCameraReset((value) => value + 1)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         setPlanting(undefined)
@@ -400,22 +437,28 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       >
         {homebase && size.width > 0 && size.height > 0 && (
           <>
-            <WorldCanvas
+            <IsoWorldCanvas
               {...size}
-              items={worldItems}
-              avatars={avatars}
-              selectedKey={selectedKey}
-              preview={
-                position ? { key: "preview", itemId: previewItemId, ...position } : undefined
+              map={scene.map}
+              frame={scene.frame}
+              drawables={scene.drawables}
+              zoom={currentZoom}
+              focus={
+                position
+                  ? meadowToIso(position.x, position.y)
+                  : focus && !editing
+                    ? meadowToIso(focus.x, focus.y)
+                    : homeFocus
               }
-              showPlantingGuide={editing}
-              guidePoints={guide}
-              justPlanted={justPlanted}
-              framing={framing}
-              picnic="group"
               resetCamera={cameraReset}
+              selectedKey={editing ? undefined : selected ? `avatar-${selected.key}` : selectedKey}
+              guideTiles={editing ? guideTiles : undefined}
+              previewTile={
+                position ? { col: (position.x - 8) / 16, row: (position.y - 8) / 16 } : undefined
+              }
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? `Tap an open patch of lawn to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore. Tap a friend or a reward to learn about it."}`}
+              onPinch={changeZoom}
+              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend, cottage or reward to learn about it."}`}
             />
             <View
               pointerEvents="none"
@@ -435,32 +478,54 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                     ? target?.kind === "reward"
                       ? "Marked spots are free lawn"
                       : "Marked spots are plantable"
-                    : "The meadow"
+                    : "The island"
                 }
                 style={styles.labelText}
               />
             </View>
             {!editing && (
-              <Pressable
-                testID="homebase-recenter"
-                accessibilityRole="button"
-                accessibilityLabel="Recenter on your friends"
-                style={styles.recenter}
-                onPress={() => {
-                  setLanded(undefined)
-                  setFocus(undefined)
-                  setCameraReset((value) => value + 1)
-                }}
-              >
-                <Text text="Recenter" style={styles.smallText} />
-              </Pressable>
+              <View style={styles.cameraControls}>
+                <Pressable
+                  testID="homebase-zoom-out"
+                  accessibilityRole="button"
+                  accessibilityLabel="Zoom out"
+                  disabled={currentZoom <= 1}
+                  style={[styles.chip, currentZoom <= 1 && styles.disabled]}
+                  onPress={() => changeZoom(-1)}
+                >
+                  <Text text="−" style={styles.chipText} />
+                </Pressable>
+                <Pressable
+                  testID="homebase-zoom-in"
+                  accessibilityRole="button"
+                  accessibilityLabel="Zoom in"
+                  disabled={currentZoom >= 4}
+                  style={[styles.chip, currentZoom >= 4 && styles.disabled]}
+                  onPress={() => changeZoom(1)}
+                >
+                  <Text text="+" style={styles.chipText} />
+                </Pressable>
+                <Pressable
+                  testID="homebase-recenter"
+                  accessibilityRole="button"
+                  accessibilityLabel="Recenter on your friends"
+                  style={styles.chip}
+                  onPress={() => {
+                    setFocus(undefined)
+                    setZoom(undefined)
+                    setCameraReset((value) => value + 1)
+                  }}
+                >
+                  <Text text="Recenter" style={styles.smallText} />
+                </Pressable>
+              </View>
             )}
           </>
         )}
         {!data && busy && (
           <View style={styles.loading}>
             <ActivityIndicator color={world.forest} />
-            <Text text="Opening your meadow…" style={styles.body} />
+            <Text text="Opening your island…" style={styles.body} />
           </View>
         )}
         {!busy && !homebase && !error && (
@@ -475,7 +540,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         )}
         {!!data?.garden && (
           <View testID="homebase-garden-status" style={styles.gardenStatus}>
-            {oak && !nextUp && !selectedKey && (
+            {oak && !nextUp && (
               <Text
                 testID="homebase-starter-oak"
                 text="Planted in your shared garden"
@@ -552,6 +617,36 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 <Text text="Move" style={styles.smallText} />
               </Pressable>
             )}
+          </View>
+        ) : selectedHouse && houseArt ? (
+          <View style={styles.detail}>
+            <View style={styles.thumbnail}>
+              <PixelArtSprite art={houseArt} scale={1} />
+            </View>
+            <View style={styles.detailText}>
+              <Text
+                text={selectedHouse.activity.name}
+                weight="semiBold"
+                style={styles.sectionTitle}
+              />
+              <Text
+                text={
+                  selectedHouse.activity.open
+                    ? "Lights are on: a session is open now."
+                    : "An activity cottage. Open it to plan or check in."
+                }
+                style={styles.description}
+              />
+            </View>
+            <Pressable
+              testID="homebase-open-activity"
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${selectedHouse.activity.name}`}
+              style={styles.placeButton}
+              onPress={() => openActivity(selectedHouse.activity.id)}
+            >
+              <Text text="Open" weight="medium" style={styles.primaryText} />
+            </Pressable>
           </View>
         ) : selectedItem && selectedArt ? (
           <View style={styles.detail}>
@@ -630,7 +725,9 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
               />
               <Text
                 text={
-                  selected ? "Part of your home base." : "Tap a friend or a reward in the meadow."
+                  selected
+                    ? "Part of your home base."
+                    : "Tap a friend, cottage or reward on the island."
                 }
                 style={styles.description}
               />
@@ -705,10 +802,30 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
 const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 12 },
   body: { color: world.text, fontSize: 14, lineHeight: 22 },
+  cameraControls: {
+    bottom: 12,
+    flexDirection: "row",
+    gap: 8,
+    position: "absolute",
+    right: 12,
+  },
+  chip: {
+    alignItems: "center",
+    backgroundColor: world.panel,
+    borderColor: world.line,
+    borderRadius: worldShape.smallRadius,
+    borderWidth: worldShape.border,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 44,
+    paddingHorizontal: 12,
+  },
+  chipText: { color: world.ink, fontSize: 20, lineHeight: 24 },
   count: { color: world.muted, fontSize: 11, lineHeight: 16 },
   description: { color: world.muted, fontSize: 12, lineHeight: 18 },
   detail: { alignItems: "center", flexDirection: "row", gap: 12, minHeight: 64 },
   detailText: { flex: 1, gap: 3 },
+  disabled: { opacity: 0.45 },
   dock: { backgroundColor: world.paper, gap: 16, padding: 20, paddingBottom: 12 },
   dot: { backgroundColor: world.leaf, height: 5, width: 5 },
   error: { color: world.error, fontSize: 13, lineHeight: 20 },
@@ -765,16 +882,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   primaryText: { color: world.onForest, fontSize: 14, lineHeight: 22 },
-  recenter: {
-    backgroundColor: world.panel,
-    borderRadius: worldShape.smallRadius,
-    bottom: 16,
-    justifyContent: "center",
-    minHeight: worldShape.control,
-    paddingHorizontal: 12,
-    position: "absolute",
-    right: 20,
-  },
   screen: { backgroundColor: world.paper, flex: 1 },
   secondary: {
     alignItems: "center",
@@ -808,7 +915,7 @@ const styles = StyleSheet.create({
     borderWidth: worldShape.border,
     padding: 8,
   },
-  world: { backgroundColor: world.canvas, flex: 1, overflow: "hidden" },
+  world: { backgroundColor: world.sea, flex: 1, overflow: "hidden" },
   worldLabel: {
     alignItems: "center",
     backgroundColor: world.panel,
