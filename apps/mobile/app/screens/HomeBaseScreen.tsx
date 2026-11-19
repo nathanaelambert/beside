@@ -135,7 +135,9 @@ function HomeIslandScreen({
   const activities = focused?.activities ?? []
   const multipleIslands = islands.length > 1
   const stops = useMemo(() => zoomStops(PixelRatio.get(), multipleIslands), [multipleIslands])
-  const autoZoom = snapZoom(size.width >= 700 ? 3 : 2, stops)
+  // One island keeps main's integer zoom; snapping to pixel-aligned stops is only for the sea.
+  const defaultZoom = size.width >= 700 ? 3 : 2
+  const autoZoom = multipleIslands ? snapZoom(defaultZoom, stops) : defaultZoom
   const currentZoom = multipleIslands ? snapZoom(zoom ?? autoZoom, stops) : (zoom ?? autoZoom)
   const changeZoom = (direction: 1 | -1) =>
     setZoom(
