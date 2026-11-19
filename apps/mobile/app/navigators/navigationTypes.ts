@@ -19,7 +19,8 @@ export type DemoTabParamList = {
 export type AppStackParamList = {
   Welcome: undefined
   Login: undefined
-  HomeBase: { connectionId?: string } | undefined
+  /** `rewardId` focuses an earned reward; with `place`, starts placing it. */
+  HomeBase: { connectionId?: string; rewardId?: string; place?: boolean } | undefined
   Activities: { connectionId: string }
   ActivityCreate: { connectionId: string }
   ActivityDetail: { activityId: string }

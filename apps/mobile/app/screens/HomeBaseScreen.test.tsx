@@ -70,14 +70,14 @@ const state: ApiState = {
   milestones: [],
   rewards: [],
 }
-const plantedGarden = { oak: { x: 104, y: 104, itemId: "oak-tree" as const } }
+const plantedGarden = { oak: { x: 104, y: 104, itemId: "oak-tree" as const }, rewards: [] }
 const roster = "Our garden. 2 members in the meadow: Alice Green, Bob Brown."
 
 beforeEach(() => {
   jest.clearAllMocks()
   jest.mocked(besideApi.homebases).mockResolvedValue([base])
   jest.mocked(besideApi.state).mockResolvedValue(state)
-  jest.mocked(besideApi.homebaseGarden).mockReset().mockResolvedValue({ oak: null })
+  jest.mocked(besideApi.homebaseGarden).mockReset().mockResolvedValue({ oak: null, rewards: [] })
   jest.mocked(besideApi.plantStarterOak).mockReset().mockResolvedValue(plantedGarden)
 })
 
@@ -120,7 +120,7 @@ it.each([390, 900])("preserves the roster and normal framing at width %i", async
 it("keeps the losing member's 409 notice after refreshing the shared oak", async () => {
   jest
     .mocked(besideApi.homebaseGarden)
-    .mockResolvedValueOnce({ oak: null })
+    .mockResolvedValueOnce({ oak: null, rewards: [] })
     .mockResolvedValueOnce(plantedGarden)
   jest.mocked(besideApi.plantStarterOak).mockRejectedValue(new ApiError(409, "Already planted"))
   const screen = openScreen()
@@ -155,7 +155,7 @@ it("keeps the planting frame for the success pulse and then restores normal brow
 it("offers retry and disables planting if the refresh after a 409 fails", async () => {
   jest
     .mocked(besideApi.homebaseGarden)
-    .mockResolvedValueOnce({ oak: null })
+    .mockResolvedValueOnce({ oak: null, rewards: [] })
     .mockRejectedValueOnce(new Error("Offline"))
   jest.mocked(besideApi.plantStarterOak).mockRejectedValue(new ApiError(409, "Already planted"))
   const screen = openScreen()

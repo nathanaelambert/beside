@@ -6,14 +6,22 @@ import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { avatarsForMembers, firstNamesLabel } from "@/components/pixel-world/avatars"
-import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
-import { avatarAt, initialItems } from "@/components/pixel-world/scene"
 import {
-  oakAt,
-  oakPlantingPulseMs,
-  starterOakGuidePoints,
-  starterOakTap,
-} from "@/components/pixel-world/starterOak"
+  nextSuggestion,
+  placementGuide,
+  placementTap,
+  rewardKey,
+} from "@/components/pixel-world/placement"
+import { PlaceRewardPanel } from "@/components/pixel-world/PlaceRewardPanel"
+import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
+import {
+  avatarAt,
+  catalogue,
+  hitTest,
+  initialItems,
+  type WorldItem,
+} from "@/components/pixel-world/scene"
+import { oakAt, oakPlantingPulseMs } from "@/components/pixel-world/starterOak"
 import { GROUP_BLANKET } from "@/components/pixel-world/terrain"
 import { WorldCanvas } from "@/components/pixel-world/WorldCanvas"
 import { RewardSprite } from "@/components/RewardSprite"
@@ -23,12 +31,28 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { besideApi } from "@/services/api/beside"
 import { selectHomebase } from "@/services/api/homebase"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
+import { firstName, namesLabel, rewardMemory, rewardsToPlace } from "@/utils/rewardChoice"
 
 const homeFraming = { scale: 4, centerX: (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2, centerY: 137 }
 const plantingFraming = { ...homeFraming, centerY: 110 }
 const compactPlantingFraming = { ...plantingFraming, scale: 3, centerY: 120 }
 
 type HomeData = { homebase?: ApiHomebase; state: ApiState; garden?: HomebaseGarden }
+// Equal-value rewards: every decoration in the home base was earned and remembers why.
+// Keep only the meadow's wild trees as scenery; their spots stay reserved by the
+// shared placement rule.
+const wildTrees = initialItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees")
+type PlacementTarget = { kind: "oak" } | { kind: "reward"; rewardId: string; itemId: string }
+const friends = { x: homeFraming.centerX, y: 92 }
+const placedRewards = (garden?: HomebaseGarden) => garden?.rewards ?? []
+
+function placementMessage(rejection: string | null) {
+  return rejection === "occupied"
+    ? "That spot is occupied."
+    : rejection
+      ? "Choose a clear patch of lawn."
+      : ""
+}
 
 export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeBase">) {
   const { logout } = useAuth()
@@ -40,17 +64,26 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const [selectedKey, setSelectedKey] = useState<string>()
   const [cameraReset, setCameraReset] = useState(0)
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const [planting, setPlanting] = useState<{ homebaseId: string; position?: MeadowPoint }>()
+  const [planting, setPlanting] = useState<{
+    homebaseId: string
+    target: PlacementTarget
+    position?: MeadowPoint
+  }>()
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
-  const [plantedIn, setPlantedIn] = useState<string>()
+  // What just landed (the oak or an earned reward), for the planting pulse and framing.
+  const [landed, setLanded] = useState<{ homebaseId: string; item: WorldItem }>()
+  const [focus, setFocus] = useState<MeadowPoint>()
   const plantingLock = useRef(false)
+  // Read the latest deep-link params inside the loader without re-running it.
+  const params = useRef(route.params)
+  params.current = route.params
 
   useEffect(() => {
-    if (!plantedIn) return
-    const timer = setTimeout(() => setPlantedIn(undefined), oakPlantingPulseMs)
+    if (!landed) return
+    const timer = setTimeout(() => setLanded(undefined), oakPlantingPulseMs)
     return () => clearTimeout(timer)
-  }, [plantedIn])
+  }, [landed])
 
   useFocusEffect(
     useCallback(() => {
@@ -59,7 +92,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setBusy(true)
       setError("")
       setPlanting(undefined)
-      setPlantedIn(undefined)
+      setLanded(undefined)
       setGardenError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
         .then(async ([bases, state]) => {
@@ -72,7 +105,9 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           try {
             const garden = await besideApi.homebaseGarden(homebase.id)
             // Commit the scene together, so a saved oak is present on its first frame.
-            if (active) setData({ homebase, state, garden })
+            if (!active) return
+            setData({ homebase, state, garden })
+            linkedReward.current(homebase.id, state, garden)
           } catch (e) {
             if (!active) return
             if (e instanceof ApiError && e.status === 404) {
@@ -110,57 +145,171 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
   const avatars = useMemo(() => avatarsForMembers(members), [members])
   const selected = avatars.find((avatar) => avatar.key === selectedKey)
   const oak = data?.garden?.oak
+  const placements = useMemo(() => placedRewards(data?.garden), [data?.garden])
+  const placedIds = useMemo(() => new Set(placements.map((p) => p.rewardId)), [placements])
+  const waiting = data && homebase ? rewardsToPlace(data.state, homebase.id, placedIds) : []
   const canPlant = !!data?.garden && !oak && !busy
-  const editing = !!planting && planting.homebaseId === homebase?.id && canPlant
+  const target = planting?.homebaseId === homebase?.id ? planting?.target : undefined
+  const editing = !!target && !!data?.garden && !busy && (target.kind === "reward" || canPlant)
+  const movingId = editing && target?.kind === "reward" ? target.rewardId : undefined
   const position = editing ? planting?.position : undefined
   const justPlanted =
-    oak && homebase && plantedIn === homebase.id ? oakAt(oak, homebase.id) : undefined
-  const framing =
-    editing || justPlanted
+    landed && homebase && landed.homebaseId === homebase.id ? landed.item : undefined
+  const framing = {
+    ...(editing || justPlanted
       ? size.width < 600
         ? compactPlantingFraming
         : plantingFraming
-      : homeFraming
+      : homeFraming),
+    ...(focus && !editing ? { centerX: focus.x, centerY: focus.y - 16 } : {}),
+  }
+  // Everything already standing except what is being placed, as the API sees it.
+  const occupied = useMemo(
+    () => [...(oak ? [oak] : []), ...placements.filter((p) => p.rewardId !== movingId)],
+    [oak, placements, movingId],
+  )
+  const guide = useMemo(() => (editing ? placementGuide(occupied) : []), [editing, occupied])
+  const worldItems = useMemo<WorldItem[]>(
+    () => [
+      ...wildTrees,
+      ...(oak ? [oakAt(oak)] : []),
+      ...placements
+        .filter((p) => p.rewardId !== movingId)
+        .map((p) => ({ key: rewardKey(p.rewardId), itemId: p.itemId, x: p.x, y: p.y })),
+    ],
+    [oak, placements, movingId],
+  )
+  const previewItemId = target?.kind === "reward" ? target.itemId : oakAt({ x: 0, y: 0 }).itemId
+  const placingItem = target?.kind === "reward" ? catalogue.get(target.itemId) : undefined
+
+  function rewardStory(state: ApiState, rewardId: string) {
+    const { milestone, activity } = rewardMemory(state, rewardId)
+    return milestone
+      ? `Earned for “${milestone.name}”${activity ? ` · ${activity.name}` : ""}`
+      : "Earned together"
+  }
 
   function startPlanting() {
     if (!homebase || !canPlant || editing || plantingLock.current) return
     setSelectedKey(undefined)
+    setFocus(undefined)
     setGardenError("")
-    setPlanting({ homebaseId: homebase.id })
+    setPlanting({ homebaseId: homebase.id, target: { kind: "oak" } })
   }
+
+  /** Start placing (or moving) a reward, with a suggested spot already previewed. */
+  function startPlacingReward(
+    homebaseId: string,
+    rewardId: string,
+    itemId: string,
+    garden: HomebaseGarden,
+  ) {
+    if (plantingLock.current) return
+    const others = [
+      ...(garden.oak ? [garden.oak] : []),
+      ...placedRewards(garden).filter((p) => p.rewardId !== rewardId),
+    ]
+    setSelectedKey(undefined)
+    setGardenError("")
+    setFocus(undefined)
+    setCameraReset((value) => value + 1)
+    setPlanting({
+      homebaseId,
+      target: { kind: "reward", rewardId, itemId },
+      position: nextSuggestion(placementGuide(others), friends),
+    })
+  }
+
+  /** Follow a link from an activity: place a fresh reward, or show one in the meadow. */
+  function openLinkedReward(homebaseId: string, state: ApiState, garden: HomebaseGarden) {
+    const { rewardId, place } = params.current ?? {}
+    if (!rewardId) return
+    navigation.setParams({ rewardId: undefined, place: undefined })
+    const reward = state.rewards.find((r) => r.id === rewardId && r.homebaseId === homebaseId)
+    if (!reward?.obtainedAt) return
+    const placed = placedRewards(garden).find((p) => p.rewardId === rewardId)
+    if (place && !placed) startPlacingReward(homebaseId, reward.id, reward.itemId, garden)
+    else if (placed) {
+      setSelectedKey(rewardKey(rewardId))
+      setFocus(placed)
+      setCameraReset((value) => value + 1)
+    }
+  }
+  const linkedReward = useRef(openLinkedReward)
+  linkedReward.current = openLinkedReward
 
   function tapWorld(x: number, y: number, scale: number) {
     if (plantingLock.current) return
-    if (!editing || !homebase) {
-      setSelectedKey(avatarAt(x, y, scale, avatars)?.key)
+    if (!editing || !homebase || !target) {
+      setSelectedKey(avatarAt(x, y, scale, avatars)?.key ?? hitTest(worldItems, x, y, scale)?.key)
       return
     }
-    const { point, rejection } = starterOakTap(x, y)
-    setPlanting({ homebaseId: homebase.id, position: rejection ? undefined : point })
-    setGardenError(
-      rejection === "occupied"
-        ? "That spot is occupied."
-        : rejection
-          ? "Choose a clear patch of lawn."
-          : "",
-    )
+    const { point, rejection } = placementTap(x, y, occupied)
+    setPlanting({ homebaseId: homebase.id, target, position: rejection ? undefined : point })
+    setGardenError(placementMessage(rejection))
   }
 
   function suggestSpot() {
-    if (!homebase || !editing || plantingLock.current) return
+    if (!homebase || !editing || !target || plantingLock.current) return
     // Offer a keyboard/screen-reader path without requiring a canvas gesture.
-    const points = [...starterOakGuidePoints()].sort(
-      (a, b) =>
-        Math.hypot(a.x - framing.centerX, a.y - framing.centerY) -
-        Math.hypot(b.x - framing.centerX, b.y - framing.centerY),
-    )
-    const index = points.findIndex((point) => point.x === position?.x && point.y === position.y)
-    const next = points[(index + 1) % points.length]
+    const next = nextSuggestion(guide, { x: framing.centerX, y: framing.centerY }, position)
     if (!next) return
     setCameraReset((value) => value + 1)
-    setPlanting({ homebaseId: homebase.id, position: next })
+    setPlanting({ homebaseId: homebase.id, target, position: next })
     setGardenError("")
   }
+
+  async function placeReward() {
+    if (!position || !homebase || target?.kind !== "reward" || plantingLock.current) return
+    plantingLock.current = true
+    setSavingOak(true)
+    setGardenError("")
+    try {
+      const garden = await besideApi.placeReward(homebase.id, target.rewardId, position)
+      setData((current) =>
+        current?.homebase?.id === homebase.id ? { ...current, garden } : current,
+      )
+      const key = rewardKey(target.rewardId)
+      setLanded({ homebaseId: homebase.id, item: { key, itemId: target.itemId, ...position } })
+      setPlanting(undefined)
+      setSelectedKey(key)
+      // Settle the camera on the new reward, so it stays in view after the pulse.
+      setFocus(position)
+    } catch (e) {
+      setGardenError(
+        e instanceof ApiError && (e.status === 400 || e.status === 409)
+          ? e.message
+          : "We couldn’t place it. Try again.",
+      )
+      if (e instanceof ApiError && e.status === 400) setAttempt((value) => value + 1)
+    } finally {
+      setSavingOak(false)
+      plantingLock.current = false
+    }
+  }
+
+  useEffect(() => {
+    // A selection that no longer exists (e.g. after a refresh) should not linger.
+    if (selectedKey?.startsWith("reward-") && !worldItems.some((i) => i.key === selectedKey))
+      setSelectedKey(undefined)
+  }, [selectedKey, worldItems])
+
+  const selectedPlacement = placements.find((p) => rewardKey(p.rewardId) === selectedKey)
+  const selectedItem = selected ? undefined : worldItems.find((item) => item.key === selectedKey)
+  const selectedArt = selectedItem && catalogue.get(selectedItem.itemId)
+  const memory =
+    selectedPlacement && data ? rewardMemory(data.state, selectedPlacement.rewardId) : undefined
+  const selectedReward =
+    selectedPlacement && data?.state.rewards.find((r) => r.id === selectedPlacement.rewardId)
+  const earnedBy =
+    selectedReward && data
+      ? selectedReward.requiredUserIds
+          .map((id) => data.state.users.find((u) => u.id === id)?.name)
+          .filter((name): name is string => !!name)
+          .map(firstName)
+      : []
+  const nextUp = waiting[0]
+  const nextUpItem = nextUp && catalogue.get(nextUp.itemId)
 
   async function plantOak() {
     if (!position || !homebase || plantingLock.current) return
@@ -172,7 +321,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
       setData((current) =>
         current?.homebase?.id === homebase.id ? { ...current, garden } : current,
       )
-      setPlantedIn(homebase.id)
+      setLanded({ homebaseId: homebase.id, item: oakAt(position, homebase.id) })
       setPlanting(undefined)
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -253,26 +402,41 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           <>
             <WorldCanvas
               {...size}
-              items={oak ? [...initialItems, oakAt(oak)] : initialItems}
+              items={worldItems}
               avatars={avatars}
               selectedKey={selectedKey}
-              preview={position ? oakAt(position, "preview") : undefined}
+              preview={
+                position ? { key: "preview", itemId: previewItemId, ...position } : undefined
+              }
               showPlantingGuide={editing}
+              guidePoints={guide}
               justPlanted={justPlanted}
               framing={framing}
               picnic="group"
               resetCamera={cameraReset}
               onTap={tapWorld}
-              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? "Tap an open patch of lawn to preview the oak, or use Suggest spot." : "Drag to explore. Tap a friend to see their name."}`}
+              accessibilityLabel={`${homebase.name}. ${members.length} members in the meadow: ${members.map((member) => member.name).join(", ")}. ${editing ? `Tap an open patch of lawn to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore. Tap a friend or a reward to learn about it."}`}
             />
             <View
               pointerEvents="none"
               style={styles.worldLabel}
-              testID={editing ? "oak-placement-guide" : undefined}
+              testID={
+                editing
+                  ? target?.kind === "reward"
+                    ? "reward-placement-guide"
+                    : "oak-placement-guide"
+                  : undefined
+              }
             >
               <View style={[styles.dot, editing && styles.guideDot]} />
               <Text
-                text={editing ? "Marked spots are plantable" : "The meadow"}
+                text={
+                  editing
+                    ? target?.kind === "reward"
+                      ? "Marked spots are free lawn"
+                      : "Marked spots are plantable"
+                    : "The meadow"
+                }
                 style={styles.labelText}
               />
             </View>
@@ -283,7 +447,8 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 accessibilityLabel="Recenter on your friends"
                 style={styles.recenter}
                 onPress={() => {
-                  setPlantedIn(undefined)
+                  setLanded(undefined)
+                  setFocus(undefined)
                   setCameraReset((value) => value + 1)
                 }}
               >
@@ -310,7 +475,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
         )}
         {!!data?.garden && (
           <View testID="homebase-garden-status" style={styles.gardenStatus}>
-            {oak && (
+            {oak && !nextUp && !selectedKey && (
               <Text
                 testID="homebase-starter-oak"
                 text="Planted in your shared garden"
@@ -318,7 +483,7 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
                 accessibilityLiveRegion="polite"
               />
             )}
-            {canPlant && (
+            {canPlant && !editing && (
               <Pressable
                 testID="start-planting-oak"
                 accessibilityRole="button"
@@ -339,41 +504,146 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
             </Pressable>
           </View>
         )}
-        <View style={styles.detail}>
-          {selected && (
+        {selectedPlacement && memory && selectedArt ? (
+          <View style={styles.detail} testID="homebase-reward-memory">
             <View style={styles.thumbnail}>
-              <RewardSprite
-                item={{
-                  id: selected.key,
-                  name: selected.name,
-                  category: "Friends",
-                  artifact: selected.frames.idle,
-                }}
-                scale={3}
+              <RewardSprite item={selectedArt} scale={1.5} />
+            </View>
+            <View style={styles.detailText}>
+              <Text
+                testID="homebase-selected-reward"
+                text={selectedArt.name}
+                weight="semiBold"
+                style={styles.sectionTitle}
+                accessibilityLiveRegion="polite"
+              />
+              <Text
+                text={data ? rewardStory(data.state, selectedPlacement.rewardId) : ""}
+                style={styles.description}
+              />
+              <Text
+                text={[
+                  selectedReward?.obtainedAt &&
+                    new Date(selectedReward.obtainedAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    }),
+                  earnedBy.length ? `with ${namesLabel(earnedBy)}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                style={styles.description}
               />
             </View>
-          )}
-          <View style={styles.detailText}>
-            <Text
-              testID="homebase-selected-member"
-              text={selected?.name ?? "Your people, together"}
-              weight="semiBold"
-              style={styles.sectionTitle}
-              accessibilityLiveRegion="polite"
-            />
-            <Text
-              text={selected ? "Part of your home base." : "Tap a friend in the meadow."}
-              style={styles.description}
-            />
+            {!editing && data?.garden && homebase && (
+              <Pressable
+                testID="homebase-move-reward"
+                accessibilityRole="button"
+                style={styles.logout}
+                onPress={() =>
+                  startPlacingReward(
+                    homebase.id,
+                    selectedPlacement.rewardId,
+                    selectedPlacement.itemId,
+                    data.garden!,
+                  )
+                }
+              >
+                <Text text="Move" style={styles.smallText} />
+              </Pressable>
+            )}
           </View>
-          {homebase && (
-            <Text
-              testID="homebase-member-count"
-              text={`${members.length} members`}
-              style={styles.count}
-            />
-          )}
-        </View>
+        ) : selectedItem && selectedArt ? (
+          <View style={styles.detail}>
+            <View style={styles.thumbnail}>
+              <RewardSprite item={selectedArt} scale={1.5} />
+            </View>
+            <View style={styles.detailText}>
+              <Text
+                text={selectedArt.name}
+                weight="semiBold"
+                style={styles.sectionTitle}
+                accessibilityLiveRegion="polite"
+              />
+              <Text
+                text={
+                  selectedItem.key === "starter-oak"
+                    ? "Your starter oak, planted together."
+                    : "Part of the meadow."
+                }
+                style={styles.description}
+              />
+            </View>
+          </View>
+        ) : !selected && nextUp && nextUpItem && !editing ? (
+          <View style={[styles.detail, styles.waiting]} testID="homebase-reward-waiting">
+            <View style={styles.thumbnail}>
+              <RewardSprite item={nextUpItem} scale={1.5} />
+            </View>
+            <View style={styles.detailText}>
+              <Text
+                text={`${nextUpItem.name} is waiting`}
+                weight="semiBold"
+                style={styles.sectionTitle}
+                accessibilityLiveRegion="polite"
+              />
+              <Text
+                text={`${data ? rewardStory(data.state, nextUp.id) : "Earned together"}. Find it a spot.${waiting.length > 1 ? ` ${waiting.length - 1} more waiting.` : ""}`}
+                style={styles.description}
+              />
+            </View>
+            <Pressable
+              testID="homebase-place-reward"
+              accessibilityRole="button"
+              style={styles.placeButton}
+              onPress={() =>
+                homebase &&
+                data?.garden &&
+                startPlacingReward(homebase.id, nextUp.id, nextUp.itemId, data.garden)
+              }
+            >
+              <Text text="Place" weight="medium" style={styles.primaryText} />
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.detail}>
+            {selected && (
+              <View style={styles.thumbnail}>
+                <RewardSprite
+                  item={{
+                    id: selected.key,
+                    name: selected.name,
+                    category: "Friends",
+                    artifact: selected.frames.idle,
+                  }}
+                  scale={3}
+                />
+              </View>
+            )}
+            <View style={styles.detailText}>
+              <Text
+                testID="homebase-selected-member"
+                text={selected?.name ?? "Your people, together"}
+                weight="semiBold"
+                style={styles.sectionTitle}
+                accessibilityLiveRegion="polite"
+              />
+              <Text
+                text={
+                  selected ? "Part of your home base." : "Tap a friend or a reward in the meadow."
+                }
+                style={styles.description}
+              />
+            </View>
+            {homebase && (
+              <Text
+                testID="homebase-member-count"
+                text={`${members.length} members`}
+                style={styles.count}
+              />
+            )}
+          </View>
+        )}
         <View style={styles.actions}>
           <Pressable
             testID="homebase-create-activity"
@@ -399,7 +669,23 @@ export function HomeBaseScreen({ navigation, route }: AppStackScreenProps<"HomeB
           </Pressable>
         </View>
       </View>
-      {editing && (
+      {editing && target?.kind === "reward" && placingItem && data && (
+        <PlaceRewardPanel
+          item={placingItem}
+          story={rewardStory(data.state, target.rewardId)}
+          moving={placedIds.has(target.rewardId)}
+          hasPreview={!!position}
+          saving={savingOak}
+          error={gardenError}
+          onCancel={() => {
+            setPlanting(undefined)
+            setGardenError("")
+          }}
+          onPlace={() => void placeReward()}
+          onSuggest={suggestSpot}
+        />
+      )}
+      {editing && target?.kind === "oak" && (
         <PlantOakPanel
           hasPreview={!!position}
           saving={savingOak}
@@ -448,6 +734,14 @@ const styles = StyleSheet.create({
   },
   logout: { justifyContent: "center", minHeight: 40, paddingLeft: 16 },
   notice: { gap: 8 },
+  placeButton: {
+    alignItems: "center",
+    backgroundColor: world.forest,
+    borderRadius: worldShape.radius,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 16,
+  },
   plantedLabel: {
     alignSelf: "flex-start",
     backgroundColor: world.meadow,
@@ -507,6 +801,13 @@ const styles = StyleSheet.create({
     width: 64,
   },
   title: { color: world.ink, fontSize: 27, lineHeight: 34 },
+  waiting: {
+    backgroundColor: world.meadow,
+    borderColor: world.leaf,
+    borderRadius: worldShape.radius,
+    borderWidth: worldShape.border,
+    padding: 8,
+  },
   world: { backgroundColor: world.canvas, flex: 1, overflow: "hidden" },
   worldLabel: {
     alignItems: "center",

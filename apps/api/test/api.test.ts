@@ -8,6 +8,7 @@ import { loadDatabase } from "../src/db/storage.ts";
 import { parseDatabase } from "@beside/domain/validation";
 import { schemas } from "../src/openapi.ts";
 import type { Session, ApiState } from "@beside/domain/api";
+import { meadowPlacements } from "@beside/domain/garden";
 
 describe("public API contract without a database", () => {
   let app: Awaited<ReturnType<typeof createApp>>;
@@ -111,6 +112,16 @@ describe("public API contract without a database", () => {
       .set("Access-Control-Request-Headers", "content-type")
       .expect(204)
       .expect("Access-Control-Allow-Origin", "http://localhost:3002");
+    // Reward placement and agreement use PUT from browsers too.
+    const preflight = await request(server)
+      .options("/api/v1/rewards/any/agreement")
+      .set("Origin", "http://localhost:3002")
+      .set("Access-Control-Request-Method", "PUT")
+      .expect(204);
+    assert.match(
+      preflight.headers["access-control-allow-methods"] ?? "",
+      /PUT/,
+    );
     await request(server)
       .get("/api/v1/state")
       .set("Origin", "http://localhost:3002")
@@ -555,49 +566,6 @@ describe(
         400,
       );
     });
-    it("shares one starter oak with members and rejects invalid, concurrent, and unrelated placements", async () => {
-      const base = await create(alice, "homebases", {
-        name: "Starter oak garden",
-      });
-      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
-      const path = `/api/v1/homebases/${base.id}/garden`;
-      const server = app.getHttpServer();
-      const get = (session: Session) =>
-        request(server).get(path).set(auth(session));
-      const plant = (session: Session, x: number, y: number) =>
-        request(server)
-          .post(`${path}/starter-oak`)
-          .set(auth(session))
-          .send({ x, y });
-      await request(server).get(path).expect(401);
-      await get(stranger).expect(404);
-      await plant(stranger, 104, 104).expect(404);
-      await get(alice).expect(200, { oak: null });
-      await plant(alice, 224, 144).expect(400);
-      await plant(alice, 144, 104).expect(400);
-      await plant(alice, 104, 105).expect(400);
-      await plant(alice, 288, 104).expect(400);
-      await request(server)
-        .post(`${path}/starter-oak`)
-        .set(auth(alice))
-        .send({ x: 104, y: 104, itemId: "pine-tree" })
-        .expect(400);
-      const results = await Promise.all([
-        plant(alice, 104, 104),
-        plant(bob, 184, 104),
-      ]);
-      assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);
-      const garden = results.find(({ status }) => status === 200)!.body;
-      assert.equal(garden.oak.itemId, "oak-tree");
-      await get(bob).expect(200, garden);
-      await plant(alice, garden.oak.x, garden.oak.y).expect(200, garden);
-      await get(stranger).expect(404);
-      await request(server)
-        .delete(`/api/v1/homebases/${base.id}`)
-        .set(auth(alice))
-        .expect(200);
-      await get(bob).expect(404);
-    });
     it("records immediate attendance at server time and replays it without another log", async () => {
       const activity = await create(alice, "activities", {
         templateId: "read-book",
@@ -650,6 +618,230 @@ describe(
       assert.ok(Date.parse(log.occurredAt) >= now);
       assert.ok(
         Date.parse(snapshot.serverTime ?? "") >= Date.parse(log.occurredAt),
+      );
+    });
+    it("shares one starter oak with members and rejects invalid, concurrent, and unrelated placements", async () => {
+      const base = await create(alice, "homebases", {
+        name: "Starter oak garden",
+      });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const path = `/api/v1/homebases/${base.id}/garden`;
+      const server = app.getHttpServer();
+      const get = (session: Session) =>
+        request(server).get(path).set(auth(session));
+      const plant = (session: Session, x: number, y: number) =>
+        request(server)
+          .post(`${path}/starter-oak`)
+          .set(auth(session))
+          .send({ x, y });
+      await request(server).get(path).expect(401);
+      await get(stranger).expect(404);
+      await plant(stranger, 104, 104).expect(404);
+      await get(alice).expect(200, { oak: null, rewards: [] });
+      await plant(alice, 224, 144).expect(400);
+      await plant(alice, 144, 104).expect(400);
+      await plant(alice, 104, 105).expect(400);
+      await plant(alice, 288, 104).expect(400);
+      await request(server)
+        .post(`${path}/starter-oak`)
+        .set(auth(alice))
+        .send({ x: 104, y: 104, itemId: "pine-tree" })
+        .expect(400);
+      const results = await Promise.all([
+        plant(alice, 104, 104),
+        plant(bob, 184, 104),
+      ]);
+      assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);
+      const garden = results.find(({ status }) => status === 200)!.body;
+      assert.equal(garden.oak.itemId, "oak-tree");
+      await get(bob).expect(200, garden);
+      await plant(alice, garden.oak.x, garden.oak.y).expect(200, garden);
+      await get(stranger).expect(404);
+      await request(server)
+        .delete(`/api/v1/homebases/${base.id}`)
+        .set(auth(alice))
+        .expect(200);
+      await get(bob).expect(404);
+    });
+    it("lets the roster agree on an equal-value reward, then place and move it once earned", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", { name: "Equal rewards" });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const activity = await create(alice, "activities", {
+        templateId: "read-book",
+        name: "Read Dune together",
+        connectionId: base.id,
+        target: 1,
+      });
+      const milestone = await create(
+        alice,
+        "milestones",
+        milestoneBody(activity.entityId, "star-statue"),
+      );
+      const rewardId = (await state(alice)).milestones.find(
+        (m) => m.id === milestone.entityId,
+      )!.rewardId!;
+      const agreements = (session: Session) =>
+        request(server)
+          .get(`/api/v1/homebases/${base.id}/reward-agreements`)
+          .set(auth(session));
+      const agree = (session: Session) =>
+        request(server)
+          .put(`/api/v1/rewards/${rewardId}/agreement`)
+          .set(auth(session));
+      const garden = (session: Session) =>
+        request(server)
+          .get(`/api/v1/homebases/${base.id}/garden`)
+          .set(auth(session));
+      const place = (session: Session, x: number, y: number) =>
+        request(server)
+          .put(`/api/v1/homebases/${base.id}/garden/rewards/${rewardId}`)
+          .set(auth(session))
+          .send({ x, y });
+      const who = (rows: { userId: string; itemId: string }[]) =>
+        rows.map(({ userId, itemId }) => [userId, itemId]);
+
+      // Picking the item is the proposer's agreement.
+      assert.deepEqual(who((await agreements(alice).expect(200)).body), [
+        [alice.user.id, "star-statue"],
+      ]);
+      await agreements(stranger).expect(404);
+      await agree(stranger).expect(404);
+      const agreed = (await agree(bob).expect(200)).body;
+      assert.deepEqual(
+        who(agreed).sort(),
+        [
+          [alice.user.id, "star-statue"],
+          [bob.user.id, "star-statue"],
+        ].sort(),
+      );
+      await agree(bob).expect(200); // Idempotent.
+
+      // Suggesting another item replaces the proposal; earlier agreements stop counting.
+      await request(server)
+        .patch(`/api/v1/milestones/${milestone.entityId}`)
+        .set(auth(bob))
+        .send({ itemId: "sunflower" })
+        .expect(200);
+      assert.deepEqual(who((await agreements(alice).expect(200)).body), [
+        [bob.user.id, "sunflower"],
+      ]);
+      await agree(alice).expect(200);
+
+      // Nothing lands before everyone completes the milestone.
+      const [spot, other] = meadowPlacements();
+      await place(alice, spot!.x, spot!.y).expect(409);
+      await create(
+        alice,
+        "logs",
+        logBody(milestone.entityId, `eq-a-${nonce}`),
+        200,
+      );
+      await place(alice, spot!.x, spot!.y).expect(409);
+      await create(
+        bob,
+        "logs",
+        logBody(milestone.entityId, `eq-b-${nonce}`),
+        200,
+      );
+      const earned = (await state(bob)).rewards.find((r) => r.id === rewardId)!;
+      assert.ok(earned.obtainedAt);
+      assert.equal(earned.itemId, "sunflower");
+      await agree(alice).expect(409);
+
+      await place(alice, 224, 144).expect(400); // The pond.
+      await place(alice, spot!.x, spot!.y + 1).expect(400); // Off the grid.
+      await place(stranger, spot!.x, spot!.y).expect(404);
+      const placed = (await place(alice, spot!.x, spot!.y).expect(200)).body;
+      assert.deepEqual(
+        placed.rewards.map(
+          (r: {
+            rewardId: string;
+            itemId: string;
+            x: number;
+            y: number;
+            placedByUserId: string;
+          }) => [r.rewardId, r.itemId, r.x, r.y, r.placedByUserId],
+        ),
+        [[rewardId, "sunflower", spot!.x, spot!.y, alice.user.id]],
+      );
+      await place(alice, spot!.x, spot!.y).expect(200, placed); // Safe retry.
+      await garden(bob).expect(200, placed);
+
+      // The starter oak cannot be planted on top of it, and vice versa.
+      await request(server)
+        .post(`/api/v1/homebases/${base.id}/garden/starter-oak`)
+        .set(auth(bob))
+        .send(spot)
+        .expect(400);
+      const moved = (await place(bob, other!.x, other!.y).expect(200)).body;
+      assert.deepEqual(
+        [
+          moved.rewards[0].x,
+          moved.rewards[0].y,
+          moved.rewards[0].placedByUserId,
+        ],
+        [other!.x, other!.y, bob.user.id],
+      );
+      const oakGarden = (
+        await request(server)
+          .post(`/api/v1/homebases/${base.id}/garden/starter-oak`)
+          .set(auth(bob))
+          .send(spot)
+          .expect(200)
+      ).body;
+      assert.equal(oakGarden.rewards.length, 1);
+      await place(alice, spot!.x, spot!.y).expect(400);
+
+      // Deleting the milestone removes its reward from the meadow.
+      await request(server)
+        .delete(`/api/v1/milestones/${milestone.entityId}`)
+        .set(auth(alice))
+        .expect(200);
+      assert.deepEqual((await garden(alice).expect(200)).body.rewards, []);
+      assert.deepEqual((await agreements(alice).expect(200)).body, []);
+    });
+    it("proposes a recurring schedule's reward on behalf of its creator", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", { name: "Weekly flowers" });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const activity = await create(alice, "activities", {
+        templateId: "read-book",
+        name: "Weekly reading",
+        connectionId: base.id,
+        target: 1,
+      });
+      const today = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Toronto",
+      }).format(new Date());
+      await create(bob, `activities/${activity.entityId}/schedules`, {
+        name: "Reading session",
+        quantity: 1,
+        timeZone: "America/Toronto",
+        startDate: today,
+        startTime: "00:00",
+        endTime: "23:59",
+        recurrence: { frequency: "daily", interval: 1 },
+        count: 3,
+        itemId: "pink-tulip",
+      });
+      const snapshot = await state(alice);
+      const rewardIds = snapshot.milestones
+        .filter((m) => m.activityId === activity.entityId && m.rewardId)
+        .map((m) => m.rewardId);
+      assert.equal(rewardIds.length, 3);
+      const { body } = await request(server)
+        .get(`/api/v1/homebases/${base.id}/reward-agreements`)
+        .set(auth(alice))
+        .expect(200);
+      assert.deepEqual(
+        body.map(
+          (row: { rewardId: string; userId: string; itemId: string }) => [
+            row.userId,
+            row.itemId,
+          ],
+        ),
+        rewardIds.map(() => [bob.user.id, "pink-tulip"]),
       );
     });
     it("supports member-authorized CRUD with transactional cascades and revoked invitations", async () => {

@@ -6,7 +6,8 @@ playground. It exports `rewardItems`, `RewardItem`, and `PixelArt`. The
 
 Each item has a stable ID, name, category, and artifact. Artifacts store a hex-color
 palette and rectangular pixel rows. A dot is transparent; other characters select
-palette entries. The eight original 32 × 32 sprites remain the only seeded items.
+palette entries. The eight original 32 × 32 sprites are seeded alongside four additions in the same
+style: a cherry blossom, lavender sprigs, a reading bench, and a garden lantern.
 Category names are independent of activity categories.
 
 The package exports TypeScript source directly to Metro, Next.js, and Node's

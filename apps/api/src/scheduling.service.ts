@@ -19,6 +19,7 @@ import type { Database } from "@beside/domain/types";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "./db/database.service.ts";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
+import { recordRewardProposals } from "./rewards.service.ts";
 
 const scheduleColumns = `id, activity_id AS "activityId", creator_user_id AS "creatorUserId",
   configuration, next_date AS "nextDate", generated_count AS "generatedCount", enabled,
@@ -103,6 +104,8 @@ export class SchedulingService {
       const generated = await this.generate(client, before, schedule, now);
       await persistChanges(client, before, generated.db);
       await this.saveOccurrences(client, generated.occurrences);
+      // The person who sets up the series proposes its reward.
+      await recordRewardProposals(client, before, generated.db, () => userId);
       return schedule;
     });
   }
@@ -255,7 +258,9 @@ export class SchedulingService {
         date: string;
         milestoneId: string;
       }[] = [];
+      const creators = new Map<string, string>();
       for (const row of schedules.rows) {
+        creators.set(row.id, row.creatorUserId);
         const generated = await this.generate(client, db, serialize(row), now);
         db = generated.db;
         occurrences.push(...generated.occurrences);
@@ -263,6 +268,16 @@ export class SchedulingService {
       const settled = settleExpiredMilestones(db, now);
       await persistChanges(client, before, settled.db);
       await this.saveOccurrences(client, occurrences);
+      // Later occurrences keep the series creator as the reward's proposer.
+      const proposers = new Map(
+        occurrences.map((o) => [o.milestoneId, creators.get(o.scheduleId)]),
+      );
+      await recordRewardProposals(client, before, settled.db, (reward) => {
+        const milestone = settled.db.milestones.find(
+          (m) => m.rewardId === reward.id,
+        );
+        return milestone && proposers.get(milestone.id);
+      });
       return {
         processedAt: now,
         milestonesCreated: occurrences.length,
