@@ -9,12 +9,19 @@ import type {
   Session,
   HomebaseGarden,
 } from "@beside/domain/api";
-import { checkStarterOakPlacement } from "@beside/domain/garden";
+import { checkMeadowPlacement } from "@beside/domain/garden";
 
-// Intentionally fixed: this experiment must never seed another API/database.
-const origin = "http://localhost:3096/api/v1";
+// Always loopback. A separate port lets throwaway verification avoid a running demo API.
+const port = Number(process.env.ARCHIPELAGO_DEMO_PORT ?? 3096);
+assert.ok(
+  Number.isInteger(port) && port > 0 && port <= 65535,
+  "Invalid demo API port",
+);
+const origin = `http://localhost:${port}/api/v1`;
 const password = "beside-demo-1";
-const cachePath = join(tmpdir(), "beside-archipelago-demo-sessions.json");
+const cachePath =
+  process.env.ARCHIPELAGO_DEMO_SESSION_CACHE ??
+  join(tmpdir(), "beside-archipelago-demo-sessions.json");
 const sessions: Record<string, Session> = JSON.parse(
   await readFile(cachePath, "utf8").catch(() => "{}"),
 );
@@ -240,6 +247,20 @@ for (const plan of plans) {
       );
     }
     if (!live) {
+      // Equal-value rewards require every saved roster member to endorse the
+      // proposed item before completion. Earned rewards stay in the waiting dock.
+      snapshot = await state();
+      const reward = snapshot.rewards.find(
+        (row) => row.id === milestone.rewardId,
+      );
+      if (reward && !reward.obtainedAt)
+        for (const person of people)
+          await api(
+            `/rewards/${reward.id}/agreement`,
+            person.token,
+            undefined,
+            "PUT",
+          );
       for (const person of people) {
         await api("/logs", person.token, {
           milestoneId: milestone.id,
@@ -253,17 +274,18 @@ for (const plan of plans) {
     }
   }
   if (plan.oak) {
-    assert.equal(
-      checkStarterOakPlacement(plan.oak),
-      null,
-      "Starter oak must satisfy the shared placement rule",
-    );
     const garden = await api<HomebaseGarden>(
       `/homebases/${base.id}/garden`,
       token,
     );
-    if (!garden.oak)
+    if (!garden.oak) {
+      assert.equal(
+        checkMeadowPlacement(plan.oak, garden.rewards),
+        null,
+        "Starter oak must satisfy the shared placement rule with saved rewards",
+      );
       await api(`/homebases/${base.id}/garden/starter-oak`, token, plan.oak);
+    }
   }
 }
 
