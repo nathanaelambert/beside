@@ -1,9 +1,11 @@
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 // eslint-disable-next-line no-restricted-imports
 import { ActivityIndicator, Keyboard, TextInput, TextStyle, View, ViewStyle } from "react-native"
 
-import { BesideMark } from "@/components/BesideMark"
 import { Button } from "@/components/Button"
+import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
+import { buildActivityScene } from "@/components/iso-world/scene"
+import { memberAvatarStyles } from "@/components/pixel-world/avatars"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
@@ -22,6 +24,11 @@ export function LoginScreen() {
   const [error, setError] = useState("")
   const { completeSignIn } = useAuth()
   const { themed } = useAppTheme()
+  const [heroWidth, setHeroWidth] = useState(0)
+  const island = useMemo(
+    () => buildActivityScene({ roof: "clay", lit: true, attendees: memberAvatarStyles }),
+    [],
+  )
 
   async function login() {
     if (busy) return
@@ -52,9 +59,24 @@ export function LoginScreen() {
       contentContainerStyle={themed($page)}
       backgroundColor={world.paper}
     >
-      <View style={themed($hero)}>
-        <BesideMark scale={7} animated />
-        <View style={themed($ground)} />
+      <View
+        style={themed($hero)}
+        testID="login-island"
+        onLayout={(event) => setHeroWidth(event.nativeEvent.layout.width)}
+      >
+        {heroWidth > 0 && (
+          <IsoWorldCanvas
+            width={heroWidth}
+            height={HERO_HEIGHT}
+            map={island.map}
+            frame={island.frame}
+            drawables={island.drawables}
+            zoom={heroWidth >= island.frame.width * 2 ? 2 : 1}
+            focus={{ u: 2.2, v: 2.1 }}
+            interactive={false}
+            accessibilityLabel="Four friends gathered outside a cottage on a little floating island."
+          />
+        )}
       </View>
       <View style={themed($intro)}>
         <Text text="beside" weight="bold" style={themed($wordmark)} />
@@ -143,24 +165,12 @@ const $page: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingBottom: spacing.xl,
   flexGrow: 1,
 })
+const HERO_HEIGHT = 230
 const $hero: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  height: 212,
+  height: HERO_HEIGHT,
   borderRadius: spacing.lg,
-  backgroundColor: world.panel,
-  alignItems: "center",
-  justifyContent: "flex-end",
+  backgroundColor: world.sea,
   overflow: "hidden",
-  paddingBottom: 28,
-})
-const $ground: ThemedStyle<ViewStyle> = () => ({
-  position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  height: 28,
-  backgroundColor: "#95b46b",
-  borderTopWidth: 4,
-  borderTopColor: "#7e9d5a",
 })
 const $intro: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "center",

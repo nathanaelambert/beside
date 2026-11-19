@@ -5,14 +5,20 @@ import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { PixelArtSprite } from "@/components/BesideMark"
-import { calendarArt } from "@/components/pixel-world/calendar"
+import { cottageArt } from "@/components/iso-world/cottageArt"
+import { homeActivities } from "@/components/iso-world/homeWorld"
 import { Text } from "@/components/Text"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { activityScheduleSummary } from "@/services/api/activitySummary"
 import { besideApi } from "@/services/api/beside"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
-type ActivityRow = { activity: ApiState["activities"][number]; summary: string }
+type ActivityRow = {
+  activity: ApiState["activities"][number]
+  summary: string
+  index: number
+  open: boolean
+}
 
 export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Activities">) {
   const [rows, setRows] = useState<ActivityRow[]>([])
@@ -30,17 +36,29 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
       async function load() {
         try {
           const state = await besideApi.state()
-          const activities = state.activities.filter(
-            (activity) => activity.connectionId === route.params.connectionId,
+          const serverNow = Date.parse(state.serverTime ?? "")
+          // Same order as the cottages on the island, so each row shows its own roof.
+          const cottages = homeActivities(
+            state,
+            route.params.connectionId,
+            Number.isFinite(serverNow) ? serverNow : Date.now(),
           )
           const next = await Promise.all(
-            activities.map(async (activity) => {
+            cottages.map(async ({ id, open }, index) => {
+              const activity = state.activities.find((candidate) => candidate.id === id)!
               try {
                 const schedules = await besideApi.schedules(activity.id)
-                return { activity, summary: activityScheduleSummary(schedules) }
+                return {
+                  activity,
+                  index,
+                  open: !!open,
+                  summary: activityScheduleSummary(schedules),
+                }
               } catch {
                 return {
                   activity,
+                  index,
+                  open: !!open,
                   summary: "Schedule unavailable. Open the activity to try again.",
                 }
               }
@@ -102,10 +120,13 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
         ) : !rows.length ? (
           <View style={styles.empty}>
             <Text text="No activities yet" weight="semiBold" style={styles.emptyTitle} />
-            <Text text="Start something together from your home base." style={styles.body} />
+            <Text
+              text="Start something together, and its cottage appears on your island."
+              style={styles.body}
+            />
           </View>
         ) : (
-          rows.map(({ activity, summary }) => (
+          rows.map(({ activity, summary, index, open }) => (
             <Pressable
               key={activity.id}
               testID={`activity-row-${activity.id}`}
@@ -114,11 +135,12 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
               <View style={styles.calendar}>
-                <PixelArtSprite art={calendarArt} scale={3} />
+                <PixelArtSprite art={cottageArt(index, open)} scale={1} />
               </View>
               <View style={styles.rowContent}>
                 <Text text={activity.name} weight="semiBold" style={styles.activityName} />
                 <Text text={summary} style={styles.summary} />
+                {open && <Text text="● Lights on: open now" style={styles.open} />}
               </View>
               <Text text="›" style={styles.chevron} />
             </Pressable>
@@ -139,13 +161,22 @@ const styles = StyleSheet.create({
   },
   backText: { color: world.text, fontSize: 14, lineHeight: 22 },
   body: { color: world.muted, fontSize: 14, lineHeight: 22 },
-  calendar: { alignSelf: "flex-start", paddingTop: 2 },
+  calendar: {
+    alignItems: "center",
+    backgroundColor: world.meadow,
+    borderRadius: worldShape.smallRadius,
+    height: 72,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 72,
+  },
   chevron: { color: world.muted, fontSize: 24, lineHeight: 30 },
   content: { flexGrow: 1, gap: 12, paddingBottom: 24, paddingHorizontal: 20 },
   empty: { gap: 12, paddingVertical: 48 },
   emptyTitle: { color: world.ink, fontSize: 18, lineHeight: 24 },
   error: { color: world.error, fontSize: 14, lineHeight: 22 },
   header: { paddingBottom: 24, paddingHorizontal: 20 },
+  open: { color: world.leaf, fontSize: 12, lineHeight: 18 },
   pressed: { opacity: 0.75 },
   retry: {
     alignSelf: "flex-start",

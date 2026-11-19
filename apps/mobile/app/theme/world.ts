@@ -27,6 +27,8 @@ export const world = {
   leaf: "#6b8658",
   /** The world canvas's own backdrop, behind the Skia scene. */
   canvas: "#2b4632",
+  /** Open water around the isometric island. */
+  sea: "#2f5d6b",
   /** Pixel-art outline color shared by avatars and sprites. */
   outline: "#3b2a2e",
   /** Errors stay warm, not alarm red. */
