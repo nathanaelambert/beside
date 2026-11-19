@@ -3,6 +3,10 @@
 Branch: `merge/isometric-world`. Base: `origin/exp/rewards-equal-value`, followed
 by a merge of `origin/main` and a preserved merge of `origin/exp/isometric-world`.
 The isometric merge is `271152f`. Follow-up fixes and regression tests are separate.
+A final fetch found upstream rewards commit `b7d5d6c` (keep near-miss rewards in
+activity history). It was merged cleanly after the follow-up commit, preserving
+the cottage plot and the new past-rewards behavior. Mobile type checks, tests and
+the web export were repeated successfully after that merge.
 
 ## Conflict resolutions
 

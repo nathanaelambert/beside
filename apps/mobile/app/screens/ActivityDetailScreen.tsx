@@ -149,13 +149,18 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   const listed = new Set(
     [...(currentOccurrence ? [currentOccurrence] : []), ...otherOpen, ...upcoming].map((m) => m.id),
   )
+  // Earned rewards, plus near misses: occurrences someone checked in to that closed
+  // before everyone did. Skipped occurrences nobody attended stay out of the list.
   const pastRewards =
     data?.milestones.filter(
       (m) =>
         m.activityId === activityId &&
         m.rewardId &&
         !listed.has(m.id) &&
-        data.rewards.find((r) => r.id === m.rewardId)?.obtainedAt,
+        (data.rewards.find((r) => r.id === m.rewardId)?.obtainedAt ||
+          (m.endAt &&
+            Date.parse(m.endAt) < now &&
+            data.logs.some((log) => log.milestoneId === m.id))),
     ) ?? []
 
   function placeReward(rewardId: string) {
@@ -517,7 +522,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
             </View>
             {!!pastRewards.length && (
               <View style={$milestoneList} testID="activity-earned-rewards">
-                <Text text="EARNED HERE" style={worldEyebrow} />
+                <Text text="PAST REWARDS" style={worldEyebrow} />
                 {pastRewards.map((milestone) => (
                   <View key={milestone.id} style={$section}>
                     <Text
