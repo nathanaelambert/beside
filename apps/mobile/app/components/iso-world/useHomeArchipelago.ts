@@ -32,6 +32,8 @@ export function useHomeArchipelago(
   const [focusedId, setFocusedId] = useState<string>()
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState("")
+  const gardenRevisions = useRef(new Map<string, number>())
+  const gardenRequests = useRef(new Map<string, number>())
   const requested = useRef(connectionId)
   requested.current = connectionId
   const currentFocus = useRef<string | undefined>(undefined)
@@ -62,9 +64,7 @@ export function useHomeArchipelago(
       Promise.all([besideApi.homebases(), besideApi.state()])
         .then(async ([bases, state]) => {
           if (!active) return
-          const preferred =
-            requested.current ?? currentFocus.current ?? loadString(storageKey) ?? undefined
-          const base = selectHomebase(bases, state.users, preferred)
+          const revisions = new Map(gardenRevisions.current)
           const missing = new Set<string>()
           const gardens = await Promise.all(
             bases.map(async (base) => {
@@ -85,16 +85,30 @@ export function useHomeArchipelago(
           if (!active) return
           // A single island keeps #34's atomic first frame, including its saved garden.
           const available = bases.filter((candidate) => !missing.has(candidate.id))
+          // Read focus after the requests: a deep link may have changed while loading.
+          const preferred =
+            requested.current ?? currentFocus.current ?? loadString(storageKey) ?? undefined
+          const base = selectHomebase(available, state.users, preferred)
           if (base) focusIsland(base.id)
-          setData({
+          setData((current) => ({
             bases: available,
             state,
-            gardens: Object.fromEntries(gardens),
+            gardens: Object.fromEntries(
+              gardens.map(([id, garden]) => [
+                id,
+                gardenRevisions.current.get(id) === revisions.get(id)
+                  ? garden
+                  : current?.gardens[id],
+              ]),
+            ),
             order: available.map((b) => b.id),
-          })
+          }))
         })
         .catch(() => {
-          if (active) setError("We couldn’t open your home base. Please try again.")
+          if (active) {
+            setData(null)
+            setError("We couldn’t open your home base. Please try again.")
+          }
         })
         .finally(() => {
           if (active) setBusy(false)
@@ -105,12 +119,23 @@ export function useHomeArchipelago(
     }, [attempt, storageKey, focusIsland]),
   )
 
-  const updateGarden = useCallback((id: string, garden: HomebaseGarden | undefined) => {
-    setData((current) =>
-      current ? { ...current, gardens: { ...current.gardens, [id]: garden } } : current,
-    )
+  // Every writer owns one home base and one revision. Late refreshes and older writes
+  // cannot replace a newer garden, even after the member sails away and back.
+  const beginGardenUpdate = useCallback((id: string) => {
+    const request = (gardenRequests.current.get(id) ?? 0) + 1
+    gardenRequests.current.set(id, request)
+    gardenRevisions.current.set(id, (gardenRevisions.current.get(id) ?? 0) + 1)
+    return (garden: HomebaseGarden | undefined) => {
+      if (gardenRequests.current.get(id) !== request) return false
+      gardenRevisions.current.set(id, (gardenRevisions.current.get(id) ?? 0) + 1)
+      setData((current) =>
+        gardenRequests.current.get(id) === request && current?.bases.some((base) => base.id === id)
+          ? { ...current, gardens: { ...current.gardens, [id]: garden } }
+          : current,
+      )
+      return true
+    }
   }, [])
-
   const islands = useMemo(() => {
     if (!data) return []
     const offsets = archipelagoLayout(data.order)
@@ -129,19 +154,20 @@ export function useHomeArchipelago(
       const avatars = avatarsForMembers(members)
       const garden = data.gardens[id]
       const activities = homeActivities(data.state, id, now)
+      const items = [
+        ...initialMeadowItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees"),
+        ...(garden?.oak ? [oakAt(garden.oak)] : []),
+        ...(garden?.rewards ?? []).map((p) => ({
+          key: rewardKey(p.rewardId),
+          itemId: p.itemId,
+          x: p.x,
+          y: p.y,
+        })),
+      ]
       const scene = buildHomeScene({
         avatars,
         activities,
-        items: [
-          ...initialMeadowItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees"),
-          ...(garden?.oak ? [oakAt(garden.oak)] : []),
-          ...(garden?.rewards ?? []).map((p) => ({
-            key: rewardKey(p.rewardId),
-            itemId: p.itemId,
-            x: p.x,
-            y: p.y,
-          })),
-        ],
+        items,
         variantSeed: multiple ? islandVariantSeed(id) : 0,
       })
       const palette = palettes[id] ?? 0
@@ -166,10 +192,19 @@ export function useHomeArchipelago(
           ? spriteDrawable(scene.frame, "sign-here", islandSign(homebase.name, true), signAt)
           : undefined,
       }
-      return [{ homebase, members, avatars, activities, garden, scene, layer }]
+      return [{ homebase, members, avatars, activities, garden, items, scene, layer }]
     })
   }, [data])
   const focused = islands.find((island) => island.homebase.id === focusedId) ?? islands[0]
 
-  return { data, islands, focused, focusIsland, updateGarden, busy, error, setError }
+  return {
+    data,
+    islands,
+    focused,
+    focusIsland,
+    beginGardenUpdate,
+    busy,
+    error,
+    setError,
+  }
 }

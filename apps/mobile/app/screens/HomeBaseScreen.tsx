@@ -92,7 +92,7 @@ function HomeIslandScreen({
     focused,
     islands,
     focusIsland,
-    updateGarden,
+    beginGardenUpdate,
     busy,
     error,
     setError,
@@ -113,14 +113,20 @@ function HomeIslandScreen({
   const [savingOak, setSavingOak] = useState(false)
   const [focus, setFocus] = useState<MeadowPoint>()
   const plantingLock = useRef(false)
-  // Read the latest deep-link params inside the loader without re-running it.
+  const viewSession = useRef<object | undefined>(undefined)
+  // Follow reward links after this island’s garden has loaded.
   const params = useRef(route.params)
   params.current = route.params
 
   useFocusEffect(
     useCallback(() => {
+      viewSession.current = {}
+      setSavingOak(plantingLock.current)
       setPlanting(undefined)
       setGardenError("")
+      return () => {
+        viewSession.current = undefined
+      }
     }, []),
   )
 
@@ -153,7 +159,7 @@ function HomeIslandScreen({
     onArrive,
   })
   function sailTo(id: string) {
-    if (plantingLock.current || voyage || id === homebase?.id) return
+    if (plantingLock.current || voyage || busy || id === homebase?.id) return
     setSelectedKey(undefined)
     setPlanting(undefined)
     setGardenError("")
@@ -165,7 +171,7 @@ function HomeIslandScreen({
   const placements = useMemo(() => placedRewards(data?.garden), [data?.garden])
   const placedIds = useMemo(() => new Set(placements.map((p) => p.rewardId)), [placements])
   const waiting = data && homebase ? rewardsToPlace(data.state, homebase.id, placedIds) : []
-  const canPlant = !!data?.garden && !oak && !busy
+  const canPlant = !!data?.garden && !oak && !busy && !voyage
   const target = planting?.homebaseId === homebase?.id ? planting?.target : undefined
   const editing =
     !!target && !!data?.garden && !busy && !voyage && (target.kind === "reward" || canPlant)
@@ -178,7 +184,7 @@ function HomeIslandScreen({
   )
   const guideTiles = useMemo(() => (editing ? plantableTiles(occupied) : []), [editing, occupied])
   const guide = guideTiles.map(({ col, row }) => ({ x: col * 16 + 8, y: row * 16 + 8 }))
-  const worldItems = focused?.scene.drawables ?? []
+  const worldItems = focused?.items ?? []
   const previewItemId = target?.kind === "reward" ? target.itemId : oakAt({ x: 0, y: 0 }).itemId
   const placingItem = target?.kind === "reward" ? catalogue.get(target.itemId) : undefined
 
@@ -253,10 +259,12 @@ function HomeIslandScreen({
   /** Follow a link from an activity: place a fresh reward, or show one in the meadow. */
   function openLinkedReward(homebaseId: string, state: ApiState, garden: HomebaseGarden) {
     const { rewardId, place } = params.current ?? {}
-    if (!rewardId) return
-    navigation.setParams({ rewardId: undefined, place: undefined })
+    if (!rewardId || (params.current?.connectionId && params.current.connectionId !== homebaseId))
+      return
     const reward = state.rewards.find((r) => r.id === rewardId && r.homebaseId === homebaseId)
-    if (!reward?.obtainedAt) return
+    if (!reward?.obtainedAt || consumedLink.current === rewardId) return
+    consumedLink.current = rewardId
+    navigation.setParams({ rewardId: undefined, place: undefined })
     const placed = placedRewards(garden).find((p) => p.rewardId === rewardId)
     if (place && !placed) startPlacingReward(homebaseId, reward.id, reward.itemId, garden)
     else if (placed) {
@@ -265,8 +273,13 @@ function HomeIslandScreen({
       setCameraReset((value) => value + 1)
     }
   }
+  const consumedLink = useRef<string | undefined>(undefined)
   const linkedReward = useRef(openLinkedReward)
   linkedReward.current = openLinkedReward
+
+  useEffect(() => {
+    if (!route.params?.rewardId) consumedLink.current = undefined
+  }, [route.params?.rewardId])
 
   useEffect(() => {
     if (!busy && !voyage && homebase && shared && focused?.garden)
@@ -285,7 +298,7 @@ function HomeIslandScreen({
     y: number
   }) {
     if (plantingLock.current || voyage) return
-    if (islandKey && islandKey !== homebase?.id) {
+    if (multipleIslands && islandKey && islandKey !== homebase?.id) {
       sailTo(islandKey)
       return
     }
@@ -313,13 +326,23 @@ function HomeIslandScreen({
   }
 
   async function placeReward() {
-    if (!position || !homebase || target?.kind !== "reward" || plantingLock.current) return
+    if (
+      !editing ||
+      !position ||
+      !homebase ||
+      target?.kind !== "reward" ||
+      plantingLock.current ||
+      !viewSession.current
+    )
+      return
+    const session = viewSession.current
+    const update = beginGardenUpdate(homebase.id)
     plantingLock.current = true
     setSavingOak(true)
     setGardenError("")
     try {
       const garden = await besideApi.placeReward(homebase.id, target.rewardId, position)
-      updateGarden(homebase.id, garden)
+      if (!update(garden) || viewSession.current !== session) return
       const key = rewardKey(target.rewardId)
       setPlanting(undefined)
       setSelectedKey(key)
@@ -327,6 +350,7 @@ function HomeIslandScreen({
       setFocus(position)
       setCameraReset((value) => value + 1)
     } catch (e) {
+      if (viewSession.current !== session) return
       setGardenError(
         e instanceof ApiError && (e.status === 400 || e.status === 409)
           ? e.message
@@ -338,8 +362,9 @@ function HomeIslandScreen({
         setPlanting((current) => current && { ...current, position: undefined })
         try {
           const garden = await besideApi.homebaseGarden(homebase.id)
-          updateGarden(homebase.id, garden)
+          if (!update(garden) || viewSession.current !== session) return
         } catch {
+          if (viewSession.current !== session) return
           setGardenError("We couldn’t refresh free spots. Cancel and try again.")
         }
       }
@@ -357,10 +382,7 @@ function HomeIslandScreen({
 
   const selectedPlacement = placements.find((p) => rewardKey(p.rewardId) === selectedKey)
   const selectedItem = selected ? undefined : worldItems.find((item) => item.key === selectedKey)
-  const selectedArt =
-    selectedItem && selectedItem.source.type === "art" && selectedItem.hit?.type === "item"
-      ? catalogue.get(selectedItem.hit.itemId)
-      : undefined
+  const selectedArt = selectedItem && catalogue.get(selectedItem.itemId)
   const memory =
     selectedPlacement && data ? rewardMemory(data.state, selectedPlacement.rewardId) : undefined
   const selectedReward =
@@ -376,28 +398,40 @@ function HomeIslandScreen({
   const nextUpItem = nextUp && catalogue.get(nextUp.itemId)
 
   async function plantOak() {
-    if (!position || !homebase || plantingLock.current) return
+    if (
+      !editing ||
+      !position ||
+      !homebase ||
+      target?.kind !== "oak" ||
+      plantingLock.current ||
+      !viewSession.current
+    )
+      return
+    const session = viewSession.current
+    const update = beginGardenUpdate(homebase.id)
     plantingLock.current = true
     setSavingOak(true)
     setGardenError("")
     try {
       const garden = await besideApi.plantStarterOak(homebase.id, position)
-      updateGarden(homebase.id, garden)
+      if (!update(garden) || viewSession.current !== session) return
       setPlanting(undefined)
       setSelectedKey("starter-oak")
       setFocus(position)
       setCameraReset((value) => value + 1)
     } catch (e) {
+      if (viewSession.current !== session) return
       if (e instanceof ApiError && e.status === 409) {
         setPlanting(undefined)
         setGardenError("Someone already planted the shared oak.")
-        updateGarden(homebase.id, undefined)
+        update(undefined)
         try {
           const garden = await besideApi.homebaseGarden(homebase.id)
-          updateGarden(homebase.id, garden)
+          if (!update(garden) || viewSession.current !== session) return
         } catch (refreshError) {
+          if (viewSession.current !== session) return
           if (refreshError instanceof ApiError && refreshError.status === 404) {
-            updateGarden(homebase.id, undefined)
+            update(undefined)
             setError("This home base is no longer available. Please try again.")
           } else {
             setError("We couldn’t load garden decorations. Please try again.")
@@ -454,7 +488,7 @@ function HomeIslandScreen({
           <IslandSwitcher
             bases={islands.map((island) => island.homebase)}
             focusedId={homebase?.id}
-            disabled={!!voyage || savingOak}
+            disabled={!!voyage || savingOak || busy}
             onTravel={sailTo}
           />
         )}
@@ -493,7 +527,7 @@ function HomeIslandScreen({
               }
               onTap={tapWorld}
               onPinch={changeZoom}
-              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend, cottage or reward to learn about it."}`}
+              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${multipleIslands ? "Use the island buttons or tap another island to sail there. " : ""}${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend, cottage or reward to learn about it."}`}
             />
             <View
               pointerEvents="none"
@@ -787,7 +821,7 @@ function HomeIslandScreen({
           <Pressable
             testID="homebase-create-activity"
             accessibilityRole="button"
-            disabled={!homebase}
+            disabled={!homebase || !!voyage}
             style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
             onPress={() =>
               homebase && navigation.navigate("ActivityCreate", { connectionId: homebase.id })
@@ -798,7 +832,7 @@ function HomeIslandScreen({
           <Pressable
             testID="homebase-activities"
             accessibilityRole="button"
-            disabled={!homebase}
+            disabled={!homebase || !!voyage}
             style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
             onPress={() =>
               homebase && navigation.navigate("Activities", { connectionId: homebase.id })

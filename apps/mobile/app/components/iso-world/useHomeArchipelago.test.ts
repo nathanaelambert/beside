@@ -106,7 +106,7 @@ it("keeps the original single-island scene and refreshes only the planted garden
   expect(original.layer.sign).toBeUndefined()
   expect(original.layer.drawables).toBe(original.scene.drawables)
   act(() =>
-    result.current.updateGarden("family", {
+    result.current.beginGardenUpdate("family")({
       oak: { x: 72, y: 88, itemId: "oak-tree" },
       rewards: [],
     }),
@@ -124,4 +124,95 @@ it("preserves other gardens when one request fails", async () => {
   expect(result.current.error).toContain("garden decorations")
   expect(result.current.islands.find((i) => i.homebase.id === "project")?.garden).toBeDefined()
   expect(result.current.islands).toHaveLength(3)
+})
+
+it("renders no unplaced rewards or catalog decorations, and preserves every saved anchor", async () => {
+  jest.mocked(besideApi.homebaseGarden).mockImplementation(async (id) => ({
+    oak: null,
+    rewards:
+      id === "project"
+        ? Array.from({ length: 10 }, (_, i) => ({
+            rewardId: `saved-${i}`,
+            itemId: "sunflower",
+            x: 80 + i * 8,
+            y: 104,
+            placedByUserId: "you",
+            placedAt: "2026-11-01",
+          }))
+        : [],
+  }))
+  const { result } = renderHook(() => useHomeArchipelago("you", undefined, 0))
+  await waitFor(() => expect(result.current.busy).toBe(false))
+  const family = result.current.islands.find((i) => i.homebase.id === "family")!
+  const project = result.current.islands.find((i) => i.homebase.id === "project")!
+  expect(family.items.every((item) => ["oak-tree", "pine-tree"].includes(item.itemId))).toBe(true)
+  expect(family.scene.drawables.some((d) => d.key === "reward-r-family")).toBe(false)
+  expect(project.scene.drawables.filter((d) => d.key.startsWith("reward-"))).toHaveLength(10)
+  expect(
+    project.items.filter((item) => item.key.startsWith("reward-")).map((item) => item.x),
+  ).toEqual(Array.from({ length: 10 }, (_, i) => 80 + i * 8))
+})
+
+it("keeps a late mutation on its own island and rejects older mutation responses", async () => {
+  const { result } = renderHook(() => useHomeArchipelago("you", undefined, 0))
+  await waitFor(() => expect(result.current.busy).toBe(false))
+  const oldWrite = result.current.beginGardenUpdate("family")
+  const latestWrite = result.current.beginGardenUpdate("family")
+  const saved = { oak: { x: 104, y: 104, itemId: "oak-tree" as const }, rewards: [] }
+  act(() => result.current.focusIsland("project"))
+  act(() => {
+    expect(latestWrite(saved)).toBe(true)
+  })
+  act(() => {
+    expect(oldWrite({ oak: null, rewards: [] })).toBe(false)
+  })
+  expect(result.current.focused?.homebase.id).toBe("project")
+  expect(result.current.focused?.garden?.oak).toBeNull()
+  expect(result.current.islands.find((i) => i.homebase.id === "family")?.garden).toEqual(saved)
+})
+
+it("does not overwrite a save with a garden refresh already in flight", async () => {
+  const { result, rerender } = renderHook(
+    ({ attempt }: { attempt: number }) => useHomeArchipelago("you", undefined, attempt),
+    {
+      initialProps: { attempt: 0 },
+    },
+  )
+  await waitFor(() => expect(result.current.busy).toBe(false))
+  const save = result.current.beginGardenUpdate("family")
+  let resolve!: (garden: { oak: null; rewards: [] }) => void
+  const refresh = new Promise<{ oak: null; rewards: [] }>((done) => {
+    resolve = done
+  })
+  jest
+    .mocked(besideApi.homebaseGarden)
+    .mockImplementation(async (id) => (id === "family" ? refresh : { oak: null, rewards: [] }))
+  rerender({ attempt: 1 })
+  await waitFor(() => expect(besideApi.homebaseGarden).toHaveBeenCalledTimes(6))
+  const saved = { oak: { x: 104, y: 104, itemId: "oak-tree" as const }, rewards: [] }
+  act(() => {
+    save(saved)
+  })
+  await act(async () => resolve({ oak: null, rewards: [] }))
+  await waitFor(() => expect(result.current.busy).toBe(false))
+  expect(result.current.islands.find((i) => i.homebase.id === "family")?.garden).toEqual(saved)
+})
+
+it("honors a route changed while the first gardens are loading", async () => {
+  let resolve!: (garden: { oak: null; rewards: [] }) => void
+  const pending = new Promise<{ oak: null; rewards: [] }>((done) => {
+    resolve = done
+  })
+  jest.mocked(besideApi.homebaseGarden).mockReturnValue(pending)
+  const { result, rerender } = renderHook(
+    ({ connectionId }: { connectionId: string }) => useHomeArchipelago("you", connectionId, 0),
+    {
+      initialProps: { connectionId: "family" },
+    },
+  )
+  await waitFor(() => expect(besideApi.homebaseGarden).toHaveBeenCalledTimes(3))
+  rerender({ connectionId: "crew" })
+  await act(async () => resolve({ oak: null, rewards: [] }))
+  await waitFor(() => expect(result.current.busy).toBe(false))
+  expect(result.current.focused?.homebase.id).toBe("crew")
 })
