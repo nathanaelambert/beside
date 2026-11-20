@@ -24,7 +24,8 @@ export type AppStackParamList = {
   HomeBase: { connectionId?: string; rewardId?: string; place?: boolean } | undefined
   Activities: { connectionId: string }
   ActivityCreate: { connectionId: string }
-  ActivityDetail: { activityId: string }
+  /** `section` opens the activity at its first open or upcoming milestone. */
+  ActivityDetail: { activityId: string; section?: "milestones" }
   Demo: NavigatorScreenParams<DemoTabParamList>
   RewardItems: undefined
   PixelWorld: undefined

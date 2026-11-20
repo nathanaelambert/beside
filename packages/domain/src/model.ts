@@ -10,7 +10,17 @@ import type {
   Participation,
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
-import { logInputSchema, milestoneInputSchema } from "./validation.ts";
+import {
+  COTTAGE_MILESTONE_CAP,
+  cottageBuildSettings,
+  cottageLevel,
+  queueCottageLevel,
+} from "./cottage.ts";
+import {
+  cottageBuildSecondsSchema,
+  logInputSchema,
+  milestoneInputSchema,
+} from "./validation.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const requireValue = <T>(value: T | undefined | null, message: string): T => {
@@ -427,6 +437,10 @@ export function execute(
       if (changes.name !== undefined) activity.name = changes.name;
       if (changes.description !== undefined)
         activity.description = changes.description;
+      if (changes.cottageBuildSeconds) {
+        activity.cottageBuild ??= cottageBuildSettings();
+        activity.cottageBuild.seconds = changes.cottageBuildSeconds;
+      }
       if (changes.target !== undefined)
         requireValue(
           participation(db, activity.id, command.actorId),
@@ -682,6 +696,10 @@ export function execute(
           throw new Error("The subject must match the activity's category.");
       }
       entityId = id("activity");
+      const cottageBuild = cottageBuildSettings(
+        cottageBuildSecondsSchema.optional().parse(command.cottageBuildSeconds),
+      );
+      queueCottageLevel(cottageBuild, 1, now);
       db.activities.push({
         id: entityId,
         templateId: template.id,
@@ -693,6 +711,8 @@ export function execute(
         progressMode: template.progressMode,
         unit: template.unit,
         createdAt: now,
+        cottageMilestones: 0,
+        cottageBuild,
       });
       for (const subjectId of new Set(command.subjectIds))
         db.activitySubjects.push({
@@ -972,6 +992,22 @@ export function execute(
         externalKey: input.externalKey || null,
         createdAt: now,
       };
+      if (
+        log.isSuccess &&
+        milestone.kind === "achievement" &&
+        (activity.cottageMilestones ?? 0) < COTTAGE_MILESTONE_CAP &&
+        !db.logs.some(
+          (entry) => entry.milestoneId === milestone.id && entry.isSuccess,
+        )
+      ) {
+        const previousLevel = cottageLevel(activity.cottageMilestones);
+        activity.cottageMilestones = (activity.cottageMilestones ?? 0) + 1;
+        const nextLevel = cottageLevel(activity.cottageMilestones);
+        if (previousLevel !== nextLevel) {
+          activity.cottageBuild ??= cottageBuildSettings();
+          queueCottageLevel(activity.cottageBuild, nextLevel, now);
+        }
+      }
       db.logs.push(log);
       emit(
         db,

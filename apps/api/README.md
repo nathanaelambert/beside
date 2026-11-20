@@ -161,6 +161,17 @@ deleted; the account can create or join another.
 `GET /state` is an audience-filtered projection rather than an import/export
 format. User profiles omit email, and deliveries are limited to the recipient.
 A shared log can refer to a milestone outside the viewer's visible activities.
+Each activity includes `cottageMilestones` (0–3), a permanent, shared construction
+count. The first successful check-in on a distinct achievement adds one;
+join logs, failed logs, and further check-ins on that achievement add nothing.
+The cottage upgrades at 1 and 3 without spending anything. Removing a milestone
+does not remove construction credit. Migration 009 backfills the count from
+existing successful achievements. Migration 010 adds cottage deadlines; apply
+both before running the updated API. Activity creation and updates accept
+optional `cottageBuildSeconds: { base, entrance, finished }` (whole seconds,
+1–3600). Defaults are 5, 10 and 15. Stage deadlines in `cottageBuild.readyAt`
+use server time and queue behind earlier stages. Changing settings affects only
+stages not yet queued. Old cottages keep their built levels.
 
 `packages/domain` is the source of truth for types, validators, templates, and
 the command engine. Its build bundles JavaScript for Node/Vercel while browser

@@ -1,8 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, RefreshControl, View, ViewStyle } from "react-native"
-import type { ApiState, MilestoneSchedule, RewardAgreement } from "@beside/api-client"
+import {
+  cottageConstruction,
+  type ApiState,
+  type MilestoneSchedule,
+  type RewardAgreement,
+} from "@beside/api-client"
 import type { RewardItem } from "@beside/rewards"
 import { useFocusEffect } from "@react-navigation/native"
+import type { KeyboardAwareScrollViewRef } from "react-native-keyboard-controller"
 
 import {
   ActivityWorldHeader,
@@ -11,6 +17,8 @@ import {
   WorldSchedulePanel,
 } from "@/components/ActivityWorld"
 import { PixelArtSprite } from "@/components/BesideMark"
+import { CottageBuildSettings, CottageCountdown } from "@/components/CottageConstruction"
+import { cottageArt, cottageProgressLabel } from "@/components/iso-world/cottageArt"
 import { homeActivities } from "@/components/iso-world/homeWorld"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { buildActivityScene, roofForIndex } from "@/components/iso-world/scene"
@@ -39,6 +47,7 @@ import {
 } from "@/utils/rewardChoice"
 
 type Milestone = ApiState["milestones"][number]
+type MilestoneAnchor = { activityId: string; group: "open" | "upcoming"; y: number }
 
 export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<"ActivityDetail">) {
   const { user } = useAuth()
@@ -53,6 +62,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   const [receivedAt, setReceivedAt] = useState(0)
   const [tick, setTick] = useState(() => performance.now())
   const submittingRef = useRef(false)
+  const scrollViewRef = useRef<KeyboardAwareScrollViewRef>(null)
+  const [milestoneAnchor, setMilestoneAnchor] = useState<MilestoneAnchor>()
   const [agreements, setAgreements] = useState<RewardAgreement[]>([])
   const [placedIds, setPlacedIds] = useState<Set<string>>(new Set())
   const [rewardBusy, setRewardBusy] = useState<string>()
@@ -63,7 +74,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   const [landed, setLanded] = useState<string>()
   // Rewards already earned when we last looked, to celebrate only fresh landings.
   const earnedBefore = useRef<Set<string>>(undefined)
-  const activityId = route.params.activityId
+  const { activityId, section } = route.params
   useFocusEffect(
     useCallback(() => {
       void refresh // Re-fetch on pull-to-refresh and retry.
@@ -294,20 +305,43 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     .map((avatar) => avatar.key)
     .join(",")
   const lit = !!currentOccurrence
+  const { level, building, seconds } = cottageConstruction(activity ?? {}, now)
   const plot = useMemo(
     () =>
       buildActivityScene({
         roof: roofForIndex(roofIndex),
+        level,
+        building: building !== null,
         lit,
         attendees: memberAvatars.filter((avatar) => attendeeKey.split(",").includes(avatar.key)),
       }),
     // memberAvatars is rebuilt every render; the attendee keys capture what is drawn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [roofIndex, lit, attendeeKey, data],
+    [roofIndex, level, building, lit, attendeeKey, data],
   )
   const [plotWidth, setPlotWidth] = useState(0)
   const plotZoom = plotWidth >= plot.frame.width * 3 ? 3 : plotWidth >= plot.frame.width * 2 ? 2 : 1
   const plotHeight = Math.min(plot.frame.height * plotZoom, 240)
+  const milestoneGroup = currentOccurrence ? "open" : "upcoming"
+  useFocusEffect(
+    useCallback(() => {
+      if (
+        section !== "milestones" ||
+        loading ||
+        !plotWidth ||
+        milestoneAnchor?.activityId !== activityId ||
+        milestoneAnchor.group !== milestoneGroup
+      ) {
+        return
+      }
+      const frame = requestAnimationFrame(() => {
+        if (!scrollViewRef.current) return
+        scrollViewRef.current.scrollTo({ y: Math.max(0, milestoneAnchor.y - 12), animated: false })
+        navigation.setParams({ section: undefined })
+      })
+      return () => cancelAnimationFrame(frame)
+    }, [activityId, loading, milestoneAnchor, milestoneGroup, navigation, plotWidth, section]),
+  )
 
   async function logAttendance(milestoneId: string) {
     if (!user || submittingRef.current) return
@@ -395,6 +429,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
         safeAreaEdges={["bottom"]}
         backgroundColor={world.paper}
         contentContainerStyle={activityWorldStyles.content}
+        scrollViewRef={scrollViewRef}
         ScrollViewProps={{
           refreshControl: (
             <RefreshControl
@@ -465,11 +500,47 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 />
               </View>
             </View>
-            {currentOccurrence && renderMilestone(currentOccurrence, true)}
-            {otherOpen.length > 0 && (
-              <View style={$milestoneList}>
-                <Text text="ALSO OPEN" style={worldEyebrow} />
-                {otherOpen.map((milestone) => renderMilestone(milestone, true))}
+            <View style={$cottageProgress}>
+              {building ? (
+                <CottageCountdown level={building} seconds={seconds} />
+              ) : (
+                <Text
+                  testID="activity-cottage-level"
+                  accessibilityLiveRegion="polite"
+                  text={cottageProgressLabel(activity.cottageMilestones)}
+                  style={[activityWorldStyles.body, $cottageProgressText]}
+                />
+              )}
+              {(building || level < 3) && (
+                <View accessible accessibilityLabel="Next cottage level preview">
+                  <PixelArtSprite
+                    art={cottageArt(roofIndex, false, building ?? (level === 1 ? 2 : 3))}
+                    scale={1}
+                  />
+                </View>
+              )}
+            </View>
+            <CottageBuildSettings
+              key={activity.id}
+              activity={activity}
+              onSaved={() => setRefresh((value) => value + 1)}
+            />
+            {currentOccurrence && (
+              <View
+                style={$milestoneList}
+                testID="activity-open-milestones"
+                onLayout={(event) =>
+                  setMilestoneAnchor({ activityId, group: "open", y: event.nativeEvent.layout.y })
+                }
+              >
+                <Text text="OPEN MILESTONES" accessibilityRole="header" style={worldEyebrow} />
+                {renderMilestone(currentOccurrence, true)}
+                {otherOpen.length > 0 && (
+                  <>
+                    <Text text="ALSO OPEN" style={worldEyebrow} />
+                    {otherOpen.map((milestone) => renderMilestone(milestone, true))}
+                  </>
+                )}
               </View>
             )}
             {!!logError && (
@@ -513,8 +584,20 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 ))}
               </View>
             </View>
-            <View style={$milestoneList}>
-              <Text text="UPCOMING MILESTONES" style={worldEyebrow} />
+            <View
+              style={$milestoneList}
+              testID="activity-upcoming-milestones"
+              onLayout={(event) => {
+                if (!currentOccurrence) {
+                  setMilestoneAnchor({
+                    activityId,
+                    group: "upcoming",
+                    y: event.nativeEvent.layout.y,
+                  })
+                }
+              }}
+            >
+              <Text text="UPCOMING MILESTONES" accessibilityRole="header" style={worldEyebrow} />
               {upcoming.map((milestone) => renderMilestone(milestone))}
               {!upcoming.length && (
                 <Text text="No upcoming milestones." style={activityWorldStyles.muted} />
@@ -568,6 +651,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   )
 }
 
+const $cottageProgress: ViewStyle = { flexDirection: "row", alignItems: "center", gap: 8 }
+const $cottageProgressText = { flex: 1 }
 const $milestoneList: ViewStyle = { gap: 12 }
 const $addReward: ViewStyle = {
   minHeight: 44,

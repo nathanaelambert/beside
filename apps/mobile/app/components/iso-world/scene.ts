@@ -1,7 +1,9 @@
+import { cottageLevel, type cottageConstruction, type CottageSpriteLevel } from "@beside/api-client"
 import type { PixelArt } from "@beside/rewards"
 import { rewardItems } from "@beside/rewards"
 
 import { hash, type Bitmap } from "./bitmap"
+import { pocketWatchArt } from "./cottageClockArt"
 import { isRaised, paintBlock } from "./paint"
 import {
   depthOf,
@@ -75,8 +77,8 @@ function cachedSprite(key: string, make: () => Sprite) {
   if (!sprite) spriteCache.set(key, (sprite = make()))
   return sprite
 }
-export const houseSprite = (roof: RoofColor, lit: boolean) =>
-  cachedSprite(`house-${roof}-${lit}`, () => house(roof, lit))
+export const houseSprite = (roof: RoofColor, lit: boolean, level: CottageSpriteLevel = 1) =>
+  cachedSprite(`house-${roof}-${lit}-${level}`, () => house(roof, lit, level))
 
 // --- Building blocks -------------------------------------------------------------------------
 
@@ -191,12 +193,13 @@ export function houseDrawable(
   row: number,
   roof: RoofColor,
   lit: boolean,
+  level: CottageSpriteLevel = 1,
 ) {
   const tile = tileAt(map, col, row)
   return spriteDrawable(
     frame,
     `house-${key}`,
-    houseSprite(roof, lit),
+    houseSprite(roof, lit, level),
     { u: col + 0.5, v: row + 0.5, lift: Math.max(0, tile?.lift ?? 0) },
     { hit: { type: "house", id: key } },
   )
@@ -317,6 +320,8 @@ export interface HomeActivity {
   name: string
   /** A milestone window is open right now. */
   open?: boolean
+  cottageMilestones?: number
+  construction?: ReturnType<typeof cottageConstruction>
 }
 
 export interface HomeSceneInput {
@@ -347,6 +352,22 @@ export function houseLots(activities: HomeActivity[]) {
  */
 export const homeAvatarY = (y: number) => 135 + (y - 147) / 2
 
+function constructionWatch(cottage: Drawable, level: CottageSpriteLevel): Drawable {
+  const y = level === 0 ? cottage.baseY - 26 : cottage.top - 1
+  return {
+    key: `${cottage.key}-clock`,
+    source: { type: "art", art: pocketWatchArt },
+    depth: cottage.depth + 0.01,
+    x: cottage.baseX + 11,
+    y,
+    width: pocketWatchArt.pixels[0].length,
+    height: pocketWatchArt.pixels.length,
+    baseX: cottage.baseX,
+    baseY: cottage.baseY,
+    top: y,
+  }
+}
+
 export function buildHomeScene({
   avatars,
   items,
@@ -367,9 +388,13 @@ export function buildHomeScene({
       const { u, v } = meadowToIso(avatar.x, homeAvatarY(avatar.y))
       return avatarDrawable(frame, map, avatar, u, v)
     }),
-    ...houses.map(({ activity, col, row, roof }) =>
-      houseDrawable(frame, map, activity.id, col, row, roof, !!activity.open),
-    ),
+    ...houses.flatMap(({ activity, col, row, roof }) => {
+      const level = activity.construction?.level ?? cottageLevel(activity.cottageMilestones)
+      const cottage = houseDrawable(frame, map, activity.id, col, row, roof, !!activity.open, level)
+      return activity.construction?.building
+        ? [cottage, constructionWatch(cottage, level)]
+        : [cottage]
+    }),
   ]
   return { map, frame, drawables: sortDrawables(drawables), houses }
 }
@@ -399,15 +424,21 @@ const PLOT_SPOTS: [number, number][] = [
 export function buildActivityScene({
   roof,
   lit,
+  level = 1,
+  building = false,
   attendees,
 }: {
   roof: RoofColor
   lit: boolean
+  level?: CottageSpriteLevel
+  building?: boolean
   attendees: Avatar[]
 }) {
+  const cottage = houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit, level)
   const drawables: Drawable[] = [
     ...terrainDrawables(plotMap, plotFrame, new Set(["1,1"])),
-    houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit),
+    cottage,
+    ...(building ? [constructionWatch(cottage, level)] : []),
     ...attendees.slice(0, PLOT_SPOTS.length).map((avatar, index) => {
       const [u, v] = PLOT_SPOTS[index]!
       return avatarDrawable(plotFrame, plotMap, avatar, u, v)

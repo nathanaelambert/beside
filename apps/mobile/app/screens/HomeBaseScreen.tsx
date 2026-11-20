@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, PixelRatio, Pressable, StatusBar, StyleSheet, View } from "react-native"
-import { ApiError, type ApiState, type HomebaseGarden } from "@beside/api-client"
+import { ApiError, cottageLevel, type ApiState, type HomebaseGarden } from "@beside/api-client"
 import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { PixelArtSprite } from "@/components/BesideMark"
-import { cottageArt } from "@/components/iso-world/cottageArt"
+import { CottageCountdown } from "@/components/CottageConstruction"
+import {
+  focusedIslandLayers,
+  snapZoom,
+  stepZoom,
+  zoomStops,
+} from "@/components/iso-world/archipelago"
+import { cottageArt, cottageProgressLabel } from "@/components/iso-world/cottageArt"
 import {
   homeFocus,
   nextSuggestion,
@@ -14,9 +21,12 @@ import {
   plantableTiles,
   plantingTap,
 } from "@/components/iso-world/homeWorld"
+import { IslandSwitcher } from "@/components/iso-world/IslandSwitcher"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { meadowToIso } from "@/components/iso-world/projection"
 import { catalogue, itemDrawable, type HitTarget } from "@/components/iso-world/scene"
+import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
+import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
 import { firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlaceRewardPanel } from "@/components/pixel-world/PlaceRewardPanel"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
@@ -28,16 +38,6 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { besideApi } from "@/services/api/beside"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { firstName, namesLabel, rewardMemory, rewardsToPlace } from "@/utils/rewardChoice"
-
-import {
-  focusedIslandLayers,
-  snapZoom,
-  stepZoom,
-  zoomStops,
-} from "@/components/iso-world/archipelago"
-import { IslandSwitcher } from "@/components/iso-world/IslandSwitcher"
-import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
-import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
 
 type PlacementTarget = { kind: "oak" } | { kind: "reward"; rewardId: string; itemId: string }
 const friends = { x: homeFocus.u * 16, y: homeFocus.v * 16 }
@@ -210,7 +210,12 @@ function HomeIslandScreen({
   const scene = focused?.scene
   const selectedHouse = scene?.houses.find((h) => `house-${h.activity.id}` === selectedKey)
   const houseArt = selectedHouse
-    ? cottageArt(scene!.houses.indexOf(selectedHouse), !!selectedHouse.activity.open)
+    ? cottageArt(
+        scene!.houses.indexOf(selectedHouse),
+        !!selectedHouse.activity.open,
+        selectedHouse.activity.construction?.level ??
+          cottageLevel(selectedHouse.activity.cottageMilestones),
+      )
     : undefined
 
   function openActivity(activityId: string) {
@@ -707,24 +712,46 @@ function HomeIslandScreen({
                 weight="semiBold"
                 style={styles.sectionTitle}
               />
-              <Text
-                text={
-                  selectedHouse.activity.open
-                    ? "Lights are on: a session is open now."
-                    : "An activity cottage. Open it to plan or check in."
-                }
-                style={styles.description}
-              />
+              {selectedHouse.activity.construction?.building ? (
+                <CottageCountdown
+                  level={selectedHouse.activity.construction.building}
+                  seconds={selectedHouse.activity.construction.seconds}
+                />
+              ) : (
+                <Text
+                  text={cottageProgressLabel(selectedHouse.activity.cottageMilestones)}
+                  style={styles.description}
+                />
+              )}
+              {selectedHouse.activity.open && (
+                <Text text="Lights on: a session is open." style={styles.description} />
+              )}
             </View>
-            <Pressable
-              testID="homebase-open-activity"
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${selectedHouse.activity.name}`}
-              style={styles.placeButton}
-              onPress={() => openActivity(selectedHouse.activity.id)}
-            >
-              <Text text="Open" weight="medium" style={styles.primaryText} />
-            </Pressable>
+            <View style={styles.houseActions}>
+              <Pressable
+                testID="homebase-open-activity"
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${selectedHouse.activity.name}`}
+                style={styles.placeButton}
+                onPress={() => openActivity(selectedHouse.activity.id)}
+              >
+                <Text text="Open" weight="medium" style={styles.primaryText} />
+              </Pressable>
+              <Pressable
+                testID="homebase-open-milestones"
+                accessibilityRole="button"
+                accessibilityLabel={`View milestones for ${selectedHouse.activity.name}`}
+                style={styles.chip}
+                onPress={() =>
+                  navigation.navigate("ActivityDetail", {
+                    activityId: selectedHouse.activity.id,
+                    section: "milestones",
+                  })
+                }
+              >
+                <Text text="Milestones" weight="medium" style={styles.smallText} />
+              </Pressable>
+            </View>
           </View>
         ) : selectedItem && selectedArt ? (
           <View style={styles.detail}>
@@ -918,6 +945,7 @@ const styles = StyleSheet.create({
   },
   header: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 8 },
   headingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  houseActions: { gap: 4 },
   labelText: { color: world.text, fontSize: 11, lineHeight: 16 },
   loading: {
     alignItems: "center",

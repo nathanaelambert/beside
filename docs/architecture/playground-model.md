@@ -46,6 +46,27 @@ Database payloads now use version 3. Storage remains under `beside.playground.v1
 
 Import validation checks foreign keys, home-base membership, same-activity ancestry and cycles, one root per activity, unique successful user/milestone pairs, reward scope and completion, contribution attribution, schedule windows, and root/participation consistency. The browser remains a local sandbox with simulated identities and last-writer-wins storage; the SQL is a reference shape, not a deployed migration.
 
+## Activity cottage prototype
+
+Each activity owns one cottage in the mobile map. One and three distinct
+successful achievement milestones unlock its next stages automatically.
+The first valid success per achievement credits the shared cottage, once, even
+if more participants check in. No currency is awarded or spent, and the
+existing cooperative reward rule is unchanged. The construction count is
+stored separately from deletable logs, so missed sessions and milestone
+deletion never take away construction credit. Deleting the activity still
+removes its cottage. The map, activity list, and detail use the same level.
+On the map, selecting a cottage offers a **Milestones** shortcut that opens
+its activity at the open milestones, or at the upcoming list if none are open.
+
+A pocket watch marks a build in progress. The base starts at activity creation
+(5 seconds), the entrance starts at the first credited milestone (10 seconds),
+and the final stage at the third (15 seconds). If an earlier build is still
+running, the next waits for it. The activity's construction settings can change
+future durations (1–3600 whole seconds) without changing saved deadlines or
+already built stages. Clients render countdowns against the server snapshot;
+opening the app later never resets construction.
+
 ## Editing and deletion
 
 All home-base members can manage its records. Home bases can be renamed; activities can change name and description, with personal targets applying only to the editor. Both the API workspace and the local experiment expose edit/delete controls.

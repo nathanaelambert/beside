@@ -26,6 +26,17 @@ import type {
 } from "@beside/domain/api";
 import type { User } from "@beside/domain/types";
 export type * from "@beside/domain/api";
+export {
+  COTTAGE_MILESTONE_CAP,
+  COTTAGE_BUILD_STAGES,
+  DEFAULT_COTTAGE_BUILD_SECONDS,
+  MAX_COTTAGE_BUILD_SECONDS,
+  cottageConstruction,
+  cottageLevel,
+  type CottageBuildSeconds,
+  type CottageSpriteLevel,
+  type CottageLevel,
+} from "@beside/domain/cottage";
 
 export class ApiError extends Error {
   readonly status: number;

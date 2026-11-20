@@ -23,7 +23,7 @@ export function AuthLayout({ title, description, children }: AuthLayoutProps) {
   const { themed } = useAppTheme()
   const [heroWidth, setHeroWidth] = useState(0)
   const island = useMemo(
-    () => buildActivityScene({ roof: "clay", lit: true, attendees: memberAvatarStyles }),
+    () => buildActivityScene({ roof: "clay", lit: true, level: 3, attendees: memberAvatarStyles }),
     [],
   )
   return (

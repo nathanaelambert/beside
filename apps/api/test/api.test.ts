@@ -1096,6 +1096,91 @@ describe(
         (error: unknown) => (error as { code: string }).code === "23505",
       );
     });
+    it("unlocks cottage levels once per achievement and never regresses on milestone deletion", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", {
+        name: "Cottage workshop",
+      });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const { entityId: activityId } = await create(alice, "activities", {
+        connectionId: base.id,
+        templateId: "read-book",
+        name: "Build a cottage",
+        description: "",
+        subjectIds: [],
+        target: 10,
+      });
+      const progress = async (session = alice) =>
+        (await state(session)).activities.find((row) => row.id === activityId)!
+          .cottageMilestones;
+      const remove = async (milestoneId: string) =>
+        request(server)
+          .delete(`/api/v1/milestones/${milestoneId}`)
+          .set(auth(alice))
+          .expect(200);
+      assert.equal(await progress(), 0); // Automatic join logs did not count.
+      const build = async () =>
+        (await state(alice)).activities.find((row) => row.id === activityId)!
+          .cottageBuild!;
+      assert.deepEqual((await build()).seconds, {
+        base: 5,
+        entrance: 10,
+        finished: 15,
+      });
+      const patchTimes = (session: Session, entrance: number, status: number) =>
+        request(server)
+          .patch(`/api/v1/activities/${activityId}`)
+          .set(auth(session))
+          .send({ cottageBuildSeconds: { base: 2, entrance, finished: 3 } })
+          .expect(status);
+      await patchTimes(stranger, 7, 400);
+      await patchTimes(bob, 0, 400);
+      await patchTimes(bob, 7, 200);
+      assert.equal((await build()).seconds.entrance, 7);
+      const milestones = [];
+      for (let i = 0; i < 4; i++)
+        milestones.push(
+          (await create(alice, "milestones", milestoneBody(activityId)))
+            .entityId as string,
+        );
+      const [first, second, third, extra] = milestones as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      await create(
+        alice,
+        "logs",
+        { ...logBody(first, "cottage-failure"), isSuccess: false },
+        200,
+      );
+      assert.equal(await progress(), 0);
+      const log = logBody(first, "cottage-first");
+      await create(alice, "logs", log, 200);
+      assert.equal((await create(alice, "logs", log, 200)).duplicate, true);
+      await create(bob, "logs", logBody(first, "cottage-first-bob"), 200);
+      assert.equal(await progress(bob), 1);
+      const queuedEntrance = (await build()).readyAt.entrance;
+      assert.ok(queuedEntrance);
+      await patchTimes(bob, 8, 200);
+      await remove(first);
+      assert.equal(await progress(), 1);
+      assert.equal((await build()).readyAt.entrance, queuedEntrance);
+      await create(alice, "logs", logBody(second, "cottage-second"), 200);
+      assert.equal(await progress(), 2);
+      await create(alice, "logs", logBody(third, "cottage-third"), 200);
+      assert.equal(await progress(bob), 3);
+      await remove(third);
+      assert.equal(await progress(bob), 3);
+      await create(alice, "logs", logBody(extra, "cottage-extra"), 200);
+      assert.equal(await progress(), 3);
+      assert.ok(
+        !(await state(alice)).milestones.some(
+          (row) => row.id === first || row.id === third,
+        ),
+      );
+    });
     it("revokes a bearer session on logout", async () => {
       await request(app.getHttpServer())
         .get("/api/v1/auth/me")

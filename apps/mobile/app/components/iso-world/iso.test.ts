@@ -1,4 +1,4 @@
-import type { ApiState } from "@beside/api-client"
+import { cottageLevel, type ApiState } from "@beside/api-client"
 import {
   checkMeadowPlacement,
   checkStarterOakPlacement,
@@ -6,11 +6,19 @@ import {
 } from "@beside/api-client/garden"
 
 import { bitmapToPixelArt } from "./bitmap"
+import { cottageArt } from "./cottageArt"
 import { homeActivities, plantableTiles, plantingTap, tileCentre } from "./homeWorld"
 import { paintGround } from "./paint"
 import { isoToScreen, mapFrame, screenToIso } from "./projection"
-import { house } from "./props"
-import { buildActivityScene, buildHomeScene, hitTest, homeFrame, HOUSE_LOTS } from "./scene"
+import { house, roofColorOrder, type RoofColor } from "./props"
+import {
+  buildActivityScene,
+  buildHomeScene,
+  hitTest,
+  homeFrame,
+  HOUSE_LOTS,
+  opaqueAt,
+} from "./scene"
 import { meadowTileMap, tileAt } from "./tilemap"
 import { avatarsForMembers } from "../pixel-world/avatars"
 
@@ -92,6 +100,74 @@ describe("painting", () => {
     }
   })
 
+  it.each(roofColorOrder)(
+    "keeps the %s cottage wide and anchored with either window state",
+    (roof) => {
+      const unlit = house(roof, false, 3)
+      const lit = house(roof, true, 3)
+      const pixels = Array.from(unlit.bitmap.rgba).filter((_, i) => i % 4 === 3)
+      const litPixels = Array.from(lit.bitmap.rgba).filter((_, i) => i % 4 === 3)
+      const points = pixels.flatMap((alpha, i) => (alpha ? [i % unlit.bitmap.width] : []))
+
+      expect([unlit.anchorX, unlit.anchorY]).toEqual([32, 60])
+      expect([lit.anchorX, lit.anchorY]).toEqual([unlit.anchorX, unlit.anchorY])
+      expect(litPixels).toEqual(pixels)
+      expect(lit.bitmap.rgba).not.toEqual(unlit.bitmap.rgba)
+      expect(Math.max(...points) - Math.min(...points) + 1).toBeGreaterThan(30)
+    },
+  )
+
+  it("distinguishes the clubhouse pennant and the timber lodge from the porch design", () => {
+    const hasColor = (roof: RoofColor, color: string) =>
+      Object.values(bitmapToPixelArt(house(roof, false, 3).bitmap).palette).includes(color)
+
+    expect(hasColor("slate", "#f1bc53")).toBe(true)
+    expect(hasColor("clay", "#f1bc53")).toBe(false)
+    expect(hasColor("teal", "#ce9156")).toBe(true)
+    expect(hasColor("clay", "#ce9156")).toBe(false)
+  })
+
+  it("uses the same unlock thresholds and distinct art in the map and thumbnails", () => {
+    expect([0, 1, 2, 3].map(cottageLevel)).toEqual([1, 2, 2, 3])
+    for (const index of [0, 1, 4]) {
+      const arts = ([1, 2, 3] as const).map((level) => cottageArt(index, false, level))
+      expect(new Set(arts.map((art) => JSON.stringify(art))).size).toBe(3)
+    }
+    const art = (cottageMilestones: number) =>
+      buildHomeScene({
+        avatars: [],
+        items: [],
+        activities: [{ id: "a", name: "Build", cottageMilestones }],
+      }).drawables.find((drawable) => drawable.key === "house-a")!
+    expect(art(0).source).not.toEqual(art(1).source)
+    expect(art(2).source).toEqual(art(1).source)
+    expect(art(3).source).not.toEqual(art(1).source)
+    expect([art(0).baseX, art(0).baseY]).toEqual([art(3).baseX, art(3).baseY])
+  })
+
+  it("shows the construction watch without changing the cottage hit target", () => {
+    const plot = buildActivityScene({
+      roof: "clay",
+      lit: false,
+      level: 0,
+      building: true,
+      attendees: [],
+    })
+    const cottage = plot.drawables.find((drawable) => drawable.key === "house-plot")!
+    const clock = plot.drawables.find((drawable) => drawable.key === "house-plot-clock")
+    expect(clock?.source.type).toBe("art")
+    expect(clock?.hit).toBeUndefined()
+    expect(hitTest(plot.drawables, cottage.baseX, cottage.baseY - 3, 16)).toEqual({
+      type: "house",
+      id: "plot",
+    })
+    expect(
+      buildActivityScene({ roof: "clay", lit: false, level: 1, attendees: [] }).drawables.some(
+        (drawable) => drawable.key === "house-plot-clock",
+      ),
+    ).toBe(false)
+  })
+
   it("converts generated sprites to shared pixel art", () => {
     const sprite = house("teal", true)
     const art = bitmapToPixelArt(sprite.bitmap)
@@ -143,6 +219,31 @@ describe("home scene", () => {
         const overlapY = f.y < c.baseY && f.baseY > c.top
         expect(overlapX && overlapY && c.depth > f.depth).toBe(false)
       }
+  })
+
+  it("keeps cottages and friends selectable with all five roof colors in the picnic area", () => {
+    const busy = buildHomeScene({
+      avatars,
+      items: [],
+      activities: roofColorOrder.map((roof) => ({ id: roof, name: roof, cottageMilestones: 3 })),
+    })
+    for (const drawable of busy.drawables.filter((d) => d.hit?.type === "house")) {
+      const visible = [-9, -4, 0, 4, 9].some((dx) =>
+        [14, 20, 26, 32, 38].some((dy) => {
+          const x = drawable.baseX + dx
+          const y = drawable.baseY - dy
+          return opaqueAt(drawable, x, y) && hitTest(busy.drawables, x, y, 0) === drawable.hit
+        }),
+      )
+      expect(visible).toBe(true)
+    }
+    for (const avatar of avatars) {
+      const friend = busy.drawables.find((d) => d.key === `avatar-${avatar.key}`)!
+      expect(hitTest(busy.drawables, friend.baseX, friend.baseY - 8, 22)).toEqual({
+        type: "avatar",
+        id: avatar.key,
+      })
+    }
   })
 
   it("maps a planting tap to the centre of the tapped tile", () => {
