@@ -84,7 +84,7 @@ export function CottageCountdown({ level, seconds }: { level: CottageLevel; seco
       accessible
       accessibilityLabel={`Building level ${level}. ${seconds} seconds remaining.`}
     >
-      <PixelArtSprite art={pocketWatchArt} scale={1} />
+      <PixelArtSprite art={pocketWatchArt(seconds)} scale={1} />
       <Text
         text={`Building level ${level} · ${cottageTime(seconds)}`}
         style={activityWorldStyles.muted}

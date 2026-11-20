@@ -59,7 +59,8 @@ removes its cottage. The map, activity list, and detail use the same level.
 On the map, selecting a cottage offers a **Milestones** shortcut that opens
 its activity at the open milestones, or at the upcoming list if none are open.
 
-A pocket watch marks a build in progress. The base starts at activity creation
+A pocket watch marks a build in progress, with its hand advancing one pixel-art
+step per countdown second. The base starts at activity creation
 (5 seconds), the entrance starts at the first credited milestone (10 seconds),
 and the final stage at the third (15 seconds). If an earlier build is still
 running, the next waits for it. The activity's construction settings can change

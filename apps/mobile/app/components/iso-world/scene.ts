@@ -352,16 +352,21 @@ export function houseLots(activities: HomeActivity[]) {
  */
 export const homeAvatarY = (y: number) => 135 + (y - 147) / 2
 
-function constructionWatch(cottage: Drawable, level: CottageSpriteLevel): Drawable {
+function constructionWatch(
+  cottage: Drawable,
+  level: CottageSpriteLevel,
+  seconds: number,
+): Drawable {
+  const art = pocketWatchArt(seconds)
   const y = level === 0 ? cottage.baseY - 26 : cottage.top - 1
   return {
     key: `${cottage.key}-clock`,
-    source: { type: "art", art: pocketWatchArt },
+    source: { type: "art", art },
     depth: cottage.depth + 0.01,
     x: cottage.baseX + 11,
     y,
-    width: pocketWatchArt.pixels[0].length,
-    height: pocketWatchArt.pixels.length,
+    width: art.pixels[0].length,
+    height: art.pixels.length,
     baseX: cottage.baseX,
     baseY: cottage.baseY,
     top: y,
@@ -392,7 +397,7 @@ export function buildHomeScene({
       const level = activity.construction?.level ?? cottageLevel(activity.cottageMilestones)
       const cottage = houseDrawable(frame, map, activity.id, col, row, roof, !!activity.open, level)
       return activity.construction?.building
-        ? [cottage, constructionWatch(cottage, level)]
+        ? [cottage, constructionWatch(cottage, level, activity.construction.seconds)]
         : [cottage]
     }),
   ]
@@ -425,20 +430,20 @@ export function buildActivityScene({
   roof,
   lit,
   level = 1,
-  building = false,
+  constructionSeconds = 0,
   attendees,
 }: {
   roof: RoofColor
   lit: boolean
   level?: CottageSpriteLevel
-  building?: boolean
+  constructionSeconds?: number
   attendees: Avatar[]
 }) {
   const cottage = houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit, level)
   const drawables: Drawable[] = [
     ...terrainDrawables(plotMap, plotFrame, new Set(["1,1"])),
     cottage,
-    ...(building ? [constructionWatch(cottage, level)] : []),
+    ...(constructionSeconds > 0 ? [constructionWatch(cottage, level, constructionSeconds)] : []),
     ...attendees.slice(0, PLOT_SPOTS.length).map((avatar, index) => {
       const [u, v] = PLOT_SPOTS[index]!
       return avatarDrawable(plotFrame, plotMap, avatar, u, v)

@@ -312,13 +312,13 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       buildActivityScene({
         roof: roofForIndex(roofIndex),
         level,
-        building: building !== null,
+        constructionSeconds: seconds,
         lit,
         attendees: memberAvatars.filter((avatar) => attendeeKey.split(",").includes(avatar.key)),
       }),
     // memberAvatars is rebuilt every render; the attendee keys capture what is drawn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [roofIndex, level, building, lit, attendeeKey, data],
+    [roofIndex, level, seconds, lit, attendeeKey, data],
   )
   const [plotWidth, setPlotWidth] = useState(0)
   const plotZoom = plotWidth >= plot.frame.width * 3 ? 3 : plotWidth >= plot.frame.width * 2 ? 2 : 1

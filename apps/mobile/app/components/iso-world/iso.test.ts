@@ -7,6 +7,7 @@ import {
 
 import { bitmapToPixelArt } from "./bitmap"
 import { cottageArt } from "./cottageArt"
+import { pocketWatchArt } from "./cottageClockArt"
 import { homeActivities, plantableTiles, plantingTap, tileCentre } from "./homeWorld"
 import { paintGround } from "./paint"
 import { isoToScreen, mapFrame, screenToIso } from "./projection"
@@ -145,17 +146,45 @@ describe("painting", () => {
     expect([art(0).baseX, art(0).baseY]).toEqual([art(3).baseX, art(3).baseY])
   })
 
-  it("shows the construction watch without changing the cottage hit target", () => {
-    const plot = buildActivityScene({
-      roof: "clay",
-      lit: false,
-      level: 0,
-      building: true,
-      attendees: [],
-    })
+  it("advances the watch clockwise once per countdown second with a fixed footprint", () => {
+    const frames = Array.from({ length: 8 }, (_, index) => pocketWatchArt(8 - index))
+    const tips = [
+      [6, 4],
+      [8, 5],
+      [9, 7],
+      [8, 9],
+      [6, 10],
+      [4, 9],
+      [3, 7],
+      [4, 5],
+    ]
+    for (const [index, frame] of frames.entries()) {
+      const [x, y] = tips[index]!
+      expect(frame.pixels[y]?.[x]).toBe("h")
+      expect(frame.pixels.map((row) => row.replaceAll("h", "f"))).toEqual(
+        frames[0]?.pixels.map((row) => row.replaceAll("h", "f")),
+      )
+    }
+    expect(new Set(frames).size).toBe(8)
+    expect(pocketWatchArt(9)).toBe(pocketWatchArt(1))
+  })
+
+  it("animates the construction watch without changing its position or the cottage hit target", () => {
+    const scene = (constructionSeconds: number) =>
+      buildActivityScene({ roof: "clay", lit: false, level: 0, constructionSeconds, attendees: [] })
+    const plot = scene(5)
     const cottage = plot.drawables.find((drawable) => drawable.key === "house-plot")!
     const clock = plot.drawables.find((drawable) => drawable.key === "house-plot-clock")
-    expect(clock?.source.type).toBe("art")
+    const nextClock = scene(4).drawables.find((drawable) => drawable.key === "house-plot-clock")
+    expect(clock?.source).toEqual({ type: "art", art: pocketWatchArt(5) })
+    expect(nextClock).toEqual({ ...clock, source: { type: "art", art: pocketWatchArt(4) } })
+    const homeClock = buildHomeScene({
+      avatars: [],
+      items: [],
+      activities: [{ id: "a", name: "Build", construction: { level: 0, building: 1, seconds: 4 } }],
+    }).drawables.find((drawable) => drawable.key === "house-a-clock")
+    expect(homeClock?.source).toBeDefined()
+    expect(homeClock?.source).toEqual(nextClock?.source)
     expect(clock?.hit).toBeUndefined()
     expect(hitTest(plot.drawables, cottage.baseX, cottage.baseY - 3, 16)).toEqual({
       type: "house",
