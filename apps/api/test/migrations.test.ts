@@ -108,7 +108,10 @@ it(
       );
       const seed = createSeed();
       for (const [key, table, currentColumns] of tables) {
-        const columns: string[] = [...currentColumns];
+        const columns: string[] = currentColumns.filter(
+          (column) =>
+            column !== "cottageMilestones" && column !== "cottageBuild",
+        );
         if (key === "connections" || key === "activities")
           columns.push("personalOwnerId");
         for (const row of seed[key]) {
@@ -155,7 +158,29 @@ it(
           "utf8",
         ),
       );
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/009_activity_cottage_milestones.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/010_activity_cottage_clock.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
       const upgraded = parseDatabase(await loadDatabase(client));
+      assert.ok(
+        upgraded.activities.every((activity) => activity.cottageBuild === null),
+      );
+      for (const activity of seed.activities) activity.cottageBuild = null;
       for (const key of Object.keys(seed) as (keyof typeof seed)[]) {
         if (key !== "logShares")
           assert.deepEqual(upgraded[key], seed[key], `Preserve ${key}`);

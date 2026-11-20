@@ -1,8 +1,8 @@
 import type { EffectCallback } from "react"
-import { useReducedMotion } from "react-native-reanimated"
 import { ApiError, type ApiHomebase, type ApiState } from "@beside/api-client"
 import { checkMeadowPlacement } from "@beside/api-client/garden"
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native"
+import { useReducedMotion } from "react-native-reanimated"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 
 import { plantableTiles, tileCentre } from "@/components/iso-world/homeWorld"
@@ -383,6 +383,11 @@ it("follows the activity landing link into island placement and opens a cottage"
   act(() => canvasProps().onTap!({ x: 0, y: 0, hit: { type: "house", id: "read" } }))
   fireEvent.press(screen.getByTestId("homebase-open-activity"))
   expect(screen.navigation.navigate).toHaveBeenCalledWith("ActivityDetail", { activityId: "read" })
+  fireEvent.press(screen.getByRole("button", { name: "View milestones for Book club" }))
+  expect(screen.navigation.navigate).toHaveBeenLastCalledWith("ActivityDetail", {
+    activityId: "read",
+    section: "milestones",
+  })
 })
 
 it("refreshes shared occupancy after a placement race without closing the reward editor", async () => {

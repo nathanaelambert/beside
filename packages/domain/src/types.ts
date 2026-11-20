@@ -1,4 +1,5 @@
 import type { RewardItem } from "@beside/rewards";
+import type { CottageBuild } from "./cottage.ts";
 export type { PixelArt, RewardItem } from "@beside/rewards";
 
 export type Category =
@@ -85,6 +86,9 @@ export interface Activity {
   progressMode: ProgressMode;
   unit: string;
   createdAt: string;
+  /** Permanent count of unlocked cottage milestones, capped at the final level. */
+  cottageMilestones?: number;
+  cottageBuild?: CottageBuild | null;
 }
 export interface ActivitySubject {
   id: string;

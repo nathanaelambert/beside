@@ -1,4 +1,4 @@
-import type { ApiState } from "@beside/api-client"
+import { cottageConstruction, type ApiState } from "@beside/api-client"
 import { checkMeadowPlacement, meadowPlacements, type MeadowPoint } from "@beside/api-client/garden"
 
 import { attendanceMilestones } from "@/services/api/attendance"
@@ -16,6 +16,8 @@ export function homeActivities(state: ApiState, homebaseId: string, now: number)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
     .map((activity) => ({
       id: activity.id,
+      cottageMilestones: activity.cottageMilestones,
+      construction: activity.cottageBuild ? cottageConstruction(activity, now) : undefined,
       name: activity.name,
       open: attendanceMilestones(state.milestones, activity.id, now).open.length > 0,
     }))

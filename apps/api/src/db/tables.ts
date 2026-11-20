@@ -35,6 +35,8 @@ export const tables = [
       "progressMode",
       "unit",
       "createdAt",
+      "cottageMilestones",
+      "cottageBuild",
     ],
   ],
   ["activitySubjects", "activity_subject", ["id", "activityId", "subjectId"]],

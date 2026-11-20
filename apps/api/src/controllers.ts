@@ -117,6 +117,16 @@ export class DomainController {
   state(@Req() request: AuthenticatedRequest) {
     return this.domain.state(request.actor.id);
   }
+  @Get("cottage-build-settings")
+  @ApiOkResponse({ schema: ref("CottageBuildSettings") })
+  @ApiOperation({
+    summary: "Read the system-wide cottage construction durations (seconds)",
+    description:
+      "Read-only. The backend applies these durations when it schedules a new stage. Already scheduled deadlines do not change.",
+  })
+  cottageBuildSettings() {
+    return this.domain.cottageBuildDurations;
+  }
   @Get("homebases")
   @ApiOkResponse({ schema: list("Homebase") })
   homebases(@Req() request: AuthenticatedRequest) {

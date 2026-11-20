@@ -13,6 +13,10 @@ import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { AuthGuard, AuthService } from "./auth.ts";
 import {
+  COTTAGE_BUILD_DURATIONS,
+  readCottageBuildDurations,
+} from "./cottage-build.config.ts";
+import {
   AuthController,
   DomainController,
   HealthController,
@@ -86,6 +90,7 @@ class ApiExceptionFilter implements ExceptionFilter {
     SwaggerAssetsController,
   ],
   providers: [
+    { provide: COTTAGE_BUILD_DURATIONS, useFactory: readCottageBuildDurations },
     DatabaseService,
     DomainService,
     GardenService,

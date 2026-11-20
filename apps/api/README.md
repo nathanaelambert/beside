@@ -161,6 +161,36 @@ deleted; the account can create or join another.
 `GET /state` is an audience-filtered projection rather than an import/export
 format. User profiles omit email, and deliveries are limited to the recipient.
 A shared log can refer to a milestone outside the viewer's visible activities.
+Each activity includes `cottageMilestones` (0–3), a permanent, shared construction
+count. The first successful check-in on a distinct achievement adds one;
+join logs, failed logs, and further check-ins on that achievement add nothing.
+The cottage upgrades at 1 and 3 without spending anything. Removing a milestone
+does not remove construction credit. Migration 009 backfills the count from
+existing successful achievements. Migration 010 adds cottage deadlines; apply
+both before running the updated API. Stage deadlines in `cottageBuild.readyAt`
+use server time and queue behind earlier stages. Old cottages keep their built
+levels.
+
+#### System-wide cottage timing
+
+`GET /api/v1/cottage-build-settings` is a read-only, bearer-authenticated
+endpoint documented in the [OpenAPI explorer](http://localhost:3001/docs).
+The default response is:
+
+```json
+{ "base": 10, "entrance": 15, "finished": 20 }
+```
+
+The backend operator can set `COTTAGE_BUILD_BASE_SECONDS`,
+`COTTAGE_BUILD_ENTRANCE_SECONDS`, and `COTTAGE_BUILD_FINISHED_SECONDS` in the
+API environment. Use whole seconds from 1 to 3600; invalid values fail API
+startup. Restart or deploy the API after changing them. The new durations apply
+when a stage is first scheduled, including stages on existing activities.
+They never rewrite a stored deadline, even if that stage is queued to start
+later. Per-activity `cottageBuildSeconds` is not accepted by activity creation
+or updates (HTTP 400); there is no write endpoint for these settings.
+`cottageBuild.seconds` in state retains the captured duration of already
+scheduled stages. Read the settings endpoint for current system values.
 
 `packages/domain` is the source of truth for types, validators, templates, and
 the command engine. Its build bundles JavaScript for Node/Vercel while browser

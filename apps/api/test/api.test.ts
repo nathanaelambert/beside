@@ -84,10 +84,25 @@ describe("public API contract without a database", () => {
       assert.ok(body.components.schemas[schema]);
     }
     assert.ok(body.paths["/api/v1/state"].get.security);
+    const settings = body.paths["/api/v1/cottage-build-settings"];
+    assert.ok(settings.get.security);
+    assert.equal(
+      settings.get.responses[200].content["application/json"].schema.$ref,
+      "#/components/schemas/CottageBuildSettings",
+    );
+    assert.equal(settings.patch, undefined);
+    for (const schema of ["CreateActivity", "UpdateActivity"])
+      assert.equal(
+        body.components.schemas[schema].properties.cottageBuildSeconds,
+        undefined,
+      );
     await request(server).get("/openapi.yaml").expect(200);
   });
   it("requires a session and validates credentials before touching the database", async () => {
     await request(app.getHttpServer()).get("/api/v1/state").expect(401);
+    await request(app.getHttpServer())
+      .get("/api/v1/cottage-build-settings")
+      .expect(401);
     const { body } = await request(app.getHttpServer())
       .post("/api/v1/auth/register")
       .send({ name: "Test", email: "invalid", password: "short" })
@@ -1094,6 +1109,113 @@ describe(
           );
         }),
         (error: unknown) => (error as { code: string }).code === "23505",
+      );
+    });
+    it("unlocks cottage levels once per achievement and never regresses on milestone deletion", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", {
+        name: "Cottage workshop",
+      });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const { entityId: activityId } = await create(alice, "activities", {
+        connectionId: base.id,
+        templateId: "read-book",
+        name: "Build a cottage",
+        description: "",
+        subjectIds: [],
+        target: 10,
+      });
+      const progress = async (session = alice) =>
+        (await state(session)).activities.find((row) => row.id === activityId)!
+          .cottageMilestones;
+      const remove = async (milestoneId: string) =>
+        request(server)
+          .delete(`/api/v1/milestones/${milestoneId}`)
+          .set(auth(alice))
+          .expect(200);
+      assert.equal(await progress(), 0); // Automatic join logs did not count.
+      const build = async () =>
+        (await state(alice)).activities.find((row) => row.id === activityId)!
+          .cottageBuild!;
+      assert.deepEqual((await build()).seconds, {
+        base: 10,
+        entrance: 15,
+        finished: 20,
+      });
+      await request(server)
+        .get("/api/v1/cottage-build-settings")
+        .set(auth(bob))
+        .expect(200, { base: 10, entrance: 15, finished: 20 });
+      await request(server)
+        .patch("/api/v1/cottage-build-settings")
+        .set(auth(bob))
+        .send({ base: 2, entrance: 7, finished: 3 })
+        .expect(404);
+      const patchTimes = (session: Session, entrance: number) =>
+        request(server)
+          .patch(`/api/v1/activities/${activityId}`)
+          .set(auth(session))
+          .send({ cottageBuildSeconds: { base: 2, entrance, finished: 3 } })
+          .expect(400);
+      await patchTimes(stranger, 7);
+      await patchTimes(bob, 7);
+      await create(
+        bob,
+        "activities",
+        {
+          connectionId: base.id,
+          templateId: "read-book",
+          name: "Client override",
+          description: "",
+          subjectIds: [],
+          target: 1,
+          cottageBuildSeconds: { base: 2, entrance: 7, finished: 3 },
+        },
+        400,
+      );
+      assert.equal((await build()).seconds.entrance, 15);
+      const milestones = [];
+      for (let i = 0; i < 4; i++)
+        milestones.push(
+          (await create(alice, "milestones", milestoneBody(activityId)))
+            .entityId as string,
+        );
+      const [first, second, third, extra] = milestones as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      await create(
+        alice,
+        "logs",
+        { ...logBody(first, "cottage-failure"), isSuccess: false },
+        200,
+      );
+      assert.equal(await progress(), 0);
+      const log = logBody(first, "cottage-first");
+      await create(alice, "logs", log, 200);
+      assert.equal((await create(alice, "logs", log, 200)).duplicate, true);
+      await create(bob, "logs", logBody(first, "cottage-first-bob"), 200);
+      assert.equal(await progress(bob), 1);
+      const queuedEntrance = (await build()).readyAt.entrance;
+      assert.ok(queuedEntrance);
+      await patchTimes(bob, 8);
+      await remove(first);
+      assert.equal(await progress(), 1);
+      assert.equal((await build()).readyAt.entrance, queuedEntrance);
+      await create(alice, "logs", logBody(second, "cottage-second"), 200);
+      assert.equal(await progress(), 2);
+      await create(alice, "logs", logBody(third, "cottage-third"), 200);
+      assert.equal(await progress(bob), 3);
+      await remove(third);
+      assert.equal(await progress(bob), 3);
+      await create(alice, "logs", logBody(extra, "cottage-extra"), 200);
+      assert.equal(await progress(), 3);
+      assert.ok(
+        !(await state(alice)).milestones.some(
+          (row) => row.id === first || row.id === third,
+        ),
       );
     });
     it("revokes a bearer session on logout", async () => {

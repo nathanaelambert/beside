@@ -12,12 +12,14 @@ import { islandSign, islandVariantSeed, JETTY, jetty } from "./archipelagoProps"
 import { homeActivities, rewardKey } from "./homeWorld"
 import { assignIslandPalettes, recolorTerrain } from "./islandPalettes"
 import { buildHomeScene, catalogue, sortDrawables, spriteDrawable } from "./scene"
+import { useCottageClock } from "./useCottageClock"
 import { avatarsForMembers } from "../pixel-world/avatars"
 import { oakAt } from "../pixel-world/starterOak"
 
 type ArchipelagoData = {
   bases: ApiHomebase[]
   state: ApiState
+  receivedAt: number
   gardens: Record<string, HomebaseGarden | undefined>
   /** Membership order: islands keep fixed places on the map, wherever you open. */
   order: string[]
@@ -61,8 +63,11 @@ export function useHomeArchipelago(
       let active = true
       setBusy(true)
       setError("")
-      Promise.all([besideApi.homebases(), besideApi.state()])
-        .then(async ([bases, state]) => {
+      Promise.all([
+        besideApi.homebases(),
+        besideApi.state().then((state) => ({ state, receivedAt: performance.now() })),
+      ])
+        .then(async ([bases, { state, receivedAt }]) => {
           if (!active) return
           const revisions = new Map(gardenRevisions.current)
           const missing = new Set<string>()
@@ -93,6 +98,7 @@ export function useHomeArchipelago(
           setData((current) => ({
             bases: available,
             state,
+            receivedAt,
             gardens: Object.fromEntries(
               gardens.map(([id, garden]) => [
                 id,
@@ -136,14 +142,13 @@ export function useHomeArchipelago(
       return true
     }
   }, [])
+  const now = useCottageClock(data?.state.activities, data?.state.serverTime, data?.receivedAt)
   const islands = useMemo(() => {
     if (!data) return []
     const offsets = archipelagoLayout(data.order)
     const multiple = data.bases.length > 1
     // Your oldest island keeps the original colours; the others get their own.
     const palettes = multiple ? assignIslandPalettes(data.bases.map((base) => base.id)) : {}
-    const serverNow = Date.parse(data.state.serverTime ?? "")
-    const now = Number.isFinite(serverNow) ? serverNow : Date.now()
     return data.order.flatMap((id) => {
       const homebase = data.bases.find((base) => base.id === id)
       if (!homebase) return []
@@ -194,7 +199,7 @@ export function useHomeArchipelago(
       }
       return [{ homebase, members, avatars, activities, garden, items, scene, layer }]
     })
-  }, [data])
+  }, [data, now])
   const focused = islands.find((island) => island.homebase.id === focusedId) ?? islands[0]
 
   return {
