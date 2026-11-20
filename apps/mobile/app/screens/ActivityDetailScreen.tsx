@@ -17,7 +17,7 @@ import {
   WorldSchedulePanel,
 } from "@/components/ActivityWorld"
 import { PixelArtSprite, snapScale } from "@/components/BesideMark"
-import { CottageBuildSettings, CottageCountdown } from "@/components/CottageConstruction"
+import { CottageCountdown } from "@/components/CottageConstruction"
 import { cottageArt, cottageProgressLabel } from "@/components/iso-world/cottageArt"
 import { homeActivities } from "@/components/iso-world/homeWorld"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
@@ -522,11 +522,6 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 </View>
               )}
             </View>
-            <CottageBuildSettings
-              key={activity.id}
-              activity={activity}
-              onSaved={() => setRefresh((value) => value + 1)}
-            />
             {currentOccurrence && (
               <View
                 style={$milestoneList}

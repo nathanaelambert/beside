@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, TextStyle, View, ViewStyle } from "react-native"
-import { MAX_COTTAGE_BUILD_SECONDS, type ApiState } from "@beside/api-client"
+import type { ApiState } from "@beside/api-client"
 
 import {
   ActivityWorldHeader,
@@ -10,11 +10,6 @@ import {
   WorldTextField as TextField,
 } from "@/components/ActivityWorld"
 import { PixelArtSprite } from "@/components/BesideMark"
-import {
-  CottageDurationFields,
-  cottageDurationDraft,
-  readCottageDurations,
-} from "@/components/CottageConstruction"
 import { cottageArt } from "@/components/iso-world/cottageArt"
 import { homeActivities } from "@/components/iso-world/homeWorld"
 import { FormChoice, MilestoneScheduleFields } from "@/components/MilestoneScheduleFields"
@@ -39,8 +34,6 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
   const [description, setDescription] = useState("")
   const [templateId, setTemplateId] = useState("")
   const [target, setTarget] = useState("1")
-  const [buildDraft, setBuildDraft] = useState(cottageDurationDraft)
-  const [showBuildTimes, setShowBuildTimes] = useState(false)
   const [step, setStep] = useState<"activity" | "milestone" | "reward">("activity")
   const [form, setForm] = useState(initialScheduleForm)
   const [itemId, setItemId] = useState<string | null>(null)
@@ -99,10 +92,6 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
       setError("Enter a personal target greater than zero.")
       return
     }
-    if (!readCottageDurations(buildDraft)) {
-      setError(`Enter whole numbers from 1 to ${MAX_COTTAGE_BUILD_SECONDS} for construction times.`)
-      return
-    }
     setError("")
     setStep("milestone")
   }
@@ -140,7 +129,6 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
           connectionId: route.params.connectionId,
           subjectIds: [],
           target: Number(target),
-          cottageBuildSeconds: readCottageDurations(buildDraft),
         })
         activityId = result.entityId
         setCreatedActivityId(activityId)
@@ -242,15 +230,6 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
               onChangeText={setTarget}
               helper="Your personal goal for this activity."
             />
-            <Button
-              text={showBuildTimes ? "Hide construction times" : "Construction times"}
-              onPress={() => setShowBuildTimes((open) => !open)}
-              accessibilityState={{ expanded: showBuildTimes }}
-              testID="create-cottage-times"
-            />
-            {showBuildTimes && (
-              <CottageDurationFields values={buildDraft} onChange={setBuildDraft} />
-            )}
             <TextField
               label="Description (optional)"
               testID="activity-description"

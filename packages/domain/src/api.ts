@@ -2,7 +2,6 @@ import { z } from "zod";
 import { meadowGridSize, starterOakItemId } from "./garden.ts";
 import { WORLD_HEIGHT, WORLD_WIDTH } from "./meadow-terrain.ts";
 import {
-  cottageBuildSecondsSchema,
   databaseSchema,
   logInputSchema,
   milestoneInputSchema,
@@ -66,7 +65,6 @@ export const updateActivitySchema = z
     name: name.optional(),
     description: z.string().max(2000).optional(),
     target: z.number().positive().finite().optional(),
-    cottageBuildSeconds: cottageBuildSecondsSchema.optional(),
   })
   .refine(hasChanges, "Provide at least one field to update.");
 // Validate schedules against the merged saved milestone in the command engine.
@@ -90,7 +88,6 @@ export const createActivitySchema = z.strictObject({
   connectionId: id,
   subjectIds: z.array(id).max(100).default([]),
   target: z.number().positive().finite(),
-  cottageBuildSeconds: cottageBuildSecondsSchema.optional(),
 });
 export const linkSubjectSchema = z.strictObject({ subjectId: id });
 export const participationSchema = z.strictObject({

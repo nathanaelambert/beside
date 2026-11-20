@@ -12,15 +12,13 @@ import type {
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
 import {
   COTTAGE_MILESTONE_CAP,
+  DEFAULT_COTTAGE_BUILD_SECONDS,
   cottageBuildSettings,
   cottageLevel,
   queueCottageLevel,
+  type CottageBuildSeconds,
 } from "./cottage.ts";
-import {
-  cottageBuildSecondsSchema,
-  logInputSchema,
-  milestoneInputSchema,
-} from "./validation.ts";
+import { logInputSchema, milestoneInputSchema } from "./validation.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const requireValue = <T>(value: T | undefined | null, message: string): T => {
@@ -343,6 +341,7 @@ export function execute(
   database: Database,
   command: Command,
   now = new Date().toISOString(),
+  cottageDurations: CottageBuildSeconds = DEFAULT_COTTAGE_BUILD_SECONDS,
 ): { db: Database; entityId: string; duplicate: boolean } {
   const db = structuredClone(database);
   const firstNewEvent = db.events.length;
@@ -437,10 +436,6 @@ export function execute(
       if (changes.name !== undefined) activity.name = changes.name;
       if (changes.description !== undefined)
         activity.description = changes.description;
-      if (changes.cottageBuildSeconds) {
-        activity.cottageBuild ??= cottageBuildSettings();
-        activity.cottageBuild.seconds = changes.cottageBuildSeconds;
-      }
       if (changes.target !== undefined)
         requireValue(
           participation(db, activity.id, command.actorId),
@@ -696,10 +691,8 @@ export function execute(
           throw new Error("The subject must match the activity's category.");
       }
       entityId = id("activity");
-      const cottageBuild = cottageBuildSettings(
-        cottageBuildSecondsSchema.optional().parse(command.cottageBuildSeconds),
-      );
-      queueCottageLevel(cottageBuild, 1, now);
+      const cottageBuild = cottageBuildSettings(cottageDurations);
+      queueCottageLevel(cottageBuild, 1, now, cottageDurations);
       db.activities.push({
         id: entityId,
         templateId: template.id,
@@ -1004,8 +997,13 @@ export function execute(
         activity.cottageMilestones = (activity.cottageMilestones ?? 0) + 1;
         const nextLevel = cottageLevel(activity.cottageMilestones);
         if (previousLevel !== nextLevel) {
-          activity.cottageBuild ??= cottageBuildSettings();
-          queueCottageLevel(activity.cottageBuild, nextLevel, now);
+          activity.cottageBuild ??= cottageBuildSettings(cottageDurations);
+          queueCottageLevel(
+            activity.cottageBuild,
+            nextLevel,
+            now,
+            cottageDurations,
+          );
         }
       }
       db.logs.push(log);

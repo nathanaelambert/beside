@@ -1,5 +1,5 @@
 import type { RewardItem } from "@beside/rewards";
-import type { CottageBuild, CottageBuildSeconds } from "./cottage.ts";
+import type { CottageBuild } from "./cottage.ts";
 export type { PixelArt, RewardItem } from "@beside/rewards";
 
 export type Category =
@@ -231,7 +231,6 @@ export type Command =
       connectionId: string;
       subjectIds: string[];
       target: number;
-      cottageBuildSeconds?: CottageBuildSeconds;
     }
   | {
       type: "linkSubject";

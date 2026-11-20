@@ -1,8 +1,10 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import type { CottageBuildSeconds } from "@beside/domain/cottage";
 import { execute } from "@beside/domain/model";
 import { settleExpiredMilestones } from "@beside/domain/expiry";
 import { stateForUser } from "@beside/domain/view";
 import type { Command } from "@beside/domain/types";
+import { COTTAGE_BUILD_DURATIONS } from "./cottage-build.config.ts";
 import { DatabaseService } from "./db/database.service.ts";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
 import { createHomebase, joinHomebase } from "./homebases.ts";
@@ -12,6 +14,8 @@ import { recordRewardProposals } from "./rewards.service.ts";
 export class DomainService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(COTTAGE_BUILD_DURATIONS)
+    readonly cottageBuildDurations: Readonly<CottageBuildSeconds>,
   ) {}
   state(userId: string) {
     // Hobby cron runs daily. Settle on reads too so an opened workspace reflects
@@ -30,7 +34,12 @@ export class DomainService {
       const before = await loadDatabase(client);
       let result: ReturnType<typeof execute>;
       try {
-        result = execute(before, command);
+        result = execute(
+          before,
+          command,
+          undefined,
+          this.cottageBuildDurations,
+        );
       } catch (error) {
         throw new BadRequestException(
           error instanceof Error ? error.message : "Invalid command.",

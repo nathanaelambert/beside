@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { databaseSchema } from "@beside/domain/validation";
+import {
+  cottageBuildSecondsSchema,
+  databaseSchema,
+} from "@beside/domain/validation";
 import { createScheduleSchema, scheduleSchema } from "@beside/domain/schedules";
 import * as api from "@beside/domain/api";
 
@@ -24,6 +27,7 @@ export const schemas = {
   RewardAgreement: api.rewardAgreementSchema,
   CreateSubject: api.createSubjectSchema,
   CreateActivity: api.createActivitySchema,
+  CottageBuildSettings: cottageBuildSecondsSchema,
   LinkSubject: api.linkSubjectSchema,
   UpdateParticipation: api.participationSchema,
   CreateMilestone: api.createMilestoneSchema,

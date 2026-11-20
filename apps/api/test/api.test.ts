@@ -84,10 +84,25 @@ describe("public API contract without a database", () => {
       assert.ok(body.components.schemas[schema]);
     }
     assert.ok(body.paths["/api/v1/state"].get.security);
+    const settings = body.paths["/api/v1/cottage-build-settings"];
+    assert.ok(settings.get.security);
+    assert.equal(
+      settings.get.responses[200].content["application/json"].schema.$ref,
+      "#/components/schemas/CottageBuildSettings",
+    );
+    assert.equal(settings.patch, undefined);
+    for (const schema of ["CreateActivity", "UpdateActivity"])
+      assert.equal(
+        body.components.schemas[schema].properties.cottageBuildSeconds,
+        undefined,
+      );
     await request(server).get("/openapi.yaml").expect(200);
   });
   it("requires a session and validates credentials before touching the database", async () => {
     await request(app.getHttpServer()).get("/api/v1/state").expect(401);
+    await request(app.getHttpServer())
+      .get("/api/v1/cottage-build-settings")
+      .expect(401);
     const { body } = await request(app.getHttpServer())
       .post("/api/v1/auth/register")
       .send({ name: "Test", email: "invalid", password: "short" })
@@ -1123,20 +1138,42 @@ describe(
         (await state(alice)).activities.find((row) => row.id === activityId)!
           .cottageBuild!;
       assert.deepEqual((await build()).seconds, {
-        base: 5,
-        entrance: 10,
-        finished: 15,
+        base: 10,
+        entrance: 15,
+        finished: 20,
       });
-      const patchTimes = (session: Session, entrance: number, status: number) =>
+      await request(server)
+        .get("/api/v1/cottage-build-settings")
+        .set(auth(bob))
+        .expect(200, { base: 10, entrance: 15, finished: 20 });
+      await request(server)
+        .patch("/api/v1/cottage-build-settings")
+        .set(auth(bob))
+        .send({ base: 2, entrance: 7, finished: 3 })
+        .expect(404);
+      const patchTimes = (session: Session, entrance: number) =>
         request(server)
           .patch(`/api/v1/activities/${activityId}`)
           .set(auth(session))
           .send({ cottageBuildSeconds: { base: 2, entrance, finished: 3 } })
-          .expect(status);
-      await patchTimes(stranger, 7, 400);
-      await patchTimes(bob, 0, 400);
-      await patchTimes(bob, 7, 200);
-      assert.equal((await build()).seconds.entrance, 7);
+          .expect(400);
+      await patchTimes(stranger, 7);
+      await patchTimes(bob, 7);
+      await create(
+        bob,
+        "activities",
+        {
+          connectionId: base.id,
+          templateId: "read-book",
+          name: "Client override",
+          description: "",
+          subjectIds: [],
+          target: 1,
+          cottageBuildSeconds: { base: 2, entrance: 7, finished: 3 },
+        },
+        400,
+      );
+      assert.equal((await build()).seconds.entrance, 15);
       const milestones = [];
       for (let i = 0; i < 4; i++)
         milestones.push(
@@ -1163,7 +1200,7 @@ describe(
       assert.equal(await progress(bob), 1);
       const queuedEntrance = (await build()).readyAt.entrance;
       assert.ok(queuedEntrance);
-      await patchTimes(bob, 8, 200);
+      await patchTimes(bob, 8);
       await remove(first);
       assert.equal(await progress(), 1);
       assert.equal((await build()).readyAt.entrance, queuedEntrance);

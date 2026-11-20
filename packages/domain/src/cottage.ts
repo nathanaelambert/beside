@@ -1,9 +1,9 @@
 export const COTTAGE_MILESTONE_CAP = 3;
 export const MAX_COTTAGE_BUILD_SECONDS = 3600;
 export const DEFAULT_COTTAGE_BUILD_SECONDS = {
-  base: 5,
-  entrance: 10,
-  finished: 15,
+  base: 10,
+  entrance: 15,
+  finished: 20,
 };
 export const COTTAGE_BUILD_STAGES = ["base", "entrance", "finished"] as const;
 
@@ -39,6 +39,7 @@ export function queueCottageLevel(
   build: CottageBuild,
   level: CottageLevel,
   now: string,
+  durations: CottageBuildSeconds,
 ) {
   const stage = COTTAGE_BUILD_STAGES[level - 1]!;
   if (build.readyAt[stage]) return;
@@ -48,9 +49,9 @@ export function queueCottageLevel(
     Date.parse(now),
     previousReady ? Date.parse(previousReady) : 0,
   );
-  build.readyAt[stage] = new Date(
-    start + build.seconds[stage] * 1000,
-  ).toISOString();
+  const seconds = durations[stage];
+  build.seconds[stage] = seconds;
+  build.readyAt[stage] = new Date(start + seconds * 1000).toISOString();
 }
 
 /** The snapshot determines construction; no writes, device timer or cron settle it. */

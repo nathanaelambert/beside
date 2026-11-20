@@ -61,11 +61,12 @@ its activity at the open milestones, or at the upcoming list if none are open.
 
 A pocket watch marks a build in progress, with its hand advancing one pixel-art
 step per countdown second. The base starts at activity creation
-(5 seconds), the entrance starts at the first credited milestone (10 seconds),
-and the final stage at the third (15 seconds). If an earlier build is still
-running, the next waits for it. The activity's construction settings can change
-future durations (1–3600 whole seconds) without changing saved deadlines or
-already built stages. Clients render countdowns against the server snapshot;
+(10 seconds by default), the entrance starts at the first credited milestone
+(15 seconds), and the final stage at the third (20 seconds). If an earlier
+build is still running, the next waits for it. Durations are configured
+system-wide in the API environment; clients cannot override them. The backend
+uses its current setting when a stage is first queued, without changing saved
+deadlines or already built stages. Clients render countdowns against the server snapshot;
 opening the app later never resets construction. In the activity detail, the
 preview stays in place when the clock gives way to the built level, and the
 progress row keeps its height when there is no next level to preview.
