@@ -16,7 +16,7 @@ import {
   WorldButton as Button,
   WorldSchedulePanel,
 } from "@/components/ActivityWorld"
-import { PixelArtSprite } from "@/components/BesideMark"
+import { PixelArtSprite, snapScale } from "@/components/BesideMark"
 import { CottageBuildSettings, CottageCountdown } from "@/components/CottageConstruction"
 import { cottageArt, cottageProgressLabel } from "@/components/iso-world/cottageArt"
 import { homeActivities } from "@/components/iso-world/homeWorld"
@@ -306,6 +306,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     .join(",")
   const lit = !!currentOccurrence
   const { level, building, seconds } = cottageConstruction(activity ?? {}, now)
+  const previewArt = cottageArt(roofIndex, false, building ?? (level === 1 ? 2 : 3))
   const plot = useMemo(
     () =>
       buildActivityScene({
@@ -500,23 +501,24 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 />
               </View>
             </View>
-            <View style={$cottageProgress}>
-              {building ? (
-                <CottageCountdown level={building} seconds={seconds} />
-              ) : (
-                <Text
-                  testID="activity-cottage-level"
-                  accessibilityLiveRegion="polite"
-                  text={cottageProgressLabel(activity.cottageMilestones)}
-                  style={[activityWorldStyles.body, $cottageProgressText]}
-                />
-              )}
+            <View
+              style={[$cottageProgress, { minHeight: previewArt.pixels.length * snapScale(1) }]}
+            >
+              <View style={$cottageProgressStatus}>
+                {building ? (
+                  <CottageCountdown level={building} seconds={seconds} />
+                ) : (
+                  <Text
+                    testID="activity-cottage-level"
+                    accessibilityLiveRegion="polite"
+                    text={cottageProgressLabel(activity.cottageMilestones)}
+                    style={activityWorldStyles.body}
+                  />
+                )}
+              </View>
               {(building || level < 3) && (
                 <View accessible accessibilityLabel="Next cottage level preview">
-                  <PixelArtSprite
-                    art={cottageArt(roofIndex, false, building ?? (level === 1 ? 2 : 3))}
-                    scale={1}
-                  />
+                  <PixelArtSprite art={previewArt} scale={1} />
                 </View>
               )}
             </View>
@@ -652,7 +654,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
 }
 
 const $cottageProgress: ViewStyle = { flexDirection: "row", alignItems: "center", gap: 8 }
-const $cottageProgressText = { flex: 1 }
+const $cottageProgressStatus: ViewStyle = { flex: 1, minWidth: 0 }
 const $milestoneList: ViewStyle = { gap: 12 }
 const $addReward: ViewStyle = {
   minHeight: 44,

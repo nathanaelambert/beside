@@ -65,7 +65,9 @@ and the final stage at the third (15 seconds). If an earlier build is still
 running, the next waits for it. The activity's construction settings can change
 future durations (1–3600 whole seconds) without changing saved deadlines or
 already built stages. Clients render countdowns against the server snapshot;
-opening the app later never resets construction.
+opening the app later never resets construction. In the activity detail, the
+preview stays in place when the clock gives way to the built level, and the
+progress row keeps its height when there is no next level to preview.
 
 ## Editing and deletion
 
