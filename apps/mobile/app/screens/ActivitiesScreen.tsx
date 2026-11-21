@@ -4,9 +4,8 @@ import { cottageConstruction, type ApiState } from "@beside/api-client"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { PixelArtSprite } from "@/components/BesideMark"
 import { CottageCountdown } from "@/components/CottageConstruction"
-import { cottageArt } from "@/components/iso-world/cottageArt"
+import { CottageThumbnail } from "@/components/CottageThumbnail"
 import { homeActivities } from "@/components/iso-world/homeWorld"
 import { useCottageClock } from "@/components/iso-world/useCottageClock"
 import { Text } from "@/components/Text"
@@ -147,7 +146,7 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
                 <View style={styles.calendar}>
-                  <PixelArtSprite art={cottageArt(index, open, level)} scale={1} />
+                  <CottageThumbnail index={index} lit={open} level={level} />
                 </View>
                 <View style={styles.rowContent}>
                   <Text text={activity.name} weight="semiBold" style={styles.activityName} />

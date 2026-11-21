@@ -9,8 +9,7 @@ import {
   WorldSchedulePanel,
   WorldTextField as TextField,
 } from "@/components/ActivityWorld"
-import { PixelArtSprite } from "@/components/BesideMark"
-import { cottageArt } from "@/components/iso-world/cottageArt"
+import { CottageThumbnail } from "@/components/CottageThumbnail"
 import { homeActivities } from "@/components/iso-world/homeWorld"
 import { FormChoice, MilestoneScheduleFields } from "@/components/MilestoneScheduleFields"
 import { RewardPicker } from "@/components/RewardPicker"
@@ -193,11 +192,8 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
             <Text text="New activity" weight="semiBold" style={activityWorldStyles.title} />
             <View style={$cottage} testID="activity-cottage-preview">
               <View style={$cottageArt}>
-                <PixelArtSprite
-                  art={cottageArt(
-                    homeActivities(data, route.params.connectionId, Date.now()).length,
-                  )}
-                  scale={1}
+                <CottageThumbnail
+                  index={homeActivities(data, route.params.connectionId, Date.now()).length}
                 />
               </View>
               <Text

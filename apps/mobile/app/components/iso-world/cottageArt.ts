@@ -1,17 +1,26 @@
 import { COTTAGE_MILESTONE_CAP, cottageLevel, type CottageSpriteLevel } from "@beside/api-client"
 import type { PixelArt } from "@beside/rewards"
 
+import { bayCottageArt } from "./bayCottageArt"
 import { bitmapToPixelArt } from "./bitmap"
 import { houseSprite, roofForIndex } from "./scene"
 
 const cache = new Map<string, PixelArt>()
 
 /** An activity's cottage as plain pixel art, for lists and thumbnails outside the canvas. */
-export function cottageArt(index: number, lit = false, level: CottageSpriteLevel = 1): PixelArt {
+export function cottageArt(
+  index: number,
+  lit = false,
+  level: CottageSpriteLevel = 1,
+  detailed = false,
+): PixelArt {
   const roof = roofForIndex(index)
-  const key = `${roof}-${lit}-${level}`
+  const key = `${roof}-${lit}-${level}-${detailed}`
   let art = cache.get(key)
-  if (!art) cache.set(key, (art = bitmapToPixelArt(houseSprite(roof, lit, level).bitmap)))
+  if (!art) {
+    const sprite = detailed ? bayCottageArt(roof, level, lit) : houseSprite(roof, lit, level)
+    cache.set(key, (art = bitmapToPixelArt(sprite.bitmap)))
+  }
   return art
 }
 

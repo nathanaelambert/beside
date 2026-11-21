@@ -9,11 +9,22 @@ import { loadString, saveString } from "@/utils/storage"
 
 import { archipelagoLayout, type IslandLayer } from "./archipelago"
 import { islandSign, islandVariantSeed, JETTY, jetty } from "./archipelagoProps"
+import { jettyTimberGrade } from "./harborArt"
 import { homeActivities, rewardKey } from "./homeWorld"
 import { assignIslandPalettes, recolorTerrain } from "./islandPalettes"
-import { buildHomeScene, catalogue, sortDrawables, spriteDrawable } from "./scene"
+import { gardenGrowthDeadline, plantArtStage } from "./plantGrowth"
+import {
+  buildHomeScene,
+  catalogue,
+  sortDrawables,
+  spriteDrawable,
+  type HomeGardenItem,
+} from "./scene"
 import { useCottageClock } from "./useCottageClock"
+import { worldArtAssets } from "./worldArtAssets"
+import { detailedSpriteBitmap } from "./worldDetailArt"
 import { avatarsForMembers } from "../pixel-world/avatars"
+import { detailedAvatar } from "../pixel-world/detailedAvatars"
 import { oakAt } from "../pixel-world/starterOak"
 
 type ArchipelagoData = {
@@ -142,7 +153,16 @@ export function useHomeArchipelago(
       return true
     }
   }, [])
-  const now = useCottageClock(data?.state.activities, data?.state.serverTime, data?.receivedAt)
+  const growthDeadline = useMemo(
+    () => gardenGrowthDeadline(Object.values(data?.gardens ?? {})),
+    [data?.gardens],
+  )
+  const now = useCottageClock(
+    data?.state.activities,
+    data?.state.serverTime,
+    data?.receivedAt,
+    growthDeadline,
+  )
   const islands = useMemo(() => {
     if (!data) return []
     const offsets = archipelagoLayout(data.order)
@@ -156,28 +176,36 @@ export function useHomeArchipelago(
         (memberId) =>
           data.state.users.find((u) => u.id === memberId) ?? { id: memberId, name: "Member" },
       )
-      const avatars = avatarsForMembers(members)
+      const avatars = avatarsForMembers(members).map(detailedAvatar)
       const garden = data.gardens[id]
       const activities = homeActivities(data.state, id, now)
-      const items = [
+      const items: HomeGardenItem[] = [
         ...initialMeadowItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees"),
-        ...(garden?.oak ? [oakAt(garden.oak)] : []),
+        ...(garden?.oak
+          ? [{ ...oakAt(garden.oak), stage: plantArtStage(garden.oak.growthStartedAt, now) }]
+          : []),
         ...(garden?.rewards ?? []).map((p) => ({
           key: rewardKey(p.rewardId),
           itemId: p.itemId,
           x: p.x,
           y: p.y,
+          stage: plantArtStage(p.growthStartedAt, now),
         })),
       ]
       const scene = buildHomeScene({
         avatars,
         activities,
         items,
+        assets: worldArtAssets,
         variantSeed: multiple ? islandVariantSeed(id) : 0,
       })
       const palette = palettes[id] ?? 0
       // Signs hang over each island's north corner, out in the channel above it.
       const signAt = { u: 0, v: 0, lift: 8 }
+      const sign = (here: boolean) => {
+        const sprite = islandSign(homebase.name, here)
+        return { ...sprite, bitmap: detailedSpriteBitmap(sprite.bitmap, "sign") }
+      }
       const layer: IslandLayer = {
         key: id,
         map: scene.map,
@@ -187,14 +215,21 @@ export function useHomeArchipelago(
         drawables: multiple
           ? sortDrawables([
               ...recolorTerrain(scene.drawables, palette),
-              spriteDrawable(scene.frame, "jetty", jetty(), { ...JETTY, lift: 0 }),
+              spriteDrawable(
+                scene.frame,
+                "jetty",
+                jetty(true),
+                { ...JETTY, lift: 0 },
+                {
+                  artAsset: worldArtAssets.jetty,
+                  artColorMatrix: jettyTimberGrade,
+                },
+              ),
             ])
           : scene.drawables,
-        sign: multiple
-          ? spriteDrawable(scene.frame, "sign", islandSign(homebase.name), signAt)
-          : undefined,
+        sign: multiple ? spriteDrawable(scene.frame, "sign", sign(false), signAt) : undefined,
         signHere: multiple
-          ? spriteDrawable(scene.frame, "sign-here", islandSign(homebase.name, true), signAt)
+          ? spriteDrawable(scene.frame, "sign-here", sign(true), signAt)
           : undefined,
       }
       return [{ homebase, members, avatars, activities, garden, items, scene, layer }]

@@ -3,8 +3,22 @@
 // continuous isometric geometry, so neighbouring tiles meet without seams or overlaps.
 
 import { createBitmap, hash, noise, put, type Bitmap } from "./bitmap"
+import {
+  coastPaving,
+  coastRock,
+  paintCoastFoam,
+  picnicShoreContact,
+  picnicShoreDistance,
+  picnicShoreFinish,
+  picnicShoreInfluence,
+} from "./coastArt"
+import { harborBoardColor } from "./harborArt"
+import { meadowSurfaceColor } from "./meadowArt"
+import { pondSandColor, stonePathColor } from "./pavingArt"
+import { wovenBlanketColor } from "./picnicArt"
 import { HALF_W, isoToScreen, screenToIso, TILE_H, type MapFrame } from "./projection"
 import { tileAt, type Tile, type TileKind, type TileMap } from "./tilemap"
+import { paintOpenWater, pondWaterColor } from "./waterArt"
 
 /** How far the island's base slab drops below the ground, in art pixels. */
 export const SLAB = 14
@@ -30,17 +44,42 @@ export const palette = {
 const pick = <T>(colors: readonly T[], t: number) =>
   colors[Math.max(0, Math.min(colors.length - 1, Math.floor(t * colors.length)))]!
 
+/** Distance to a tile of the opposite water/land kind, measured inside this tile. */
+function waterEdgeDistance(map: TileMap, tile: Tile, u: number, v: number) {
+  const water = tile.kind === "water"
+  const changesAt = (col: number, row: number) =>
+    (tileAt(map, col, row)?.kind === "water") !== water
+  return Math.min(
+    changesAt(tile.col - 1, tile.row) ? u : 1,
+    changesAt(tile.col + 1, tile.row) ? 1 - u : 1,
+    changesAt(tile.col, tile.row - 1) ? v : 1,
+    changesAt(tile.col, tile.row + 1) ? 1 - v : 1,
+  )
+}
+
 function topColor(map: TileMap, tile: Tile, fu: number, fv: number, x: number, y: number) {
-  const n = noise(x, y, 9, 1) * 0.55 + noise(x, y, 23, 2) * 0.45 + (tile.seed - 0.5) * 0.16
-  const grain = hash(x, y, 3)
   const kind: TileKind = tile.kind
+  const detailed = map.art === "detailed"
   // Edges that drop away get a lit rim, like the reference tiles' bevel.
   const backEdge = fu < 1 / 16 || fv < 1 / 16
-  if (kind === "grass" || kind === "forest" || kind === "blanket") {
-    if (kind === "blanket") {
-      const blanket = blanketColor(map, tile, fu, fv)
-      if (blanket) return blanket
-    }
+  const meadow = kind === "grass" || kind === "forest" || kind === "blanket"
+  if (kind === "blanket") {
+    const blanket = blanketColor(map, tile, fu, fv)
+    if (blanket) return blanket
+  }
+  if (detailed && meadow) {
+    const rim =
+      (fu < 0.07 && tileAt(map, tile.col - 1, tile.row)?.lift !== tile.lift) ||
+      (fv < 0.07 && tileAt(map, tile.col, tile.row - 1)?.lift !== tile.lift)
+    return meadowSurfaceColor(x, y, kind === "forest", rim)
+  }
+  if (detailed && kind === "path") return stonePathColor(tile.col + fu, tile.row + fv, x, y)
+  if (detailed && kind === "sand") return pondSandColor(x, y, waterEdgeDistance(map, tile, fu, fv))
+  if (detailed && kind === "water")
+    return pondWaterColor(x, y, waterEdgeDistance(map, tile, fu, fv))
+  const n = noise(x, y, 9, 1) * 0.55 + noise(x, y, 23, 2) * 0.45 + (tile.seed - 0.5) * 0.16
+  const grain = hash(x, y, 3)
+  if (meadow) {
     const tones = kind === "forest" ? palette.forest : palette.grass
     if (grain > 0.985) return palette.grassLight
     if (grain > 0.94) return tones[0]!
@@ -50,6 +89,7 @@ function topColor(map: TileMap, tile: Tile, fu: number, fv: number, x: number, y
     return tone
   }
   if (kind === "path") {
+    if (map.coast) return coastPaving(fu, fv, grain, pick(palette.dirt, n * 0.85 + 0.1))
     if (grain > 0.972) return palette.pebble
     if (hash(x, y - 1, 3) > 0.972) return palette.dirt[0]!
     return pick(palette.dirt, n * 0.85 + 0.1)
@@ -61,12 +101,13 @@ function topColor(map: TileMap, tile: Tile, fu: number, fv: number, x: number, y
   if (kind === "dock") {
     // Planks run along u; seams every quarter tile, with a nail now and then.
     const plank = Math.floor(fv * 4)
-    const seam = fv * 4 - plank < 0.12
-    if (seam) return palette.plank[0]!
+    const across = fv * 4 - plank
+    if (detailed) return harborBoardColor(tile.row * 4 + plank, fu, across)
+    if (across < 0.12) return palette.plank[0]!
     if (grain > 0.985) return palette.plank[0]!
     return palette.plank[1 + ((plank + (n > 0.55 ? 1 : 0)) % 3)]!
   }
-  // Water: banded ripples that follow the iso axis, foam where it meets land.
+  // Original water: banded ripples with the brighter far-bank bevel.
   const shoreU = fu < 1 / 16 ? tileAt(map, tile.col - 1, tile.row) : undefined
   const shoreV = fv < 1 / 16 ? tileAt(map, tile.col, tile.row - 1) : undefined
   if ((shoreU && shoreU.kind !== "water") || (shoreV && shoreV.kind !== "water"))
@@ -86,6 +127,11 @@ function blanketColor(map: TileMap, tile: Tile, fu: number, fv: number) {
   const v1 = isBlanket(0, 1) ? 1 : 1 - inset
   if (fu < u0 || fu >= u1 || fv < v0 || fv >= v1) return undefined
   const border = 0.07
+  if (map.art === "detailed") {
+    const edgeU = Math.min(u0 > 0 ? fu - u0 : 1, u1 < 1 ? u1 - fu : 1)
+    const edgeV = Math.min(v0 > 0 ? fv - v0 : 1, v1 < 1 ? v1 - fv : 1)
+    return wovenBlanketColor(tile.col + fu, tile.row + fv, edgeU, edgeV, border)
+  }
   if (
     (u0 > 0 && fu < u0 + border) ||
     (u1 < 1 && fu > u1 - border) ||
@@ -166,11 +212,22 @@ function paintSides(bitmap: Bitmap, frame: MapFrame, map: TileMap, tile: Tile, o
     for (let x = Math.round(a.x); x < Math.round(b.x); x++) {
       const t = (x + 0.5 - a.x) / (b.x - a.x)
       const edge = a.y + t * (b.y - a.y)
+      const picnicShore =
+        !neighbour && face === "left" ? picnicShoreInfluence(map, tile, 0, 1, t) : 0
+      const shorelineAt = picnicShore ? picnicShoreDistance(tile, t) : 0
       for (let y = Math.floor(edge - 0.5); y < edge + height + 1; y++) {
         const depth = y + 0.5 - edge
         if (depth < 0 || depth >= height) continue
         const color =
-          !neighbour && depth >= height - 1 ? palette.outline : sideColor(face, tile, depth, x, y)
+          !neighbour && depth >= height - 1
+            ? picnicShore
+              ? picnicShoreContact(shorelineAt, picnicShore, palette.outline)
+              : palette.outline
+            : !neighbour && map.coast
+              ? picnicShore
+                ? picnicShoreFinish(x, y, depth, height, picnicShore, shorelineAt)
+                : coastRock(map.coast, face, depth, x, y, map.art === "detailed", height)
+              : sideColor(face, tile, depth, x, y)
         put(bitmap, x - ox, y - oy, color)
       }
     }
@@ -182,8 +239,9 @@ export const isRaised = (tile: Tile) => tile.lift > 0
 
 export function paintGround(map: TileMap, frame: MapFrame): Bitmap {
   const bitmap = createBitmap(frame.width, frame.height)
+  if (map.coast) paintCoastFoam(bitmap, frame, map, SLAB)
   const ordered = [...map.tiles]
-    .filter((tile) => !isRaised(tile))
+    .filter((tile) => tile.kind !== "void" && !isRaised(tile))
     .sort((a, b) => a.col + a.row - (b.col + b.row) || a.col - b.col)
   for (const tile of ordered) {
     paintSides(bitmap, frame, map, tile)
@@ -222,7 +280,12 @@ export function waterGlints(map: TileMap, frame: MapFrame) {
 /** A seamless 64 × 32 patch of open water that surrounds the floating island. */
 export const SEA_TILE = { width: 64, height: 32 }
 let sea: Bitmap | undefined
-export function seaTile(): Bitmap {
+let detailedSea: Bitmap | undefined
+export function seaTile(detailed = false): Bitmap {
+  if (detailed) {
+    detailedSea ??= paintOpenWater(SEA_TILE.width, SEA_TILE.height)
+    return detailedSea
+  }
   if (sea) return sea
   const { width, height } = SEA_TILE
   sea = createBitmap(width, height)

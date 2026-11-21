@@ -3,11 +3,12 @@ import { cottageConstruction, type ApiState } from "@beside/api-client"
 
 import { estimateServerNow } from "@/services/api/attendance"
 
-/** Tick only while at least one visible build is in progress. */
+/** Tick only during construction or when a planted specimen is still growing. */
 export function useCottageClock(
   activities: ApiState["activities"] | undefined,
   serverTime: string | undefined,
   receivedAt: number | undefined,
+  gardenDeadline = 0,
 ) {
   const [tick, setTick] = useState(0)
   const serverNow = Date.parse(serverTime ?? "")
@@ -15,13 +16,14 @@ export function useCottageClock(
     Number.isFinite(serverNow) && receivedAt !== undefined
       ? estimateServerNow(serverNow, receivedAt, tick)
       : Date.now()
-  const running =
+  const building =
     activities?.some((activity) => cottageConstruction(activity, now).building) ?? false
+  const period = building ? 250 : now < gardenDeadline ? 1000 : 0
   useEffect(() => {
-    if (!running) return
+    if (!period) return
     setTick(performance.now())
-    const timer = setInterval(() => setTick(performance.now()), 250)
+    const timer = setInterval(() => setTick(performance.now()), period)
     return () => clearInterval(timer)
-  }, [running, receivedAt])
+  }, [period, receivedAt])
   return now
 }

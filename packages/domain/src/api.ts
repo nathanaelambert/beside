@@ -35,15 +35,22 @@ export const plantStarterOakSchema = z.strictObject({
     .multipleOf(meadowGridSize),
 });
 export const placeRewardSchema = plantStarterOakSchema;
+const growthStartedAt = z.iso
+  .datetime()
+  .optional()
+  .describe(
+    "First planting time for garden art. Omitted for legacy placements, which render fully grown.",
+  );
 export const rewardPlacementSchema = plantStarterOakSchema.extend({
   rewardId: id,
   itemId: id,
   placedByUserId: id.nullable(),
   placedAt: z.iso.datetime(),
+  growthStartedAt,
 });
 export const homebaseGardenSchema = z.strictObject({
   oak: plantStarterOakSchema
-    .extend({ itemId: z.literal(starterOakItemId) })
+    .extend({ itemId: z.literal(starterOakItemId), growthStartedAt })
     .nullable(),
   rewards: z
     .array(rewardPlacementSchema)

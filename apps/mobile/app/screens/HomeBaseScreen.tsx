@@ -5,15 +5,15 @@ import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { PixelArtSprite } from "@/components/BesideMark"
 import { CottageCountdown } from "@/components/CottageConstruction"
+import { CottageThumbnail } from "@/components/CottageThumbnail"
 import {
   focusedIslandLayers,
   snapZoom,
   stepZoom,
   zoomStops,
 } from "@/components/iso-world/archipelago"
-import { cottageArt, cottageProgressLabel } from "@/components/iso-world/cottageArt"
+import { cottageProgressLabel } from "@/components/iso-world/cottageArt"
 import {
   homeFocus,
   nextSuggestion,
@@ -27,6 +27,7 @@ import { meadowToIso } from "@/components/iso-world/projection"
 import { catalogue, itemDrawable, type HitTarget } from "@/components/iso-world/scene"
 import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
 import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
+import { detailedCatalogArt, hasGrowthArt } from "@/components/iso-world/worldDetailArt"
 import { firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlaceRewardPanel } from "@/components/pixel-world/PlaceRewardPanel"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
@@ -186,8 +187,11 @@ function HomeIslandScreen({
   )
   const guideTiles = useMemo(() => (editing ? plantableTiles(occupied) : []), [editing, occupied])
   const guide = guideTiles.map(({ col, row }) => ({ x: col * 16 + 8, y: row * 16 + 8 }))
-  const worldItems = focused?.items ?? []
+  const worldItems = useMemo(() => focused?.items ?? [], [focused?.items])
   const previewItemId = target?.kind === "reward" ? target.itemId : oakAt({ x: 0, y: 0 }).itemId
+  const previewStage = movingId
+    ? worldItems.find((item) => item.key === rewardKey(movingId))?.stage
+    : "sprout"
   const placingItem = target?.kind === "reward" ? catalogue.get(target.itemId) : undefined
 
   const layers = useMemo(() => {
@@ -201,22 +205,30 @@ function HomeIslandScreen({
     const preview =
       built &&
       point &&
-      itemDrawable(built.frame, built.map, "placement-preview", previewItemId, point.u, point.v, {
-        opacity: 0.72,
-        hit: undefined,
-      })
+      itemDrawable(
+        built.frame,
+        built.map,
+        "placement-preview",
+        previewItemId,
+        point.u,
+        point.v,
+        { opacity: 0.72, hit: undefined },
+        previewStage,
+      )
     return focusedIslandLayers(editedLayers, homebase?.id, userId, !!voyage, preview || undefined)
-  }, [baseLayers, homebase?.id, movingId, focused, position, previewItemId, userId, voyage])
+  }, [
+    baseLayers,
+    homebase?.id,
+    movingId,
+    focused,
+    position,
+    previewItemId,
+    previewStage,
+    userId,
+    voyage,
+  ])
   const scene = focused?.scene
   const selectedHouse = scene?.houses.find((h) => `house-${h.activity.id}` === selectedKey)
-  const houseArt = selectedHouse
-    ? cottageArt(
-        scene!.houses.indexOf(selectedHouse),
-        !!selectedHouse.activity.open,
-        selectedHouse.activity.construction?.level ??
-          cottageLevel(selectedHouse.activity.cottageMilestones),
-      )
-    : undefined
 
   function openActivity(activityId: string) {
     navigation.navigate("ActivityDetail", { activityId })
@@ -389,7 +401,23 @@ function HomeIslandScreen({
 
   const selectedPlacement = placements.find((p) => rewardKey(p.rewardId) === selectedKey)
   const selectedItem = selected ? undefined : worldItems.find((item) => item.key === selectedKey)
-  const selectedArt = selectedItem && catalogue.get(selectedItem.itemId)
+  const selectedCatalog = selectedItem && catalogue.get(selectedItem.itemId)
+  const selectedArt = selectedCatalog && {
+    ...selectedCatalog,
+    artifact:
+      detailedCatalogArt(selectedCatalog.id, selectedItem?.stage) ?? selectedCatalog.artifact,
+  }
+  const growthPhase =
+    selectedItem && hasGrowthArt(selectedItem.itemId)
+      ? {
+          sprout: "Sprout",
+          young: selectedCatalog?.category === "Flowers" ? "Bud" : "Young",
+          mature: selectedCatalog?.category === "Flowers" ? "In bloom" : "Mature",
+        }[selectedItem.stage ?? "mature"]
+      : undefined
+  const growthLabel = growthPhase && (
+    <Text testID="homebase-plant-stage" text={growthPhase} style={styles.description} />
+  )
   const memory =
     selectedPlacement && data ? rewardMemory(data.state, selectedPlacement.rewardId) : undefined
   const selectedReward =
@@ -474,15 +502,28 @@ function HomeIslandScreen({
       <View style={styles.header}>
         <View style={styles.headingRow}>
           <Text text={multipleIslands ? "YOUR ISLANDS" : "YOUR HOME BASE"} style={worldEyebrow} />
-          <Pressable
-            testID="homebase-logout"
-            accessibilityRole="button"
-            onPress={signOut}
-            disabled={loggingOut}
-            style={styles.logout}
-          >
-            <Text text={loggingOut ? "Logging out…" : "Log out"} style={styles.smallText} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            {homebase && (
+              <Pressable
+                testID="homebase-bay-workshop"
+                accessibilityRole="button"
+                disabled={!!voyage || savingOak}
+                style={styles.logout}
+                onPress={() => navigation.navigate("BayWorkshop", { connectionId: homebase.id })}
+              >
+                <Text text="Bay prototype" style={styles.smallText} />
+              </Pressable>
+            )}
+            <Pressable
+              testID="homebase-logout"
+              accessibilityRole="button"
+              onPress={signOut}
+              disabled={loggingOut}
+              style={styles.logout}
+            >
+              <Text text={loggingOut ? "Logging out…" : "Log out"} style={styles.smallText} />
+            </Pressable>
+          </View>
         </View>
         <Text
           testID="homebase-name"
@@ -534,6 +575,7 @@ function HomeIslandScreen({
               }
               onTap={tapWorld}
               onPinch={changeZoom}
+              detailedSea
               accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${multipleIslands ? "Use the island buttons or tap another island to sail there. " : ""}${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend, cottage or reward to learn about it."}`}
             />
             <View
@@ -655,7 +697,11 @@ function HomeIslandScreen({
         {selectedPlacement && memory && selectedArt ? (
           <View style={styles.detail} testID="homebase-reward-memory">
             <View style={styles.thumbnail}>
-              <RewardSprite item={selectedArt} scale={1.5} />
+              <RewardSprite
+                item={selectedArt}
+                scale={1.5}
+                growthStage={selectedItem?.stage ?? "mature"}
+              />
             </View>
             <View style={styles.detailText}>
               <Text
@@ -669,6 +715,7 @@ function HomeIslandScreen({
                 text={data ? rewardStory(data.state, selectedPlacement.rewardId) : ""}
                 style={styles.description}
               />
+              {growthLabel}
               <Text
                 text={[
                   selectedReward?.obtainedAt &&
@@ -701,10 +748,18 @@ function HomeIslandScreen({
               </Pressable>
             )}
           </View>
-        ) : selectedHouse && houseArt ? (
+        ) : selectedHouse ? (
           <View style={styles.detail}>
             <View style={styles.thumbnail}>
-              <PixelArtSprite art={houseArt} scale={1} />
+              <CottageThumbnail
+                index={scene!.houses.indexOf(selectedHouse)}
+                lit={!!selectedHouse.activity.open}
+                level={
+                  selectedHouse.activity.construction?.level ??
+                  cottageLevel(selectedHouse.activity.cottageMilestones)
+                }
+                detailed
+              />
             </View>
             <View style={styles.detailText}>
               <Text
@@ -719,12 +774,13 @@ function HomeIslandScreen({
                 />
               ) : (
                 <Text
+                  testID="homebase-cottage-level"
                   text={cottageProgressLabel(selectedHouse.activity.cottageMilestones)}
                   style={styles.description}
                 />
               )}
               {selectedHouse.activity.open && (
-                <Text text="Lights on: a session is open." style={styles.description} />
+                <Text text="A session is open." style={styles.description} />
               )}
             </View>
             <View style={styles.houseActions}>
@@ -756,7 +812,11 @@ function HomeIslandScreen({
         ) : selectedItem && selectedArt ? (
           <View style={styles.detail}>
             <View style={styles.thumbnail}>
-              <RewardSprite item={selectedArt} scale={1.5} />
+              <RewardSprite
+                item={selectedArt}
+                scale={1.5}
+                growthStage={selectedItem.stage ?? "mature"}
+              />
             </View>
             <View style={styles.detailText}>
               <Text
@@ -773,6 +833,7 @@ function HomeIslandScreen({
                 }
                 style={styles.description}
               />
+              {growthLabel}
             </View>
           </View>
         ) : !selected && nextUp && nextUpItem && !editing ? (
@@ -816,7 +877,7 @@ function HomeIslandScreen({
                     category: "Friends",
                     artifact: selected.frames.idle,
                   }}
-                  scale={3}
+                  scale={1.5}
                 />
               </View>
             )}
@@ -944,6 +1005,7 @@ const styles = StyleSheet.create({
     width: 8,
   },
   header: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 8 },
+  headerActions: { flexDirection: "row" },
   headingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   houseActions: { gap: 4 },
   labelText: { color: world.text, fontSize: 11, lineHeight: 16 },

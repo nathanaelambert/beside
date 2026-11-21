@@ -198,18 +198,28 @@ const pritesh: PixelArt = {
 }
 
 // Eyes close to a single line of lashes.
-function blink(art: PixelArt): PixelArt {
+function blink(art: PixelArt, scale: number): PixelArt {
   const eyes = art.pixels.findIndex((row) => row.includes("e"))
   return {
     ...art,
-    pixels: art.pixels.map((row, y) => (y === eyes ? row.replaceAll("e", "s") : row)),
+    pixels: art.pixels.map((row, y) =>
+      y >= eyes && y < eyes + scale ? row.replaceAll("e", "s") : row,
+    ),
   }
 }
 
 // The head settles a pixel onto the shoulders, as if breathing out. Row 11 is the neck.
-function breathe(art: PixelArt, neck = 11): PixelArt {
+function breathe(art: PixelArt, scale: number): PixelArt {
   const empty = ".".repeat(art.pixels[0].length)
-  return { ...art, pixels: [empty, ...art.pixels.slice(0, neck), ...art.pixels.slice(neck + 1)] }
+  const neck = 11 * scale
+  return {
+    ...art,
+    pixels: [
+      ...Array<string>(scale).fill(empty),
+      ...art.pixels.slice(0, neck),
+      ...art.pixels.slice(neck + scale),
+    ],
+  }
 }
 
 export interface Avatar {
@@ -223,14 +233,21 @@ export interface Avatar {
   phase: number
 }
 
-function frames(art: PixelArt) {
-  return { idle: art, blink: blink(art), breathe: breathe(art) }
+export function avatarFrames(art: PixelArt, scale: 1 | 2 = 1): Avatar["frames"] {
+  return { idle: art, blink: blink(art, scale), breathe: breathe(art, scale) }
 }
 
 // Thirteen pixels apart, their hands meet on one shared outline pixel.
 export const avatars: Avatar[] = [
-  { key: "you", name: "You", x: 145, y: 147, frames: frames(you), phase: 0 },
-  { key: "nathaniel", name: "Nathaniel", x: 158, y: 147, frames: frames(nathaniel), phase: 5 },
+  { key: "you", name: "You", x: 145, y: 147, frames: avatarFrames(you), phase: 0 },
+  {
+    key: "nathaniel",
+    name: "Nathaniel",
+    x: 158,
+    y: 147,
+    frames: avatarFrames(nathaniel),
+    phase: 5,
+  },
 ]
 
 export const AVATAR_WIDTH = 16
@@ -239,8 +256,22 @@ export const AVATAR_HEIGHT = 20
 // The prototype keeps its original two-person roster. Home bases opt into these four.
 export const memberAvatarStyles: Avatar[] = [
   ...avatars,
-  { key: "vaibhav", name: "Vaibhav Kapoor", x: 160, y: 147, frames: frames(vaibhav), phase: 11 },
-  { key: "pritesh", name: "Pritesh Parmar", x: 177, y: 147, frames: frames(pritesh), phase: 17 },
+  {
+    key: "vaibhav",
+    name: "Vaibhav Kapoor",
+    x: 160,
+    y: 147,
+    frames: avatarFrames(vaibhav),
+    phase: 11,
+  },
+  {
+    key: "pritesh",
+    name: "Pritesh Parmar",
+    x: 177,
+    y: 147,
+    frames: avatarFrames(pritesh),
+    phase: 17,
+  },
 ]
 
 const memberArtNames = ["mosaab", "nathanael lambert", "vaibhav kapoor", "pritesh parmar"]

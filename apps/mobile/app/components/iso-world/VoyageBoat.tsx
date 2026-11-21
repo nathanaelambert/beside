@@ -4,6 +4,7 @@ import { useDerivedValue, type SharedValue } from "react-native-reanimated"
 import { BOAT_SEAT, rowboat, rowboatFront, type Heading } from "./archipelagoProps"
 import { bitmapImage, artImage, sampling } from "./skia"
 import { voyagePoint, type VoyagePath } from "./voyage"
+import { detailedSpriteBitmap } from "./worldDetailArt"
 import { AVATAR_HEIGHT, AVATAR_WIDTH, type Avatar } from "../pixel-world/avatars"
 
 const headings: Heading[] = ["se", "sw", "ne", "nw"]
@@ -13,11 +14,13 @@ function Hull({
   activeHeading,
   progress,
   front = false,
+  detailed,
 }: {
   heading: Heading
   activeHeading: SharedValue<Heading>
   progress: SharedValue<number>
   front?: boolean
+  detailed: boolean
 }) {
   const first = useDerivedValue(() =>
     activeHeading.value === heading && Math.floor(progress.value * 18) % 2 === 0 ? 1 : 0,
@@ -31,7 +34,7 @@ function Hull({
       {boats.map((boat, index) => (
         <Image
           key={index}
-          image={bitmapImage(boat.bitmap)}
+          image={bitmapImage(detailed ? detailedSpriteBitmap(boat.bitmap, "boat") : boat.bitmap)}
           x={-boat.anchorX}
           y={-boat.anchorY}
           width={boat.bitmap.width}
@@ -48,10 +51,12 @@ export function Boat({
   path,
   progress,
   avatar,
+  detailed = false,
 }: {
   path: VoyagePath
   progress: SharedValue<number>
   avatar: Avatar
+  detailed?: boolean
 }) {
   const point = useDerivedValue(() => voyagePoint(path, progress.value))
   const heading = useDerivedValue<Heading>(() => {
@@ -68,7 +73,13 @@ export function Boat({
   return (
     <Group transform={transform}>
       {headings.map((direction) => (
-        <Hull key={direction} heading={direction} activeHeading={heading} progress={progress} />
+        <Hull
+          key={direction}
+          heading={direction}
+          activeHeading={heading}
+          progress={progress}
+          detailed={detailed}
+        />
       ))}
       <Image
         image={artImage(avatar.frames.idle)}
@@ -84,6 +95,7 @@ export function Boat({
           heading={direction}
           activeHeading={heading}
           progress={progress}
+          detailed={detailed}
           front
         />
       ))}

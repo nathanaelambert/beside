@@ -33,7 +33,7 @@ jest.mock("@/components/iso-world/IsoWorldCanvas", () => ({
     return <View testID="world-canvas" accessibilityLabel={accessibilityLabel} />
   }),
 }))
-jest.mock("@/components/BesideMark", () => ({ PixelArtSprite: () => null }))
+jest.mock("@/components/CottageThumbnail", () => ({ CottageThumbnail: () => null }))
 jest.mock("@/components/RewardSprite", () => ({ RewardSprite: () => null }))
 jest.mock("@/context/AuthContext", () => ({
   useAuth: () => ({ user: { id: "alice" }, logout: jest.fn() }),

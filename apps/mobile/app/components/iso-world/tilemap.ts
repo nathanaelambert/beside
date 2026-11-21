@@ -3,7 +3,8 @@ import { Ground, groundAt, WORLD_HEIGHT, WORLD_WIDTH } from "@beside/api-client/
 import { hash } from "./bitmap"
 import { CELL, LEVEL } from "./projection"
 
-export type TileKind = "grass" | "forest" | "path" | "water" | "sand" | "dock" | "blanket"
+export type TileKind = "grass" | "forest" | "path" | "water" | "sand" | "dock" | "blanket" | "void"
+export type CoastMaterial = "sandstone" | "granite" | "slate"
 
 export interface Tile {
   col: number
@@ -19,12 +20,17 @@ export interface TileMap {
   cols: number
   rows: number
   tiles: Tile[]
+  coast?: CoastMaterial
+  coastFinish?: "picnic-headland"
+  /** Opt-in surface art; tile shape, elevations and placement are unchanged. */
+  art?: "detailed"
 }
 
-export const tileAt = (map: TileMap, col: number, row: number): Tile | undefined =>
-  col < 0 || row < 0 || col >= map.cols || row >= map.rows
-    ? undefined
-    : map.tiles[row * map.cols + col]
+export function tileAt(map: TileMap, col: number, row: number): Tile | undefined {
+  if (col < 0 || row < 0 || col >= map.cols || row >= map.rows) return undefined
+  const tile = map.tiles[row * map.cols + col]
+  return tile?.kind === "void" ? undefined : tile
+}
 
 export const liftFor = (kind: TileKind) => (kind === "forest" ? LEVEL : kind === "water" ? -3 : 0)
 
@@ -73,13 +79,14 @@ export function meadowTileMap(): TileMap {
 /** Build a small hand-authored map from rows of characters (used by the activity vignette). */
 export function tileMapFromRows(rows: string[]): TileMap {
   const kinds: Record<string, TileKind> = {
-    g: "grass",
-    f: "forest",
-    p: "path",
-    w: "water",
-    s: "sand",
-    d: "dock",
-    b: "blanket",
+    ".": "void",
+    "g": "grass",
+    "f": "forest",
+    "p": "path",
+    "w": "water",
+    "s": "sand",
+    "d": "dock",
+    "b": "blanket",
   }
   const tiles = rows.flatMap((line, row) =>
     [...line].map((char, col) => makeTile(col, row, kinds[char] ?? "grass")),

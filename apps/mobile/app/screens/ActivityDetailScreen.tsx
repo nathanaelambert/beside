@@ -18,10 +18,12 @@ import {
 } from "@/components/ActivityWorld"
 import { PixelArtSprite, snapScale } from "@/components/BesideMark"
 import { CottageCountdown } from "@/components/CottageConstruction"
-import { cottageArt, cottageProgressLabel } from "@/components/iso-world/cottageArt"
+import { CottageThumbnail } from "@/components/CottageThumbnail"
+import { cottageProgressLabel } from "@/components/iso-world/cottageArt"
 import { homeActivities } from "@/components/iso-world/homeWorld"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { buildActivityScene, roofForIndex } from "@/components/iso-world/scene"
+import { worldArtAssets } from "@/components/iso-world/worldArtAssets"
 import { MilestoneReward, RewardChip, RewardLanded } from "@/components/MilestoneReward"
 import { avatarsForMembers } from "@/components/pixel-world/avatars"
 import { catalogue } from "@/components/pixel-world/scene"
@@ -306,13 +308,14 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     .join(",")
   const lit = !!currentOccurrence
   const { level, building, seconds } = cottageConstruction(activity ?? {}, now)
-  const previewArt = cottageArt(roofIndex, false, building ?? (level === 1 ? 2 : 3))
+  const previewLevel = building ?? (level === 1 ? 2 : 3)
   const plot = useMemo(
     () =>
       buildActivityScene({
         roof: roofForIndex(roofIndex),
         level,
         constructionSeconds: seconds,
+        cottages: worldArtAssets.cottages,
         lit,
         attendees: memberAvatars.filter((avatar) => attendeeKey.split(",").includes(avatar.key)),
       }),
@@ -501,9 +504,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                 />
               </View>
             </View>
-            <View
-              style={[$cottageProgress, { minHeight: previewArt.pixels.length * snapScale(1) }]}
-            >
+            <View style={[$cottageProgress, { minHeight: 70 * snapScale(1) }]}>
               <View style={$cottageProgressStatus}>
                 {building ? (
                   <CottageCountdown level={building} seconds={seconds} />
@@ -518,7 +519,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
               </View>
               {(building || level < 3) && (
                 <View accessible accessibilityLabel="Next cottage level preview">
-                  <PixelArtSprite art={previewArt} scale={1} />
+                  <CottageThumbnail index={roofIndex} level={previewLevel} />
                 </View>
               )}
             </View>

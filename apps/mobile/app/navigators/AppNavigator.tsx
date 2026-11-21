@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext"
 import { ActivitiesScreen } from "@/screens/ActivitiesScreen"
 import { ActivityCreateScreen } from "@/screens/ActivityCreateScreen"
 import { ActivityDetailScreen } from "@/screens/ActivityDetailScreen"
+import { BayWorkshopScreen } from "@/screens/BayWorkshopScreen"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { HomeBaseScreen } from "@/screens/HomeBaseScreen"
 import { LoginScreen } from "@/screens/LoginScreen"
@@ -87,6 +88,7 @@ const AppStack = () => {
           <Stack.Screen name="Activities" component={ActivitiesScreen} />
           <Stack.Screen name="ActivityCreate" component={ActivityCreateScreen} />
           <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+          <Stack.Screen name="BayWorkshop" component={BayWorkshopScreen} />
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
 
           <Stack.Screen name="Demo" component={DemoNavigator} />

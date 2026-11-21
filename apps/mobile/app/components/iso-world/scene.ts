@@ -2,9 +2,15 @@ import { cottageLevel, type cottageConstruction, type CottageSpriteLevel } from 
 import type { PixelArt } from "@beside/rewards"
 import { rewardItems } from "@beside/rewards"
 
+import { bayCottageArt } from "./bayCottageArt"
 import { hash, type Bitmap } from "./bitmap"
 import { pocketWatchArt } from "./cottageClockArt"
+import { cottageStage, type CottageGrowthArt } from "./cottageGrowthArt"
+import { flowerFamilyArt } from "./flowerFamilyArt"
+import type { FoliageKind } from "./foliageWind"
+import { meadowShrub } from "./meadowArt"
 import { isRaised, paintBlock } from "./paint"
+import { readingBenchTexture } from "./picnicArt"
 import {
   depthOf,
   isoToScreen,
@@ -15,6 +21,8 @@ import {
 } from "./projection"
 import { bush, house, rock, roofColorOrder, type RoofColor, type Sprite } from "./props"
 import { meadowTileMap, tileAt, tileMapFromRows, type TileMap } from "./tilemap"
+import { treeFamilyArt, type TreeFamilyId } from "./treeFamilyArt"
+import { detailedCatalogArt, type TreeArtStage } from "./worldDetailArt"
 import { AVATAR_HEIGHT, AVATAR_WIDTH, type Avatar } from "../pixel-world/avatars"
 
 export const catalogue = new Map(rewardItems.map((item) => [item.id, item]))
@@ -32,6 +40,14 @@ export type DrawableSource =
 export interface Drawable {
   key: string
   source: DrawableSource
+  /** Optional visual-only replacement, fitted to the source's existing sprite bounds. */
+  artAsset?: number
+  /** RGB finish for a loaded texture; the authored bitmap is the unfiltered fallback. */
+  artColorMatrix?: number[]
+  artRows?: readonly number[]
+  treeArt?: { id: TreeFamilyId; stage: TreeArtStage }
+  /** Visual-only idle motion; the saved anchor and hit target are unchanged. */
+  foliage?: FoliageKind
   /** Painter's order; larger draws later (nearer). */
   depth: number
   /** Top-left in map-frame pixels. */
@@ -134,16 +150,35 @@ export function itemDrawable(
   u: number,
   v: number,
   extra: Partial<Drawable> = {},
+  growthStage?: TreeArtStage,
 ): Drawable | undefined {
   const item = catalogue.get(itemId)
   if (!item) return undefined
+  const art = (map.art === "detailed" && detailedCatalogArt(itemId, growthStage)) || item.artifact
+  const tree = map.art === "detailed" ? treeFamilyArt(itemId, growthStage) : undefined
+  const flower = map.art === "detailed" ? flowerFamilyArt(itemId, growthStage) : undefined
+  const bench =
+    map.art === "detailed" && itemId === "reading-bench" ? readingBenchTexture : undefined
+  const rows = tree?.rows ?? flower?.rows
   const lift = liftAt(map, u, v)
   const base = isoToScreen(frame, u, v, lift)
   const x = Math.round(base.x - 16)
   const y = Math.round(base.y - 31)
+  const foliage: FoliageKind | undefined =
+    map.art === "detailed" && extra.opacity === undefined
+      ? item.category === "Trees"
+        ? "tree"
+        : item.category === "Flowers"
+          ? "flower"
+          : undefined
+      : undefined
   return {
     key,
-    source: { type: "art", art: item.artifact },
+    source: { type: "art", art },
+    foliage,
+    artAsset: flower?.asset ?? bench,
+    treeArt: tree && { id: tree.id, stage: tree.stage },
+    artRows: rows,
     depth: depthOf(u, v),
     x,
     y,
@@ -152,7 +187,7 @@ export function itemDrawable(
     baseX: Math.round(base.x),
     baseY: Math.round(base.y),
     shadow: 18,
-    top: y + artTop(item.artifact),
+    top: y + (rows ? rows.findIndex(Boolean) : artTop(art)),
     hit: { type: "item", id: key, itemId },
     ...extra,
   }
@@ -194,15 +229,28 @@ export function houseDrawable(
   roof: RoofColor,
   lit: boolean,
   level: CottageSpriteLevel = 1,
+  cottages?: CottageGrowthArt,
 ) {
   const tile = tileAt(map, col, row)
-  return spriteDrawable(
+  const image = cottageStage(roof, level, cottages)
+  const spriteLevel = image && level === 0 ? 1 : level
+  const result = spriteDrawable(
     frame,
     `house-${key}`,
-    houseSprite(roof, lit, level),
+    map.art === "detailed" || image
+      ? bayCottageArt(roof, spriteLevel, lit)
+      : houseSprite(roof, lit, level),
     { u: col + 0.5, v: row + 0.5, lift: Math.max(0, tile?.lift ?? 0) },
     { hit: { type: "house", id: key } },
   )
+  return image
+    ? {
+        ...result,
+        artAsset: image.asset,
+        artRows: image.rows,
+        top: result.y + Math.max(0, image.rows.findIndex(Boolean)),
+      }
+    : result
 }
 
 /** Raised tiles, plus trees, bushes and rocks on the forest rim (skipping reserved lots). */
@@ -213,6 +261,7 @@ export function terrainDrawables(
   variantSeed = 0,
 ): Drawable[] {
   const result: Drawable[] = []
+  const detailed = map.art === "detailed"
   const salt = Math.floor(variantSeed * 1000000)
   map.tiles.forEach((tile, index) => {
     if (!isRaised(tile)) return
@@ -242,20 +291,22 @@ export function terrainDrawables(
       const tree = itemDrawable(frame, map, key, itemId, at.u, at.v, { hit: undefined })
       if (tree) result.push(tree)
     } else if (roll < 0.86 || (front && roll < 0.5)) {
+      const shrub = cachedSprite(`bush-${roll > 0.7}`, () => bush(roll > 0.7 ? 0.8 : 0.2))
       result.push(
-        spriteDrawable(
-          frame,
-          key,
-          cachedSprite(`bush-${roll > 0.7}`, () => bush(roll > 0.7 ? 0.8 : 0.2)),
-          at,
-        ),
+        detailed
+          ? spriteDrawable(frame, key, { ...shrub, bitmap: meadowShrub(shrub.bitmap) }, at, {
+              foliage: "shrub",
+            })
+          : spriteDrawable(frame, key, shrub, at),
       )
     } else if (front ? roll < 0.75 : true) {
       result.push(
         spriteDrawable(
           frame,
           key,
-          cachedSprite(`rock-${roll > 0.9}`, () => rock(roll > 0.9 ? 0.8 : 0.1)),
+          cachedSprite(`rock-${roll > 0.9}-${detailed}`, () =>
+            rock(roll > 0.9 ? 0.8 : 0.1, detailed),
+          ),
           at,
         ),
       )
@@ -272,11 +323,16 @@ export function opaqueAt(d: Drawable, x: number, y: number) {
   const px = Math.floor(x - d.x)
   const py = Math.floor(y - d.y)
   if (px < 0 || py < 0 || px >= d.width || py >= d.height) return false
+  if (d.artRows) {
+    const span = d.artRows[py] ?? 0
+    return px >= span >> 7 && px < (span & 127)
+  }
   const { source } = d
   if (source.type === "bitmap")
     return source.bitmap.rgba[(py * source.bitmap.width + px) * 4 + 3] !== 0
   const art = source.type === "art" ? source.art : source.avatar.frames.idle
-  return (art.pixels[py]?.[px] ?? ".") !== "."
+  const row = art.pixels[Math.floor((py * art.pixels.length) / d.height)]
+  return !!row && (row[Math.floor((px * row.length) / d.width)] ?? ".") !== "."
 }
 
 /**
@@ -324,12 +380,29 @@ export interface HomeActivity {
   construction?: ReturnType<typeof cottageConstruction>
 }
 
+export type HomeGardenItem = {
+  key: string
+  itemId: string
+  x: number
+  y: number
+  stage?: TreeArtStage
+}
+
 export interface HomeSceneInput {
   variantSeed?: number
   avatars: Avatar[]
   /** Decorations in meadow pixels (bottom-centre anchors). */
-  items: { key: string; itemId: string; x: number; y: number }[]
+  items: HomeGardenItem[]
   activities?: HomeActivity[]
+  assets?: { cottages: CottageGrowthArt }
+}
+
+// Same land cells/elevation and frame; opt into the bay's material treatment.
+const detailedHomeMap: TileMap = {
+  ...meadowTileMap(),
+  art: "detailed",
+  coast: "sandstone",
+  coastFinish: "picnic-headland",
 }
 
 export const homeFrame = (() => {
@@ -358,7 +431,7 @@ function constructionWatch(
   seconds: number,
 ): Drawable {
   const art = pocketWatchArt(seconds)
-  const y = level === 0 ? cottage.baseY - 26 : cottage.top - 1
+  const y = level === 0 && !cottage.artRows ? cottage.baseY - 26 : cottage.top - 1
   return {
     key: `${cottage.key}-clock`,
     source: { type: "art", art },
@@ -378,8 +451,9 @@ export function buildHomeScene({
   items,
   activities = [],
   variantSeed = 0,
+  assets,
 }: HomeSceneInput) {
-  const map = meadowTileMap()
+  const map = detailedHomeMap
   const frame = homeFrame
   const houses = houseLots(activities)
   const reserved = new Set([...houses.map(({ col, row }) => `${col},${row}`)])
@@ -387,7 +461,7 @@ export function buildHomeScene({
     ...terrainDrawables(map, frame, reserved, variantSeed),
     ...items.flatMap((item) => {
       const { u, v } = meadowToIso(item.x, item.y)
-      return itemDrawable(frame, map, item.key, item.itemId, u, v) ?? []
+      return itemDrawable(frame, map, item.key, item.itemId, u, v, {}, item.stage) ?? []
     }),
     ...avatars.map((avatar) => {
       const { u, v } = meadowToIso(avatar.x, homeAvatarY(avatar.y))
@@ -395,7 +469,17 @@ export function buildHomeScene({
     }),
     ...houses.flatMap(({ activity, col, row, roof }) => {
       const level = activity.construction?.level ?? cottageLevel(activity.cottageMilestones)
-      const cottage = houseDrawable(frame, map, activity.id, col, row, roof, !!activity.open, level)
+      const cottage = houseDrawable(
+        frame,
+        map,
+        activity.id,
+        col,
+        row,
+        roof,
+        !!activity.open,
+        level,
+        assets?.cottages,
+      )
       return activity.construction?.building
         ? [cottage, constructionWatch(cottage, level, activity.construction.seconds)]
         : [cottage]
@@ -432,14 +516,16 @@ export function buildActivityScene({
   level = 1,
   constructionSeconds = 0,
   attendees,
+  cottages,
 }: {
   roof: RoofColor
   lit: boolean
   level?: CottageSpriteLevel
   constructionSeconds?: number
   attendees: Avatar[]
+  cottages?: CottageGrowthArt
 }) {
-  const cottage = houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit, level)
+  const cottage = houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit, level, cottages)
   const drawables: Drawable[] = [
     ...terrainDrawables(plotMap, plotFrame, new Set(["1,1"])),
     cottage,

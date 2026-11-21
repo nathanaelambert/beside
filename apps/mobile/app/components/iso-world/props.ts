@@ -4,6 +4,7 @@
 import type { CottageSpriteLevel } from "@beside/api-client"
 
 import { createBitmap, outline, put, type Bitmap } from "./bitmap"
+import { shorelineBoulderColor } from "./coastArt"
 import { HALF_H, HALF_W } from "./projection"
 
 export interface Sprite {
@@ -356,7 +357,7 @@ export function bush(seed: number): Sprite {
 }
 
 /** A lumpy grey boulder with a lit top, sitting in its own shadow. */
-export function rock(seed: number): Sprite {
+export function rock(seed: number, detailed = false): Sprite {
   const W = 18
   const H = 14
   const bitmap = createBitmap(W, H)
@@ -376,13 +377,13 @@ export function rock(seed: number): Sprite {
         const lit = -nx * 0.45 - ny * 0.85 + Math.sqrt(1 - d * d) * 0.4
         best = Math.max(best, lit > 0.75 ? 3 : lit > 0.35 ? 2 : lit > -0.05 ? 1 : 0)
       }
-      if (best >= 0) put(bitmap, x, y, tones[best]!)
+      if (best >= 0) put(bitmap, x, y, detailed ? shorelineBoulderColor(x, y, best) : tones[best]!)
     }
   if (seed > 0.4) {
     put(bitmap, 5, 6, "#7fa65a")
     put(bitmap, 6, 6, "#7fa65a")
     put(bitmap, 6, 5, "#9ccb73")
   }
-  outline(bitmap, "#3b3f45")
+  outline(bitmap, detailed ? "#464739" : "#3b3f45")
   return { bitmap, anchorX: W / 2, anchorY: H - 2 }
 }

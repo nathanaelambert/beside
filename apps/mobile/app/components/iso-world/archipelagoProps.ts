@@ -3,9 +3,12 @@
 // Same rules as props.ts: procedural, top-left light, 1px dark outline, no anti-aliasing.
 
 import { createBitmap, hash, isSet, outline, put, type Bitmap } from "./bitmap"
+import { shorelineBoulderColor } from "./coastArt"
+import { harborBoardColor, harborLamp, harborTimber } from "./harborArt"
 import { SLAB } from "./paint"
 import { HALF_H, HALF_W } from "./projection"
 import { fillPolygon, type Point, type Sprite } from "./props"
+import { shoreFoamColor } from "./waterArt"
 
 const wood = {
   dark: "#3a2820",
@@ -277,18 +280,20 @@ export const MOORING = { u: JETTY.u + 1.5, v: JETTY.v + 0.82 }
 /** The boat sits on the sea, which is SLAB pixels below the island's lawn. */
 export const SEA_LIFT = -SLAB
 
-let jettySprite: Sprite | undefined
+const jettySprites = new Map<boolean, Sprite>()
 /**
  * A plank jetty from the cliff edge out over the sea, on posts. Anchor = where the deck
  * meets the island edge (u = JETTY.u, v = JETTY.v, ground level).
  */
-export function jetty(): Sprite {
-  if (jettySprite) return jettySprite
+export function jetty(detailed = false): Sprite {
+  const cached = jettySprites.get(detailed)
+  if (cached) return cached
+  const timber = detailed ? harborTimber : wood
   const W = 80
   const H = 64
   const ax = 14
   const ay = 22
-  jettySprite = sketch(W, H, ax, ay, (bitmap) => {
+  const sprite = sketch(W, H, ax, ay, (bitmap) => {
     const P = (u: number, v: number, h: number): Point => [
       ax + (u - v) * HALF_W,
       ay + (u + v) * HALF_H - h,
@@ -300,8 +305,8 @@ export function jetty(): Sprite {
       const b = P(u, v, -SLAB + 1)
       for (let y = Math.round(a[1]); y <= Math.round(b[1]); y++) {
         const wet = y > b[1] - 4
-        put(bitmap, Math.round(a[0]), y, wet ? wood.wet : near ? wood.shade : wood.dark)
-        put(bitmap, Math.round(a[0]) + 1, y, wet ? wood.wet : near ? wood.dark : wood.dark)
+        put(bitmap, Math.round(a[0]), y, wet ? timber.wet : near ? timber.shade : timber.dark)
+        put(bitmap, Math.round(a[0]) + 1, y, wet ? timber.wet : timber.dark)
       }
       // A ring of foam where it meets the sea.
       put(bitmap, Math.round(b[0]) - 1, Math.round(b[1]) + 1, foam[0])
@@ -317,7 +322,7 @@ export function jetty(): Sprite {
         P(JETTY_LENGTH, half, -deck - 1),
         P(0, half, -deck - 1),
       ],
-      () => wood.dark,
+      () => timber.dark,
     )
     fillPolygon(
       bitmap,
@@ -327,7 +332,7 @@ export function jetty(): Sprite {
         P(JETTY_LENGTH, half, -deck - 1),
         P(JETTY_LENGTH, -half, -deck - 1),
       ],
-      () => wood.shade,
+      () => timber.shade,
     )
     fillPolygon(
       bitmap,
@@ -339,6 +344,10 @@ export function jetty(): Sprite {
         const u = (px / HALF_W + py / HALF_H) / 2
         const board = Math.floor(u * 7)
         const within = u * 7 - board
+        if (detailed) {
+          const v = (py / HALF_H - px / HALF_W) / 2
+          return harborBoardColor(board, (v + half) / (2 * half), within)
+        }
         if (within < 0.16) return wood.shade
         const tone = hash(board, 3, 81)
         return tone > 0.7 ? wood.edge : tone > 0.3 ? wood.pale : wood.light
@@ -348,30 +357,39 @@ export function jetty(): Sprite {
     // Mooring bollard with a rope coil at the end.
     const b = P(JETTY_LENGTH - 0.2, half - 0.12, 0)
     for (let y = -5; y <= 0; y++) {
-      put(bitmap, Math.round(b[0]), Math.round(b[1]) + y, y === -5 ? wood.edge : wood.mid)
-      put(bitmap, Math.round(b[0]) + 1, Math.round(b[1]) + y, wood.shade)
+      put(bitmap, Math.round(b[0]), Math.round(b[1]) + y, y === -5 ? timber.edge : timber.mid)
+      put(bitmap, Math.round(b[0]) + 1, Math.round(b[1]) + y, timber.shade)
     }
     put(bitmap, Math.round(b[0]) - 1, Math.round(b[1]) - 2, "#d9c9a8")
     put(bitmap, Math.round(b[0]) + 2, Math.round(b[1]) - 2, "#d9c9a8")
     put(bitmap, Math.round(b[0]) + 2, Math.round(b[1]) - 1, "#b99f78")
     // A lantern post near the island end, so the jetty reads from far away.
     const l = P(0.35, -half + 0.08, 0)
-    for (let y = -14; y <= 0; y++) put(bitmap, Math.round(l[0]), Math.round(l[1]) + y, wood.dark)
+    for (let y = -14; y <= 0; y++)
+      put(
+        bitmap,
+        Math.round(l[0]),
+        Math.round(l[1]) + y,
+        detailed && y % 5 !== 0 ? timber.mid : timber.dark,
+      )
+    const rim = detailed ? harborLamp.metal : "#3b2a2e"
+    const amber = detailed ? harborLamp.amber : "#f2c96b"
     for (const [dx, dy, c] of [
-      [-1, -17, "#3b2a2e"],
-      [0, -17, "#3b2a2e"],
-      [1, -17, "#3b2a2e"],
-      [-1, -16, "#f2c96b"],
-      [0, -16, "#fff4cf"],
-      [1, -16, "#f2c96b"],
-      [-1, -15, "#f2c96b"],
-      [0, -15, "#f6d77a"],
-      [1, -15, "#e0a84a"],
+      [-1, -17, rim],
+      [0, -17, rim],
+      [1, -17, rim],
+      [-1, -16, amber],
+      [0, -16, detailed ? harborLamp.flame : "#fff4cf"],
+      [1, -16, amber],
+      [-1, -15, amber],
+      [0, -15, detailed ? harborLamp.amber : "#f6d77a"],
+      [1, -15, detailed ? harborLamp.ember : "#e0a84a"],
     ] as const)
       put(bitmap, Math.round(l[0]) + dx, Math.round(l[1]) + dy, c)
     outline(bitmap, OUTLINE)
   })
-  return jettySprite
+  jettySprites.set(detailed, sprite)
+  return sprite
 }
 
 // --- Open water ------------------------------------------------------------------------------
@@ -403,8 +421,8 @@ export function buoy(frame: 0 | 1): Sprite {
 }
 
 /** A low rock in the sea, sometimes with a resting gull. Anchor = waterline centre. */
-export function seaRock(seed: number): Sprite {
-  const key = `rock-${seed.toFixed(3)}`
+export function seaRock(seed: number, detailed = false): Sprite {
+  const key = `rock-${seed.toFixed(3)}-${detailed}`
   const cached = boatCache.get(key)
   if (cached) return cached
   const W = 26
@@ -426,7 +444,15 @@ export function seaRock(seed: number): Sprite {
         const lit = -nx * 0.45 - ny * 0.85 + Math.sqrt(1 - d * d) * 0.4
         best = Math.max(best, lit > 0.75 ? 3 : lit > 0.35 ? 2 : lit > -0.05 ? 1 : 0)
       }
-      if (best >= 0) put(bitmap, x, y, y >= H - 4 ? "#3f4a4f" : tones[best]!)
+      if (best >= 0) {
+        const atWaterline = y >= H - 4
+        const stone = detailed
+          ? shorelineBoulderColor(x, y, best, atWaterline)
+          : atWaterline
+            ? "#3f4a4f"
+            : tones[best]!
+        put(bitmap, x, y, stone)
+      }
     }
   if (seed > 0.45) {
     // A gull: white body, grey wing, yellow beak.
@@ -444,7 +470,13 @@ export function seaRock(seed: number): Sprite {
   outline(bitmap, OUTLINE)
   // Foam where the rock meets the sea, left unoutlined so it reads as water.
   for (let x = 3; x < W - 3; x++)
-    if (hash(x, 1, 97) > 0.35) put(bitmap, x, H - 3, x % 3 === 0 ? foam[1] : foam[0])
+    if (hash(x, 1, 97) > 0.35)
+      put(
+        bitmap,
+        x,
+        H - 3,
+        detailed ? shoreFoamColor(x, H - 3, 1.6) : x % 3 === 0 ? foam[1] : foam[0],
+      )
   const sprite = { bitmap, anchorX: W / 2, anchorY: H - 3 }
   boatCache.set(key, sprite)
   return sprite
