@@ -5,6 +5,7 @@ import type { CottageSpriteLevel } from "@beside/api-client"
 
 import { createBitmap, outline, put, type Bitmap } from "./bitmap"
 import { shorelineBoulderColor } from "./coastArt"
+import { compactGroundProp } from "./groundPropArt"
 import { HALF_H, HALF_W } from "./projection"
 
 export interface Sprite {
@@ -385,5 +386,7 @@ export function rock(seed: number, detailed = false): Sprite {
     put(bitmap, 6, 5, "#9ccb73")
   }
   outline(bitmap, detailed ? "#464739" : "#3b3f45")
-  return { bitmap, anchorX: W / 2, anchorY: H - 2 }
+  // Keep the wide, damp foot and step down only the upper limestone facets.
+  const finish = detailed ? compactGroundProp(bitmap, [3, 5, 7, 8, 9, 10], 11, 1) : bitmap
+  return { bitmap: finish, anchorX: W / 2, anchorY: H - 2 }
 }

@@ -5,6 +5,7 @@ import { type Bitmap } from "./bitmap"
 import { paintBlock, paintGround, seaTile } from "./paint"
 import { mapFrame } from "./projection"
 import { bush, rock } from "./props"
+import { hitTest, itemDrawable, opaqueAt, type Drawable } from "./scene"
 import { tileAt, tileMapFromRows, type CoastMaterial } from "./tilemap"
 import {
   detailedCatalogArt,
@@ -21,6 +22,13 @@ const artMask = ({ pixels }: PixelArt) =>
 const alpha = ({ rgba }: Bitmap) => rgba.filter((_, i) => i % 4 === 3)
 const occupiedRows = (art: PixelArt) =>
   art.pixels.flatMap((row, y) => (row.includes(".") && /^\.+$/.test(row) ? [] : [y]))
+const compactKeepsakes = [
+  ["owl-statue", 17, 27],
+  ["star-statue", 17, 27],
+  ["rose-pennant", 19, 26],
+  ["blue-banner", 19, 26],
+] as const
+const compactIds = new Set<string>(["stone-lantern", ...compactKeepsakes.map(([id]) => id)])
 
 it("has distinct detailed art for each of the twelve current catalog props", () => {
   expect(rewardItems).toHaveLength(12)
@@ -29,12 +37,62 @@ it("has distinct detailed art for each of the twelve current catalog props", () 
     expect(detailed).not.toEqual(artifact)
     expect(detailed.pixels).toHaveLength(32)
     expect(detailed.pixels.every((row) => row.length === 32)).toBe(true)
-    expect(artMask(detailed)).toEqual(artMask(artifact))
+    // The shorter props deliberately change their upper masks, not their feet.
+    if (!compactIds.has(id)) expect(artMask(detailed)).toEqual(artMask(artifact))
     expect(detailedRewardArt(artifact)).toBe(detailed)
     expect(detailedCatalogArt(id)).toBe(detailed)
   }
   expect(detailedCatalogArt("missing")).toBeUndefined()
 })
+
+it.each(compactKeepsakes)(
+  "keeps %s registered, shorter, and selectable on the painted pixels",
+  (id, height, foot) => {
+    const map = tileMapFromRows(["ggg", "ggg", "ggg"])
+    const frame = mapFrame(map.cols, map.rows)
+    const original = rewardItems.find((item) => item.id === id)!.artifact
+    const art = detailedCatalogArt(id)!
+    const plain = itemDrawable(frame, map, id, id, 1.5, 1.5)!
+    const compact = itemDrawable(frame, { ...map, art: "detailed" }, id, id, 1.5, 1.5)!
+    const registration = ({ x, y, baseX, baseY, width, height, depth, hit, shadow }: Drawable) => ({
+      x,
+      y,
+      baseX,
+      baseY,
+      width,
+      height,
+      depth,
+      hit,
+      shadow,
+    })
+    const visible = occupiedRows(art)
+    expect(visible.at(-1)! - visible[0]! + 1).toBe(height)
+    expect(artMask(art).slice(foot)).toEqual(artMask(original).slice(foot))
+    expect(plain.source).toEqual({ type: "art", art: original })
+    expect(compact.source).toEqual({ type: "art", art })
+    expect(registration(compact)).toEqual(registration(plain))
+    expect(compact.foliage).toBeUndefined()
+    expect(hasGrowthArt(id)).toBe(false)
+    for (const row of [visible[0]! + 5, visible.at(-1)!]) {
+      const x = compact.x + art.pixels[row]!.search(/[^.]/)
+      const y = compact.y + row
+      expect(opaqueAt(compact, x, y)).toBe(true)
+      expect(hitTest([compact], x, y, 12)).toEqual(compact.hit)
+    }
+
+    const highest = occupiedRows(original)[0]!
+    const x = plain.x + original.pixels[highest]!.search(/[^.]/)
+    const y = plain.y + highest
+    const behind = {
+      ...plain,
+      depth: plain.depth - 1,
+      hit: { type: "avatar", id: "neighbor" },
+    } as const
+    expect(opaqueAt(plain, x, y)).toBe(true)
+    expect(opaqueAt(compact, x, y)).toBe(false)
+    expect(hitTest([compact, behind], x, y, 12)).toEqual(behind.hit)
+  },
+)
 
 it("keeps the same ground row for all stages of each tree and flower", () => {
   const plants = rewardItems.filter(({ id }) => hasGrowthArt(id))

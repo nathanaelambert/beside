@@ -3,7 +3,8 @@ import { rewardItems } from "@beside/rewards"
 
 import { buoy, islandSign, jetty, rowboat, seaRock } from "./archipelagoProps"
 import { put } from "./bitmap"
-import type { CottageGrowthArt } from "./cottageGrowthArt"
+import { cottageLayers } from "./cottageDepth"
+import { cottageStage, type CottageGrowthArt } from "./cottageGrowthArt"
 import { jettyTimberGrade } from "./harborArt"
 import { recolorTerrain } from "./islandPalettes"
 import { mapFrame, screenToIso } from "./projection"
@@ -82,12 +83,29 @@ const memberSpots = [
 const visitors = memberAvatarStyles.map((avatar, i) => ({ ...avatar, name: `Visitor ${i + 1}` }))
 const detailedVisitors = visitors.map(detailedAvatar)
 const harborProps = [
-  { id: "boat", sprite: rowboat(0), u: 8.25, v: 5.9, lift: -3 },
-  { id: "buoy", sprite: buoy(0), u: 8.8, v: 7.35, lift: -3 },
-  { id: "sea-rock", sprite: seaRock(0.68), u: 7.85, v: 9, lift: -3 },
-  { id: "sign", sprite: islandSign("Beside Bay"), u: 7.5, v: 2.4, lift: 0 },
+  {
+    id: "boat",
+    sprite: (detailed: boolean) => rowboat(0, "se", detailed),
+    u: 8.25,
+    v: 5.9,
+    lift: -3,
+  },
+  { id: "buoy", sprite: (detailed: boolean) => buoy(0, detailed), u: 8.8, v: 7.35, lift: -3 },
+  {
+    id: "sea-rock",
+    sprite: (detailed: boolean) => seaRock(0.68, detailed),
+    u: 7.85,
+    v: 9,
+    lift: -3,
+  },
+  {
+    id: "sign",
+    sprite: (detailed: boolean) => islandSign("Beside Bay", false, detailed),
+    u: 7.5,
+    v: 2.4,
+    lift: 0,
+  },
 ] as const
-const detailedHarborRock = seaRock(0.68, true)
 
 const blossoms = {
   terracotta: ["#ba6575", "#f2afb3"],
@@ -214,12 +232,7 @@ export function buildBayScene(
     extraDrawables.push(decoration("bay-sample", sampleId, 4.15, 7.5, treeStage))
   } else if (view === "harbor") {
     for (const prop of harborProps) {
-      const drawable = spriteDrawable(
-        frame,
-        `bay-harbor-${prop.id}`,
-        prop.id === "sea-rock" && detailed ? detailedHarborRock : prop.sprite,
-        prop,
-      )
+      const drawable = spriteDrawable(frame, `bay-harbor-${prop.id}`, prop.sprite(detailed), prop)
       extraDrawables.push(
         prop.id === "sea-rock" ? drawable : refineDecoration(drawable, detailed, prop.id),
       )
@@ -237,7 +250,10 @@ export function buildBayScene(
   const drawables = sortDrawables(
     [
       ...terrain,
-      cottage,
+      ...cottageLayers(
+        cottage,
+        cottageStage(roof, level, detailed ? assets?.cottages : undefined)?.depthLayers,
+      ),
       pier,
       oak,
       decoration("bay-blooms", "pink-tulip", 2.1, 5.8),

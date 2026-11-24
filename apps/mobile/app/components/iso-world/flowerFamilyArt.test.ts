@@ -5,6 +5,7 @@ import { flowerFamilyArt } from "./flowerFamilyArt"
 import { foliageBands } from "./foliageWind"
 import { buildHomeScene, itemDrawable, opaqueAt, type Drawable } from "./scene"
 import { treeArtStages } from "./worldDetailArt"
+import { AVATAR_HEIGHT } from "../pixel-world/avatars"
 
 const flowerIds = rewardItems.filter((item) => item.category === "Flowers").map((item) => item.id)
 const placement = ({ x, y, width, height, baseX, baseY, depth, shadow, hit }: Drawable) => ({
@@ -59,6 +60,19 @@ it.each(flowerIds)("%s uses the same rooted flower art in Home Base and Bay Work
   expect(tops[0]).toBeGreaterThan(tops[1]!)
   expect(tops[1]).toBeGreaterThan(tops[2]!)
   expect(flowerFamilyArt(id)).toBe(flowerFamilyArt(id, "mature"))
+})
+
+it("keeps the tulip compact and the lavender taller without exceeding the avatar scale", () => {
+  const heights = (id: string) =>
+    treeArtStages.map((stage) => {
+      const rows = flowerFamilyArt(id, stage)!.rows
+      return rows.length - 2 - rows.findIndex(Boolean)
+    })
+
+  expect(heights("pink-tulip")).toEqual([7, 12, 15])
+  expect(heights("lavender")).toEqual([8, 13, 18])
+  expect(heights("sunflower")).toEqual([8, 13, 17])
+  expect(Math.max(...flowerIds.flatMap(heights))).toBeLessThan(AVATAR_HEIGHT)
 })
 
 it("leaves the tree and prop art paths alone, and keeps the flower placement ghost still", () => {

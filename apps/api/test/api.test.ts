@@ -669,6 +669,7 @@ describe(
       assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);
       const garden = results.find(({ status }) => status === 200)!.body;
       assert.equal(garden.oak.itemId, "oak-tree");
+      assert.ok(Number.isFinite(Date.parse(garden.oak.growthStartedAt)));
       await get(bob).expect(200, garden);
       await plant(alice, garden.oak.x, garden.oak.y).expect(200, garden);
       await get(stranger).expect(404);
@@ -775,6 +776,10 @@ describe(
       await place(alice, spot!.x, spot!.y + 1).expect(400); // Off the grid.
       await place(stranger, spot!.x, spot!.y).expect(404);
       const placed = (await place(alice, spot!.x, spot!.y).expect(200)).body;
+      assert.equal(
+        placed.rewards[0].growthStartedAt,
+        placed.rewards[0].placedAt,
+      );
       assert.deepEqual(
         placed.rewards.map(
           (r: {
@@ -797,6 +802,10 @@ describe(
         .send(spot)
         .expect(400);
       const moved = (await place(bob, other!.x, other!.y).expect(200)).body;
+      assert.equal(
+        moved.rewards[0].growthStartedAt,
+        placed.rewards[0].growthStartedAt,
+      );
       assert.deepEqual(
         [
           moved.rewards[0].x,

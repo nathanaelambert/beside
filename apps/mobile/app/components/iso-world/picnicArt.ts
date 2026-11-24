@@ -14,20 +14,32 @@ export const picnicClothRamp = [
 
 /** Three checks per world tile, so the warp carries across even and odd tiles. */
 export function wovenBlanketColor(u: number, v: number, edgeU: number, edgeV: number, hem: number) {
-  const [binding, edge, stitch, dyed, mixed, mixedThread, linenThread, linen] = picnicClothRamp
+  const [binding, edge, stitch, dyed, mixed, , , linen] = picnicClothRamp
   const nearest = Math.min(edgeU, edgeV)
   if (nearest < hem) {
     if (nearest < hem * 0.47) return binding
     const along = edgeU < edgeV ? v : u
-    return Math.floor(along * 24) % 3 === 1 ? stitch : edge
+    // Two adjacent steps read as a short stitch, not a second continuous border.
+    const step = Math.floor(along * 16) % 5
+    return step === 2 || step === 3 ? stitch : edge
   }
 
   const dyedThreads = (Math.floor(u * 3) % 2) + (Math.floor(v * 3) % 2)
-  // One short warp frequency, quieter than the hem at the edge of the cloth.
-  const thread = Math.floor(u * 16) % 10 === 2 && Math.floor(v * 16) % 10 < 4
-  if (dyedThreads === 2) return thread ? mixed : dyed
-  if (dyedThreads === 1) return thread ? mixedThread : mixed
-  return thread ? linenThread : linen
+  // Keep the broad checks flat; the native finish adds the smaller weave.
+  return dyedThreads === 2 ? dyed : dyedThreads === 1 ? mixed : linen
+}
+
+/** Short crossed strands, aligned to the cloth's isometric axes rather than the viewport. */
+export function linenGrain(u: number, v: number, hem: boolean) {
+  if (hem) return 0 // Give the existing inner stitches their own space.
+  const across = Math.floor(v * 32)
+  const band = Math.floor(across / 16) % 2
+  const warp = (Math.floor(u * 32) + band * 7) % 18
+  const weft = across % 16
+  if (warp >= 3 && warp <= 8 && (weft === 5 || weft === 6)) return 12
+  if (warp >= 4 && warp <= 8 && weft === 7) return -8
+  if (band === 0 && (warp === 12 || warp === 13) && weft >= 10 && weft <= 13) return 8
+  return 0
 }
 
 // Render the 3× finish only in the world; lists, fallback and all hits use the same logical art.

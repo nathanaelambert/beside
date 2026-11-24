@@ -2,7 +2,7 @@ import { bayFrame, bayTerrain, buildBayScene } from "./bayWorkshop"
 import { rgb, type Bitmap } from "./bitmap"
 import { islandPalettes, recolor } from "./islandPalettes"
 import { paintGround, palette } from "./paint"
-import { picnicClothRamp, readingBenchTexture, wovenBlanketColor } from "./picnicArt"
+import { linenGrain, picnicClothRamp, readingBenchTexture, wovenBlanketColor } from "./picnicArt"
 import { mapFrame } from "./projection"
 import { buildHomeScene, hitTest, itemDrawable, opaqueAt, type Drawable } from "./scene"
 import { tileMapFromRows } from "./tilemap"
@@ -39,6 +39,22 @@ it("alternates check color across neighboring tiles and only stitches where ther
   expect(wovenBlanketColor(1.14, 0.18, 1, 1, 0.07)).not.toBe(interior)
   expect(wovenBlanketColor(0.14, 0.18, 0.01, 1, 0.07)).toBe(picnicClothRamp[0])
   expect(wovenBlanketColor(0.14, 0.18, 0.044, 1, 0.07)).toBe(picnicClothRamp[2])
+  expect(wovenBlanketColor(0.14, 0.21, 0.044, 1, 0.07)).toBe(picnicClothRamp[2])
+  expect(wovenBlanketColor(0.14, 0.26, 0.044, 1, 0.07)).toBe(picnicClothRamp[1])
+  expect(wovenBlanketColor(0.46, 0.46, 1, 1, 0.07)).toBe(picnicClothRamp[3])
+  expect(wovenBlanketColor(0.46, 0.18, 1, 1, 0.07)).toBe(picnicClothRamp[4])
+  expect(interior).toBe(picnicClothRamp[7])
+})
+
+it("groups the native weave into short muted strands and leaves the hem finish unlayered", () => {
+  const shade = (u: number, v: number, hem = false) =>
+    linenGrain((u + 0.5) / 32, (v + 0.5) / 32, hem)
+
+  // Woven pair and its trailing shadow, with a gap before the next motif.
+  expect([2, 3, 4, 5, 6, 7, 8, 9].map((u) => shade(u, 5))).toEqual([0, 12, 12, 12, 12, 12, 12, 0])
+  expect([4, 5, 6, 7, 8, 9].map((u) => shade(u, 7))).toEqual([-8, -8, -8, -8, -8, 0])
+  expect([9, 10, 11, 12, 13, 14].map((v) => shade(12, v))).toEqual([0, 8, 8, 8, 8, 0])
+  expect(shade(5, 5, true)).toBe(0)
 })
 
 const place = ({ key, depth, x, y, baseX, baseY, top, width, height, hit, shadow }: Drawable) => ({

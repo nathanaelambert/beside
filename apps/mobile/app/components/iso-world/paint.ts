@@ -16,7 +16,7 @@ import { harborBoardColor } from "./harborArt"
 import { meadowSurfaceColor } from "./meadowArt"
 import { pondSandColor, stonePathColor } from "./pavingArt"
 import { wovenBlanketColor } from "./picnicArt"
-import { HALF_W, isoToScreen, screenToIso, TILE_H, type MapFrame } from "./projection"
+import { HALF_H, HALF_W, isoToScreen, screenToIso, TILE_H, type MapFrame } from "./projection"
 import { tileAt, type Tile, type TileKind, type TileMap } from "./tilemap"
 import { paintOpenWater, pondWaterColor } from "./waterArt"
 
@@ -45,7 +45,7 @@ const pick = <T>(colors: readonly T[], t: number) =>
   colors[Math.max(0, Math.min(colors.length - 1, Math.floor(t * colors.length)))]!
 
 /** Distance to a tile of the opposite water/land kind, measured inside this tile. */
-function waterEdgeDistance(map: TileMap, tile: Tile, u: number, v: number) {
+export function waterEdgeDistance(map: TileMap, tile: Tile, u: number, v: number) {
   const water = tile.kind === "water"
   const changesAt = (col: number, row: number) =>
     (tileAt(map, col, row)?.kind === "water") !== water
@@ -57,9 +57,31 @@ function waterEdgeDistance(map: TileMap, tile: Tile, u: number, v: number) {
   )
 }
 
+// One horizontal or vertical screen pixel decoded onto the tile plane.
+const pathDx = 1 / (2 * HALF_W)
+const pathDy = 1 / (2 * HALF_H)
+
+function exposedPathEdge(map: TileMap, tile: Tile, u: number, v: number) {
+  if (u >= pathDy && u < 1 - pathDy && v >= pathDy && v < 1 - pathDy) return false
+  const hasPaving = (du: number, dv: number) => {
+    const dc = Math.floor(u + du)
+    const dr = Math.floor(v + dv)
+    if (dc === 0 && dr === 0) return true
+    const neighbor = tileAt(map, tile.col + dc, tile.row + dr)
+    return neighbor?.kind === "path" && neighbor.lift === tile.lift
+  }
+  return (
+    !hasPaving(pathDx, -pathDx) ||
+    !hasPaving(-pathDx, pathDx) ||
+    !hasPaving(pathDy, pathDy) ||
+    !hasPaving(-pathDy, -pathDy)
+  )
+}
+
 function topColor(map: TileMap, tile: Tile, fu: number, fv: number, x: number, y: number) {
   const kind: TileKind = tile.kind
   const detailed = map.art === "detailed"
+  const homeFinish = map.surfaceFinish === "fine-grain"
   // Edges that drop away get a lit rim, like the reference tiles' bevel.
   const backEdge = fu < 1 / 16 || fv < 1 / 16
   const meadow = kind === "grass" || kind === "forest" || kind === "blanket"
@@ -71,10 +93,14 @@ function topColor(map: TileMap, tile: Tile, fu: number, fv: number, x: number, y
     const rim =
       (fu < 0.07 && tileAt(map, tile.col - 1, tile.row)?.lift !== tile.lift) ||
       (fv < 0.07 && tileAt(map, tile.col, tile.row - 1)?.lift !== tile.lift)
-    return meadowSurfaceColor(x, y, kind === "forest", rim)
+    return meadowSurfaceColor(x, y, kind === "forest", rim, homeFinish)
   }
-  if (detailed && kind === "path") return stonePathColor(tile.col + fu, tile.row + fv, x, y)
-  if (detailed && kind === "sand") return pondSandColor(x, y, waterEdgeDistance(map, tile, fu, fv))
+  if (detailed && kind === "path") {
+    return stonePathColor(tile.col + fu, tile.row + fv, x, y, exposedPathEdge(map, tile, fu, fv))
+  }
+  if (detailed && kind === "sand") {
+    return pondSandColor(x, y, waterEdgeDistance(map, tile, fu, fv), homeFinish)
+  }
   if (detailed && kind === "water")
     return pondWaterColor(x, y, waterEdgeDistance(map, tile, fu, fv))
   const n = noise(x, y, 9, 1) * 0.55 + noise(x, y, 23, 2) * 0.45 + (tile.seed - 0.5) * 0.16
@@ -177,8 +203,12 @@ function sideColor(face: "left" | "right", tile: Tile, depth: number, x: number,
   return n > 0.62 ? set[1]! : set[0]!
 }
 
-/** Paint a tile's top face. `ox`/`oy` shift the output (for standalone block bitmaps). */
-function paintTop(bitmap: Bitmap, frame: MapFrame, map: TileMap, tile: Tile, ox = 0, oy = 0) {
+/** Visit the same logical texels whether painting the base or finishing its surface. */
+export function visitTileTop(
+  frame: MapFrame,
+  tile: Tile,
+  visit: (x: number, y: number, u: number, v: number) => void,
+) {
   const top = isoToScreen(frame, tile.col, tile.row, tile.lift)
   const x0 = Math.floor(top.x - HALF_W)
   const y0 = Math.floor(top.y)
@@ -186,13 +216,15 @@ function paintTop(bitmap: Bitmap, frame: MapFrame, map: TileMap, tile: Tile, ox 
     for (let x = x0; x < x0 + HALF_W * 2; x++) {
       const p = screenToIso(frame, x + 0.5, y + 0.5, tile.lift)
       if (Math.floor(p.u) !== tile.col || Math.floor(p.v) !== tile.row) continue
-      put(
-        bitmap,
-        x - ox,
-        y - oy,
-        topColor(map, tile, p.u - tile.col, p.v - tile.row, x, y + tile.lift),
-      )
+      visit(x, y, p.u - tile.col, p.v - tile.row)
     }
+}
+
+/** Paint a tile's top face. `ox`/`oy` shift the output (for standalone block bitmaps). */
+function paintTop(bitmap: Bitmap, frame: MapFrame, map: TileMap, tile: Tile, ox = 0, oy = 0) {
+  visitTileTop(frame, tile, (x, y, u, v) =>
+    put(bitmap, x - ox, y - oy, topColor(map, tile, u, v, x, y + tile.lift)),
+  )
 }
 
 /** Paint the two front faces wherever this tile stands above its neighbour (or the void). */

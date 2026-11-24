@@ -5,6 +5,10 @@ export const additionalCottageArt = {
   teal: {
     1: {
       asset: require("@assets/images/cottage-growth/woodland/starter.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/woodland/starter-rear.png") as number,
+        bounds: [9, 31, 22, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2844, 2844,
         2850, 2852, 2726, 2729, 2730, 2731, 2732, 2732, 2733, 2734, 2607, 2480, 2353, 2226, 2098,
@@ -14,6 +18,10 @@ export const additionalCottageArt = {
     },
     2: {
       asset: require("@assets/images/cottage-growth/woodland/wing.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/woodland/wing-rear.png") as number,
+        bounds: [8, 31, 21, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3097, 2843, 2721,
         2851, 2725, 2727, 2729, 2730, 2730, 2732, 2732, 2741, 2614, 2488, 2361, 2235, 2108, 2109,
@@ -23,6 +31,10 @@ export const additionalCottageArt = {
     },
     3: {
       asset: require("@assets/images/cottage-growth/woodland/loft.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/woodland/loft-rear.png") as number,
+        bounds: [8, 30, 21, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4132, 4134, 4008, 4010, 3882,
         2732, 2732, 2733, 2735, 2607, 2608, 2609, 2608, 2607, 2607, 2613, 2614, 2488, 2361, 2235,
@@ -34,6 +46,10 @@ export const additionalCottageArt = {
   plum: {
     1: {
       asset: require("@assets/images/cottage-growth/plum/starter.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/plum/starter-rear.png") as number,
+        bounds: [8, 31, 22, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3098, 2844,
         2844, 2980, 2853, 2728, 2729, 2859, 2859, 2732, 2733, 2734, 2607, 2480, 2353, 2354, 2226,
@@ -43,6 +59,10 @@ export const additionalCottageArt = {
     },
     2: {
       asset: require("@assets/images/cottage-growth/plum/wing.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/plum/wing-rear.png") as number,
+        bounds: [9, 31, 22, 63],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3099, 2845,
         2972, 2980, 2854, 2727, 2729, 2858, 2859, 2859, 2865, 2738, 2612, 2614, 2487, 2361, 2235,
@@ -52,6 +72,10 @@ export const additionalCottageArt = {
     },
     3: {
       asset: require("@assets/images/cottage-growth/plum/loft.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/plum/loft-rear.png") as number,
+        bounds: [8, 30, 21, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4388, 4262, 4264, 4138,
         3115, 2860, 2733, 2862, 2735, 2608, 2609, 2738, 2739, 2738, 2737, 2737, 2613, 2486, 2488,
@@ -63,6 +87,10 @@ export const additionalCottageArt = {
   moss: {
     1: {
       asset: require("@assets/images/cottage-growth/moss/starter.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/moss/starter-rear.png") as number,
+        bounds: [8, 31, 21, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3098, 2844,
         2716, 2852, 2853, 2726, 2728, 2729, 2730, 2731, 2731, 2732, 2734, 2606, 2479, 2352, 2225,
@@ -72,6 +100,10 @@ export const additionalCottageArt = {
     },
     2: {
       asset: require("@assets/images/cottage-growth/moss/wing.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/moss/wing-rear.png") as number,
+        bounds: [8, 31, 21, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3097, 2844,
         2716, 2851, 2725, 2726, 2728, 2729, 2730, 2731, 2737, 2738, 2740, 2613, 2487, 2360, 2234,
@@ -81,6 +113,10 @@ export const additionalCottageArt = {
     },
     3: {
       asset: require("@assets/images/cottage-growth/moss/loft.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/moss/loft-rear.png") as number,
+        bounds: [7, 30, 21, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4260, 4262, 4135, 4009,
         2858, 2603, 2603, 2732, 2605, 2606, 2607, 2608, 2608, 2607, 2611, 2612, 2613, 2487, 2360,
@@ -92,6 +128,10 @@ export const additionalCottageArt = {
   slate: {
     1: {
       asset: require("@assets/images/cottage-growth/clubhouse/starter.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/clubhouse/starter-rear.png") as number,
+        bounds: [10, 31, 24, 63],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3229,
         3102, 3107, 3109, 2983, 2985, 3114, 3115, 2988, 2989, 2990, 2863, 2736, 2609, 2610, 2354,
@@ -101,6 +141,10 @@ export const additionalCottageArt = {
     },
     2: {
       asset: require("@assets/images/cottage-growth/clubhouse/wing.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/clubhouse/wing-rear.png") as number,
+        bounds: [9, 31, 23, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3228,
         2974, 2979, 3109, 2983, 2985, 2986, 2987, 2987, 2994, 2995, 2870, 2744, 2618, 2491, 2365,
@@ -110,6 +154,10 @@ export const additionalCottageArt = {
     },
     3: {
       asset: require("@assets/images/cottage-growth/clubhouse/loft.png") as number,
+      depthLayers: {
+        rear: require("@assets/images/cottage-growth/clubhouse/loft-rear.png") as number,
+        bounds: [9, 31, 23, 62],
+      },
       rows: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4646, 4776, 4780, 4778, 4390, 4392,
         4266, 4140, 4012, 3117, 2862, 2863, 2992, 2865, 2866, 2867, 2868, 2867, 2867, 2870, 2743,

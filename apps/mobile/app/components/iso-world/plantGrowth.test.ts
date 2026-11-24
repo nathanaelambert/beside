@@ -38,13 +38,9 @@ it("changes only the staged art while retaining main-island anchors and selectio
     { key: "starter-oak", itemId: "oak-tree", x: 104, y: 104 },
     { key: "reward-flower", itemId: "sunflower", x: 184, y: 104 },
   ]
-  const where = ({ x, y, baseX, baseY, width, height, depth, hit }: Drawable) => ({
-    x,
-    y,
+  const where = ({ baseX, baseY, depth, hit }: Drawable) => ({
     baseX,
     baseY,
-    width,
-    height,
     depth,
     hit,
   })
@@ -58,6 +54,15 @@ it("changes only the staged art while retaining main-island anchors and selectio
     const anchor = isoToScreen(scenes[0]!.frame, u, v)
     expect(examples.map((d) => [d.baseX, d.baseY])).toEqual(phases.map(() => [anchor.x, anchor.y]))
     expect(examples.map(where)).toEqual(phases.map(() => where(examples[0]!)))
+    for (const [index, stage] of phases.entries()) {
+      const size = item.key === "starter-oak" && stage === "mature" ? 40 : 32
+      expect(examples[index]).toMatchObject({
+        x: anchor.x - size / 2,
+        y: anchor.y - size + 1,
+        width: size,
+        height: size,
+      })
+    }
     expect(new Set(examples.map((d) => d.source.type === "art" && d.source.art)).size).toBe(3)
   }
 })

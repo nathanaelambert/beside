@@ -34,3 +34,12 @@ export function harborBoardColor(board: number, lengthwise: number, crosswise: n
   if (crosswise > 0.8) return harborTimber.light
   return hash(board, 3, 81) > 0.32 ? harborTimber.pale : harborTimber.light
 }
+
+/** A small deck-only accent; the shared pond-deck palette and jetty hardware stay put. */
+export function harborJettyBoardColor(board: number, lengthwise: number, crosswise: number) {
+  const timber = harborBoardColor(board, lengthwise, crosswise)
+  if (lengthwise < 0.19 || lengthwise > 0.81) return timber
+  if (timber === harborTimber.pale) return board % 3 === 1 ? "#c19a68" : "#b99264"
+  if (timber === harborTimber.light) return "#ac8157"
+  return timber
+}

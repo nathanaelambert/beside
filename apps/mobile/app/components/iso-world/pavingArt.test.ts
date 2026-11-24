@@ -1,5 +1,6 @@
 import { rgb } from "./bitmap"
-import { paintGround, waterGlints } from "./paint"
+import { paintGround, visitTileTop, waterGlints } from "./paint"
+import { pondSandColor } from "./pavingArt"
 import { HALF_W, isoToScreen, mapFrame, screenToIso, TILE_H, type MapFrame } from "./projection"
 import { tileMapFromRows, type Tile, type TileMap } from "./tilemap"
 
@@ -34,6 +35,34 @@ it("repaints connected path tiles without changing their footprint or pond glint
   }
 })
 
+it("weather-blends the outside rim, not the seams between connected path tiles", () => {
+  const connected: TileMap = { ...tileMapFromRows(["ppp", "ppp", "ppp"]), art: "detailed" }
+  const standalone: TileMap = { ...tileMapFromRows(["ggg", "gpg", "ggg"]), art: "detailed" }
+  const frame = mapFrame(connected.cols, connected.rows)
+  const tile = connected.tiles[4]!
+  const joined = paintGround(connected, frame)
+  const exposed = paintGround(standalone, frame)
+  let weathered = 0
+  let interior = 0
+  visitTileTop(frame, tile, (x, y, u, v) => {
+    const i = (y * joined.width + x) * 4
+    const a = joined.rgba.subarray(i, i + 4)
+    const b = exposed.rgba.subarray(i, i + 4)
+    expect(a[3]).toBe(255)
+    expect(b[3]).toBe(255)
+    const differs = a.some((channel, index) => channel !== b[index])
+    const withinRim = Math.min(u, v, 1 - u, 1 - v) < 1 / TILE_H
+    if (withinRim) {
+      if (differs) weathered++
+    } else {
+      expect(differs).toBe(false)
+      interior++
+    }
+  })
+  expect(weathered).toBeGreaterThan(0)
+  expect(interior).toBeGreaterThan(weathered)
+})
+
 it("darkens sand at each facing water edge and never wets a sand tile away from water", () => {
   const original = tileMapFromRows(["sgggg", "ggsgg", "gswsg", "ggsgg", "ggggg"])
   const detailed = { ...original, art: "detailed" as const }
@@ -59,4 +88,14 @@ it("darkens sand at each facing water edge and never wets a sand tile away from 
             : pixel.v
     expect(wet.every((pixel) => distance(pixel) < 0.34)).toBe(true)
   }
+})
+
+it("uses a restrained matte palette only on dry sand", () => {
+  const colors = new Set<string>()
+  for (let y = 0; y < 42; y++)
+    for (let x = 0; x < 56; x++) {
+      colors.add(pondSandColor(x, y, 1, true))
+      expect(pondSandColor(x, y, 0.16, true)).toBe(pondSandColor(x, y, 0.16))
+    }
+  expect(colors).toEqual(new Set(["#c6b28c", "#d0bf99", "#d7c6a0", "#ddcba3"]))
 })

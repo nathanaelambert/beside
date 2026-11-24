@@ -28,7 +28,9 @@ function Hull({
   const second = useDerivedValue(() =>
     activeHeading.value === heading && Math.floor(progress.value * 18) % 2 === 1 ? 1 : 0,
   )
-  const boats = [0, 1].map((frame) => (front ? rowboatFront : rowboat)(frame as 0 | 1, heading))
+  const boats = [0, 1].map((frame) =>
+    (front ? rowboatFront : rowboat)(frame as 0 | 1, heading, detailed),
+  )
   return (
     <>
       {boats.map((boat, index) => (

@@ -1,20 +1,23 @@
 import { bayFrame, bayTerrain, buildBayScene } from "./bayWorkshop"
+import { foliageBands } from "./foliageWind"
 import { matureTreeRows } from "./matureTreeArt"
-import { buildHomeScene, itemDrawable, type Drawable } from "./scene"
+import { buildHomeScene, itemDrawable, opaqueAt, type Drawable } from "./scene"
 import { treeFamilyArt, type TreeFamilyId } from "./treeFamilyArt"
 import { treeArtStages } from "./worldDetailArt"
 
-const place = ({ x, y, width, height, baseX, baseY, depth, shadow, hit }: Drawable) => ({
-  x,
-  y,
-  width,
-  height,
+const place = ({ baseX, baseY, depth, shadow, hit }: Drawable) => ({
   baseX,
   baseY,
   depth,
   shadow,
   hit,
 })
+
+const matureFrameSize: Record<TreeFamilyId, number> = {
+  "oak-tree": 40,
+  "pine-tree": 44,
+  "cherry-tree": 40,
+}
 
 it.each(["oak-tree", "pine-tree"] as const)(
   "%s shares one silhouette across planted rewards, landscape and the workshop",
@@ -63,13 +66,21 @@ it.each<TreeFamilyId>(["oak-tree", "pine-tree", "cherry-tree"])(
     const map = bayTerrain([], "terracotta", true)
     const ages = treeArtStages.map((stage) => {
       const rows = treeFamilyArt(id, stage)!.rows
-      expect(rows).toHaveLength(32)
-      expect(rows.slice(30)).toEqual([0, 0])
-      expect(rows[29] >> 7).toBeLessThanOrEqual(16)
-      expect(rows[29] & 127).toBeGreaterThan(16)
+      const size = stage === "mature" ? matureFrameSize[id] : 32
+      expect(rows).toHaveLength(size)
+      expect(rows.slice(-2)).toEqual([0, 0])
       const tree = itemDrawable(bayFrame, map, "tree", id, 3, 4, {}, stage)!
+      expect(tree.width).toBe(size)
+      expect(tree.height).toBe(size)
+      expect(tree.x).toBe(tree.baseX - size / 2)
+      expect(tree.y).toBe(tree.baseY - size + 1)
+      expect(opaqueAt(tree, tree.baseX, tree.baseY - 2)).toBe(true)
+      expect(opaqueAt(tree, tree.baseX, tree.baseY - 1)).toBe(false)
       expect(tree.artRows).toBe(rows)
       expect(tree.foliage).toBe("tree")
+      const { root } = foliageBands(tree, "tree")
+      expect(root).toBeGreaterThan(tree.top)
+      expect(root).toBeLessThanOrEqual(tree.baseY - 3)
       return tree
     })
     expect(ages.map(place)).toEqual(Array(3).fill(place(ages[0]!)))
@@ -78,11 +89,35 @@ it.each<TreeFamilyId>(["oak-tree", "pine-tree", "cherry-tree"])(
   },
 )
 
-it("preserves the approved mature oak and pine and leaves flowers out of the tree family", () => {
+it("uses the shared mature masks and keeps the pine tall and narrow next to the rounder crowns", () => {
   expect(treeFamilyArt("oak-tree", "mature")?.rows).toBe(matureTreeRows["oak-tree"])
   expect(treeFamilyArt("pine-tree", "mature")?.rows).toBe(matureTreeRows["pine-tree"])
-  expect(matureTreeRows["pine-tree"].findIndex(Boolean)).toBeLessThan(
-    matureTreeRows["oak-tree"].findIndex(Boolean),
-  )
   expect(treeFamilyArt("sunflower", "mature")).toBeUndefined()
+
+  const silhouette = (id: TreeFamilyId) =>
+    treeArtStages.map((stage) => {
+      const rows = treeFamilyArt(id, stage)!.rows
+      const spans = rows.filter(Boolean)
+      const x0 = Math.min(...spans.map((span) => span >> 7))
+      const x1 = Math.max(...spans.map((span) => span & 127))
+      return { height: spans.length, width: x1 - x0 }
+    })
+  const pine = silhouette("pine-tree")
+  const cherry = silhouette("cherry-tree")
+  expect(pine.map(({ height }) => height)).toEqual([11, 23, 38])
+  expect(cherry.map(({ height }) => height)).toEqual([10, 22, 33])
+  const oak = silhouette("oak-tree")
+  expect(pine[2]!.height).toBeGreaterThan(oak[2]!.height)
+  expect(pine[2]!.width).toBeLessThan(cherry[2]!.width)
+})
+
+it("keeps all three sunflower stages visibly below the oak", () => {
+  const map = bayTerrain([], "terracotta", true)
+  const heights = (id: string) =>
+    treeArtStages.map((stage) => {
+      const item = itemDrawable(bayFrame, map, id, id, 3, 4, {}, stage)!
+      return item.baseY - 1 - item.top
+    })
+  expect(heights("sunflower")).toEqual([8, 13, 17])
+  expect(heights("oak-tree")).toEqual([10, 20, 34])
 })

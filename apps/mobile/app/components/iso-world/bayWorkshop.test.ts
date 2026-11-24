@@ -48,18 +48,19 @@ it("uses the same house and pier anchors for previews, terrain growth, styles an
   expect(bayCellAt(point.x, point.y)).toEqual(additions[0])
 })
 
-const placement = ({ key, x, y, width, height, baseX, baseY, depth, shadow, hit }: Drawable) => ({
-  key,
-  x,
-  y,
-  width,
-  height,
-  baseX,
-  baseY,
-  depth,
-  shadow,
-  hit,
-})
+const registration = (d: Drawable) => {
+  const { key, x, y, width, height, baseX, baseY, depth, shadow, hit } = d
+  return {
+    key,
+    baseX,
+    baseY,
+    depth,
+    shadow,
+    hit,
+    // Catalogue frames may grow upward around their fixed bottom-center point.
+    bounds: d.source.type === "art" ? [x + width / 2, y + height - 1] : [x, y, width, height],
+  }
+}
 
 it("changes the art without moving or reordering the scene in any view or style", () => {
   for (const style of ["terracotta", "woodland", "plum", "moss", "clubhouse"] as const) {
@@ -72,12 +73,23 @@ it("changes the art without moving or reordering the scene in any view or style"
       const detailed = buildBayScene(painted, style, 3, options)
       expect(detailed.frame).toBe(original.frame)
       expect(detailed.offset).toEqual(original.offset)
-      expect(detailed.drawables.map(placement)).toEqual(original.drawables.map(placement))
+      expect(
+        detailed.drawables.filter((d) => d.key !== "house-bay-rear").map(registration),
+      ).toEqual(original.drawables.map(registration))
       expect(original.drawables.every((d) => d.artAsset === undefined)).toBe(true)
-      const structures = detailed.drawables.filter((d) => d.foliage !== "flower")
-      expect(structures.filter((d) => d.artAsset !== undefined)).toHaveLength(
-        style === "terracotta" ? 2 : 1,
-      )
+      const house = detailed.drawables.find((d) => d.key === "house-bay")!
+      const rear = detailed.drawables.find((d) => d.key === "house-bay-rear")
+      const pier = detailed.drawables.find((d) => d.key === "bay-jetty")!
+      expect(house.artAsset).toBeDefined()
+      expect(pier.artAsset !== undefined).toBe(style === "terracotta")
+      if (style === "terracotta") {
+        expect(rear).toBeUndefined()
+      } else {
+        expect(rear?.artAsset).toBeDefined()
+        expect(rear).toMatchObject({ baseX: house.baseX, baseY: house.baseY })
+        expect(rear?.hit).toBeUndefined()
+        expect(rear?.depth).toBeLessThan(house.depth)
+      }
     }
   }
 })
@@ -89,7 +101,7 @@ it("starts with the starter cottage and adds the wing and loft without moving it
       (d) => d.key === "house-bay",
     )!,
   )
-  expect(stages.map(placement)).toEqual(Array(4).fill(placement(stages[0]!)))
+  expect(stages.map(registration)).toEqual(Array(4).fill(registration(stages[0]!)))
   expect(stages.map((d) => d.artRows)).toEqual(
     ([1, 1, 2, 3] as const).map((level) => sampleArt.cottages.clay[level].rows),
   )
@@ -99,7 +111,7 @@ it("starts with the starter cottage and adds the wing and loft without moving it
 it("shows every catalogue item and previews plant growth in the same sample slot", () => {
   const map = bayTerrain([], "terracotta", true)
   const artSet = new Set()
-  let expectedPlacement: ReturnType<typeof placement> | undefined
+  let expectedPlacement: ReturnType<typeof registration> | undefined
   for (const { id } of bayGardenItems) {
     const specimens = treeArtStages.map((treeStage) =>
       buildBayScene(map, "terracotta", 3, {
@@ -108,9 +120,9 @@ it("shows every catalogue item and previews plant growth in the same sample slot
         treeStage,
       }).drawables.find((d) => d.key === "bay-sample")!,
     )
-    expectedPlacement ??= placement(specimens[0]!)
+    expectedPlacement ??= registration(specimens[0]!)
     const stages = specimens.map((d) => {
-      expect(placement(d)).toEqual(expectedPlacement)
+      expect(registration(d)).toEqual(expectedPlacement)
       expect(d.source.type).toBe("art")
       return d.source.type === "art" ? d.source.art : undefined
     })

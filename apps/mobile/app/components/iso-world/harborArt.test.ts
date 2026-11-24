@@ -1,9 +1,15 @@
-import { jetty, JETTY, MOORING } from "./archipelagoProps"
+import { buoy, islandSign, jetty, JETTY, MOORING, rowboat, rowboatFront } from "./archipelagoProps"
 import { bayFrame, bayTerrain, buildBayScene } from "./bayWorkshop"
-import type { Bitmap } from "./bitmap"
-import { harborBoardColor, harborTimber, jettyTimberGrade } from "./harborArt"
+import { rgb, type Bitmap } from "./bitmap"
+import {
+  harborBoardColor,
+  harborJettyBoardColor,
+  harborTimber,
+  jettyTimberGrade,
+} from "./harborArt"
 import { paintGround } from "./paint"
 import { mapFrame } from "./projection"
+import type { Sprite } from "./props"
 import { itemDrawable, type Drawable } from "./scene"
 import { tileMapFromRows } from "./tilemap"
 import { worldArtAssets } from "./worldArtAssets"
@@ -19,6 +25,49 @@ const place = ({ x, y, width, height, top, baseX, baseY, depth, hit }: Drawable)
   baseY,
   depth,
   hit,
+})
+
+function materialChanges(plain: Sprite, detailed: Sprite) {
+  expect(detailed).toMatchObject({ anchorX: plain.anchorX, anchorY: plain.anchorY })
+  const { width, height, rgba } = plain.bitmap
+  expect(detailed.bitmap).toMatchObject({ width, height })
+  expect(alpha(detailed.bitmap)).toEqual(alpha(plain.bitmap))
+  const pixels = []
+  for (let i = 0; i < rgba.length; i += 4) {
+    const old = rgba.subarray(i, i + 3)
+    const next = detailed.bitmap.rgba.subarray(i, i + 3)
+    if (old.some((channel, n) => channel !== next[n])) {
+      pixels.push({ x: (i / 4) % width, y: Math.floor(i / 4 / width), rgb: [...old].join(",") })
+    }
+  }
+  expect(pixels.length).toBeGreaterThan(0)
+  return pixels
+}
+
+it("changes dry hull wood across all strokes and both layers without changing their anchors or alpha", () => {
+  const timber = new Set(["#7a5538", "#c8a06c"].map((tone) => rgb(tone).join(",")))
+  for (const make of [rowboat, rowboatFront])
+    for (const heading of ["se", "sw", "ne", "nw"] as const)
+      for (const frame of [0, 1] as const) {
+        const changed = materialChanges(make(frame, heading), make(frame, heading, true))
+        expect(changed.every((pixel) => timber.has(pixel.rgb))).toBe(true)
+      }
+})
+
+it("keeps both buoy lights, the waterline, letters, and the active flag untouched", () => {
+  for (const frame of [0, 1] as const) {
+    const paint = materialChanges(buoy(frame), buoy(frame, true))
+    expect(paint.every(({ x, y }) => x >= 3 && x <= 7 && y >= 3 - frame && y <= 11 - frame)).toBe(
+      true,
+    )
+  }
+  for (const here of [false, true]) {
+    const paint = materialChanges(
+      islandSign("Fern landing", here),
+      islandSign("Fern landing", here, true),
+    )
+    expect(paint.every(({ y }) => y === (here ? 8 : 1))).toBe(true)
+  }
 })
 
 it("preserves the jetty silhouette and anchor, with no change to the mooring", () => {
@@ -55,18 +104,21 @@ it("grades the Terracotta texture without changing alpha or moving the workshop 
   }
 })
 
-it("paints the limestone lantern in place without moving or lighting up other pixels", () => {
+it("keeps the shorter limestone lantern static and rooted on the original plinth", () => {
   const lamp = (detailed: boolean) =>
     itemDrawable(bayFrame, bayTerrain([], "terracotta", detailed), "reward", "stone-lantern", 4, 5)!
   const plain = lamp(false)
   const lit = lamp(true)
-  expect(place(lit)).toEqual(place(plain))
+  expect(place(lit)).toEqual({ ...place(plain), top: plain.y + 15 })
   expect(lit.foliage).toBeUndefined()
   if (lit.source.type !== "art" || plain.source.type !== "art")
     throw new Error("Missing lantern art")
   const mask = (rows: readonly string[]) => rows.map((row) => row.replace(/[^.]/g, "#"))
-  expect(mask(lit.source.art.pixels)).toEqual(mask(plain.source.art.pixels))
-  expect(lit.source.art.palette).not.toEqual(plain.source.art.palette)
+  const { pixels: rows, palette } = lit.source.art
+  expect(mask(rows).slice(27)).toEqual(mask(plain.source.art.pixels).slice(27))
+  expect(rows.slice(15, 30).every((row) => /[^.]/.test(row))).toBe(true)
+  const glass = rows.slice(20, 23).join("")
+  expect([...glass].some((pixel) => palette[pixel] === "#fff3bc")).toBe(true)
 })
 
 it("keeps the pond deck shape while painting seams, board edges and pegs", () => {
@@ -79,4 +131,7 @@ it("keeps the pond deck shape while painting seams, board edges and pegs", () =>
   expect(harborBoardColor(0, 0.5, 0.06)).toBe(harborTimber.shade)
   expect(harborBoardColor(0, 0.5, 0.2)).toBe(harborTimber.edge)
   expect(harborBoardColor(0, 0.96, 0.55)).toBe(harborTimber.dark)
+  expect(harborJettyBoardColor(0, 0.96, 0.55)).toBe(harborBoardColor(0, 0.96, 0.55))
+  expect(harborJettyBoardColor(0, 0.5, 0.06)).toBe(harborBoardColor(0, 0.5, 0.06))
+  expect(harborJettyBoardColor(0, 0.5, 0.9)).not.toBe(harborBoardColor(0, 0.5, 0.9))
 })

@@ -11,7 +11,7 @@ export function foliageGust(tick: number, phase: number) {
 
 /** Nearby props ease into a breeze at different times, without random changes on re-render. */
 export function foliagePhase(baseX: number, baseY: number) {
-  return (Math.abs(baseX * 7 + baseY * 11) % 36) | 0
+  return Math.trunc(Math.abs(baseX * 7 + baseY * 11) % 36)
 }
 
 /** Preserve the trunk or stem and the contact pixels, even for the smallest sprout. */

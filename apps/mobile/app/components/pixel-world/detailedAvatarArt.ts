@@ -1,273 +1,91 @@
 import type { PixelArt } from "@beside/rewards"
 
-type AvatarPaint = {
-  palette: PixelArt["palette"]
-  pixels: PixelArt["pixels"]
-  /** [logical column, logical row, 2× quadrant (TL, TR, BL, BR), pigment]. */
-  accents: readonly (readonly [number, number, 0 | 1 | 2 | 3, string])[]
+import type { Avatar } from "./avatars"
+
+type Point = readonly [number, number]
+type Layer = string[][]
+type Portrait = {
+  palette: string
+  body: string
+  head: string
+  eyesOpen: string
+  eyesClosed: string
 }
 
-// Four authored planes on the original 16×20 silhouettes. The light-side rim
-// belongs to its material: there is no single color outlining the entire figure.
-export const memberPaint = {
-  you: {
-    palette: {
-      h: "#342c2e",
-      H: "#514044",
-      Q: "#64504e",
-      d: "#29272e",
-      s: "#a46a4a",
-      l: "#9e6848",
-      S: "#764932",
-      L: "#ba8059",
-      i: "#995a42",
-      e: "#28232a",
-      g: "#594b4b",
-      G: "#70564c",
-      b: "#322829",
-      B: "#4e3731",
-      m: "#a86650",
-      C: "#647786",
-      c: "#465c76",
-      k: "#34465c",
-      K: "#2d384a",
-      w: "#e2d5ba",
-      t: "#ad9879",
-      T: "#77654f",
-      p: "#414e61",
-      P: "#313c50",
-      F: "#59565d",
-      f: "#30343b",
-      o: "#222a37",
-      0: "#765d51",
-      1: "#caad7f",
-      2: "#8b9ba2",
-      3: "#766664",
-    },
-    pixels: [
-      "...HHHHhhhhhd...",
-      "..HQQQHHhhhddd..",
-      ".HQHHHHhHHhhhddd",
-      "HHHHhHhhhhhHhddd",
-      "HHHHsLLssssShddd",
-      "HhhGGGGssGgggddd",
-      "HhsGLegssgeigSdd",
-      "hhiGLegLsgeSgSdd",
-      "hHBGlLSsLsisgBdd",
-      "hhBLiBBBBbBiSBdd",
-      ".hBbBBBmmBBbBbd.",
-      "..bbBBBBBBbbbb..",
-      "...cwwBBBbwkK...",
-      "...cCwwtTwckK...",
-      ".cCCCcwTTkckkKk.",
-      ".cscCccTTckkKSk.",
-      "..kkppppPPPPko..",
-      "...pppPooPPPo...",
-      "..fFfffoofFffo..",
-      "...oooo..oooo...",
-    ],
-    accents: [
-      [4, 1, 1, "0"],
-      [6, 2, 0, "0"],
-      [3, 5, 1, "1"],
-      [9, 5, 0, "1"],
-      [4, 13, 1, "2"],
-      [3, 18, 0, "3"],
-    ],
-  },
-  nathaniel: {
-    palette: {
-      h: "#5d4034",
-      H: "#825a43",
-      Q: "#a57655",
-      d: "#45342f",
-      s: "#ce936a",
-      S: "#9c654e",
-      L: "#dfad80",
-      i: "#b9795b",
-      e: "#35282a",
-      g: "#715b49",
-      G: "#8f714f",
-      m: "#925a49",
-      C: "#9ba477",
-      c: "#738860",
-      k: "#52694e",
-      K: "#465544",
-      w: "#e4d8b7",
-      W: "#bfa98d",
-      p: "#79604c",
-      P: "#604b41",
-      F: "#77665c",
-      f: "#433734",
-      o: "#342d31",
-      0: "#b88961",
-      1: "#d1af7d",
-      2: "#b7b58b",
-      3: "#918072",
-    },
-    pixels: [
-      "....HH.HHHhh....",
-      "...HQQHHHHhhd...",
-      "..HQQQHHhHhhdd..",
-      ".HHHHhHHhhhhhdd.",
-      ".hHhhhLLsshhSdd.",
-      ".hsGGGGssGgggSd.",
-      ".hsGLegssgesgSd.",
-      ".siGLegLsgeigSS.",
-      ".sLGLssLsssigiS.",
-      ".sLLsssmmsssiiS.",
-      "..ssLssssssiSS..",
-      "...KkksSSsikk...",
-      "...kCCwwWWkkk...",
-      ".CCCCkwwWwckKKk.",
-      ".cCccCkwWwckKKk.",
-      ".cskcckWwWkkKSk.",
-      "..KkppppPPPPKo..",
-      "...pppPooPPPo...",
-      "..fFfffoofFffo..",
-      "...oooo..oooo...",
-    ],
-    accents: [
-      [4, 1, 1, "0"],
-      [5, 2, 0, "0"],
-      [3, 5, 1, "1"],
-      [9, 5, 0, "1"],
-      [4, 12, 1, "2"],
-      [3, 18, 0, "3"],
-    ],
-  },
-  vaibhav: {
-    palette: {
-      o: "#282f36",
-      a: "#85583e",
-      A: "#ae7953",
-      s: "#c28a5e",
-      S: "#a16b4c",
-      L: "#dfa97c",
-      i: "#b77a55",
-      e: "#29272d",
-      g: "#3f3536",
-      G: "#594748",
-      b: "#383033",
-      B: "#574139",
-      m: "#ab6f55",
-      C: "#c67a5b",
-      c: "#a25848",
-      k: "#714642",
-      K: "#563c3d",
-      q: "#8b4c42",
-      w: "#d2936c",
-      p: "#4b5663",
-      P: "#37434d",
-      F: "#736160",
-      f: "#383b42",
-      0: "#ebbc88",
-      1: "#9c8170",
-      2: "#d98b65",
-      3: "#826d61",
-    },
-    pixels: [
-      ".....AAAaAa.....",
-      "...AALLLLssSaa..",
-      "..ALLLLLssssSSa.",
-      ".ALsLLsssssssSSa",
-      ".AssssssssssSiSa",
-      ".aiGGGGssggggSSa",
-      ".aiGsegssgesgSSa",
-      ".aLGLegLsgeigSSa",
-      ".aLGLsgsigsSgBSa",
-      ".bBiLBBbbBBiiBS.",
-      ".bbBBbBmmbbBbbo.",
-      "..bBBBBBbbbbbo..",
-      "...qCwwqccqkK...",
-      ".cqwCwqqcckqKck.",
-      ".qcCkccwkCwcKck.",
-      ".csqkkcCcwckKSc.",
-      "..kkppppPPPPKo..",
-      "...pppPooPPPo...",
-      "..fFfffoofFffo..",
-      "...oooo..oooo...",
-    ],
-    accents: [
-      [5, 1, 1, "0"],
-      [4, 2, 1, "0"],
-      [3, 5, 1, "1"],
-      [9, 5, 0, "1"],
-      [4, 12, 1, "2"],
-      [3, 18, 0, "3"],
-    ],
-  },
-  pritesh: {
-    palette: {
-      h: "#524039",
-      H: "#765542",
-      Q: "#947358",
-      d: "#3f3433",
-      s: "#bc835e",
-      S: "#9b634b",
-      L: "#d3986e",
-      i: "#b47657",
-      e: "#2a262d",
-      g: "#43383e",
-      G: "#60565a",
-      b: "#483633",
-      B: "#674a3e",
-      m: "#955e4b",
-      C: "#81a4b2",
-      c: "#5d8eaa",
-      k: "#44697f",
-      K: "#3e5363",
-      w: "#ebd9b2",
-      W: "#c1ad87",
-      p: "#cbb587",
-      P: "#9d8768",
-      F: "#71645c",
-      f: "#433e45",
-      o: "#352f38",
-      0: "#ac886a",
-      1: "#9a8c83",
-      2: "#b8c5b9",
-      3: "#887468",
-    },
-    pixels: [
-      "....HHHHhhd.....",
-      "...HQQHHhhdd....",
-      "..HQQHHHhhhddd..",
-      ".HHHHhhhShhddB..",
-      ".HhhhsLLsssSdd..",
-      ".hsGGGGssggggS..",
-      ".siGLegssgesgS..",
-      ".sLGLegLsgeSgS..",
-      ".sLGsLgsLisSbi..",
-      "..biLsmmiSBbb...",
-      "..bBBssSBbbBb...",
-      "...kbbsSSbbKk...",
-      "...cCCcwWCckK...",
-      ".CCCCckwWcckKKc.",
-      ".CLScCcWwWckKSs.",
-      ".SsSkckWwwckKSk.",
-      "..kkppppPpPPKo..",
-      "...pppPoopPPo...",
-      "..fFfffoofFffo..",
-      "...oooo..oooo...",
-    ],
-    accents: [
-      [4, 1, 1, "0"],
-      [4, 2, 0, "0"],
-      [3, 5, 1, "1"],
-      [9, 5, 0, "1"],
-      [4, 12, 1, "2"],
-      [3, 18, 0, "3"],
-    ],
-  },
-} satisfies Record<string, AvatarPaint>
+const width = 48
+const height = 60
 
-export function paintAvatar({ palette, pixels, accents }: AvatarPaint): PixelArt {
-  const raster = pixels.flatMap((row) => {
-    const doubled = row.replace(/./g, "$&$&").split("")
-    return [doubled, [...doubled]]
+// Swatches are key/color pairs; whitespace only groups related entries visually.
+function decodePalette(text: string): PixelArt["palette"] {
+  const pairs = text.trim().split(/\s+/)
+  const palette: PixelArt["palette"] = {}
+  for (let i = 0; i < pairs.length; i += 2) palette[pairs[i]!] = pairs[i + 1]!
+  return palette
+}
+
+// Each line is a palette key and its polygon's x,y pairs, in back-to-front order.
+// Coordinates use native texels, independent of the 16 × 20 world rectangle.
+function paint(...layers: string[]): Layer {
+  const pixels = Array.from({ length: height }, () => Array<string>(width).fill("."))
+  for (const row of layers.join("\n").split("\n")) {
+    const line = row.trim()
+    if (!line) continue
+    const color = line[0]!
+    const path = line.slice(2)
+    const points: Point[] = path.split(" ").map((pair) => {
+      const [x, y] = pair.split(",")
+      return [Number(x), Number(y)]
+    })
+    const minY = Math.max(0, Math.min(...points.map((p) => p[1])))
+    const maxY = Math.min(height, Math.max(...points.map((p) => p[1])))
+    for (let y = minY; y < maxY; y++) {
+      const intersections: number[] = []
+      const center = y + 0.5
+      for (let i = 0; i < points.length; i++) {
+        const [x1, y1] = points[i]!
+        const [x2, y2] = points[(i + 1) % points.length]!
+        if (y1 > center !== y2 > center) {
+          intersections.push(x1 + ((center - y1) * (x2 - x1)) / (y2 - y1))
+        }
+      }
+      intersections.sort((a, b) => a - b)
+      for (let i = 0; i < intersections.length; i += 2) {
+        const start = Math.max(0, Math.ceil(intersections[i]! - 0.5))
+        const end = Math.min(width, Math.ceil(intersections[i + 1]! - 0.5))
+        for (let x = start; x < end; x++) pixels[y]![x] = color
+      }
+    }
+  }
+  return pixels
+}
+
+export function portraitFrames({
+  palette,
+  body,
+  head,
+  eyesOpen,
+  eyesClosed,
+}: Portrait): Avatar["frames"] {
+  const base = paint(body)
+  const open = paint(head, eyesOpen)
+  const closed = paint(head, eyesClosed)
+  const swatches = decodePalette(palette)
+  const pose = (face: Layer, drop: number): PixelArt => ({
+    format: "pixel-art",
+    palette: swatches,
+    pixels: base.map((row, y) =>
+      row
+        .map((value, x) => {
+          const over = face[y - drop]?.[x]
+          return over && over !== "." ? over : value
+        })
+        .join(""),
+    ),
   })
-  for (const [x, y, quadrant, pigment] of accents)
-    raster[y * 2 + (quadrant >> 1)]![x * 2 + (quadrant & 1)] = pigment
-  return { format: "pixel-art", palette, pixels: raster.map((row) => row.join("")) }
+  return {
+    idle: pose(open, 0),
+    blink: pose(closed, 0),
+    // Only the head settles. The shoes, body anchor and hit rectangle do not move.
+    breathe: pose(open, 2),
+  }
 }

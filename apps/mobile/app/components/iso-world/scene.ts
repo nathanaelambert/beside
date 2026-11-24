@@ -5,6 +5,7 @@ import { rewardItems } from "@beside/rewards"
 import { bayCottageArt } from "./bayCottageArt"
 import { hash, type Bitmap } from "./bitmap"
 import { pocketWatchArt } from "./cottageClockArt"
+import { cottageLayers } from "./cottageDepth"
 import { cottageStage, type CottageGrowthArt } from "./cottageGrowthArt"
 import { flowerFamilyArt } from "./flowerFamilyArt"
 import type { FoliageKind } from "./foliageWind"
@@ -60,6 +61,8 @@ export interface Drawable {
   baseY: number
   /** Width of the soft ground shadow, if any. */
   shadow?: number
+  /** Pixel-snapped contact shadow in the sprite's local coordinates (visual only). */
+  contactShadow?: string
   /** Topmost opaque row, for the selection pointer. */
   top: number
   opacity?: number
@@ -160,10 +163,13 @@ export function itemDrawable(
   const bench =
     map.art === "detailed" && itemId === "reading-bench" ? readingBenchTexture : undefined
   const rows = tree?.rows ?? flower?.rows
+  // Square native plant frames can grow above the catalog cell; their bottom
+  // registration still uses the same world point and one row below it.
+  const size = rows?.length ?? 32
   const lift = liftAt(map, u, v)
   const base = isoToScreen(frame, u, v, lift)
-  const x = Math.round(base.x - 16)
-  const y = Math.round(base.y - 31)
+  const x = Math.round(base.x - size / 2)
+  const y = Math.round(base.y - size + 1)
   const foliage: FoliageKind | undefined =
     map.art === "detailed" && extra.opacity === undefined
       ? item.category === "Trees"
@@ -182,8 +188,8 @@ export function itemDrawable(
     depth: depthOf(u, v),
     x,
     y,
-    width: 32,
-    height: 32,
+    width: size,
+    height: size,
     baseX: Math.round(base.x),
     baseY: Math.round(base.y),
     shadow: 18,
@@ -220,6 +226,11 @@ export function avatarDrawable(
   } satisfies Drawable
 }
 
+// Every detailed cottage frame registers the front step at the same local coordinates.
+// Use the step, not the changing silhouette's centre, to align the short ground contact.
+const cottageStepShadow =
+  "M18 62h12v1h-12zM20 63h14v1h-14zM22 64h16v1h-16zM23 65h16v1h-16zM23 66h14v1h-14zM25 67h10v1h-10zM27 68h5v1h-5z"
+
 export function houseDrawable(
   frame: MapFrame,
   map: TileMap,
@@ -248,6 +259,7 @@ export function houseDrawable(
         ...result,
         artAsset: image.asset,
         artRows: image.rows,
+        contactShadow: cottageStepShadow,
         top: result.y + Math.max(0, image.rows.findIndex(Boolean)),
       }
     : result
@@ -403,6 +415,7 @@ const detailedHomeMap: TileMap = {
   art: "detailed",
   coast: "sandstone",
   coastFinish: "picnic-headland",
+  surfaceFinish: "fine-grain",
 }
 
 export const homeFrame = (() => {
@@ -457,6 +470,26 @@ export function buildHomeScene({
   const frame = homeFrame
   const houses = houseLots(activities)
   const reserved = new Set([...houses.map(({ col, row }) => `${col},${row}`)])
+  const plans = houses.map(({ activity, col, row, roof }) => {
+    const level = activity.construction?.level ?? cottageLevel(activity.cottageMilestones)
+    return {
+      cottage: houseDrawable(
+        frame,
+        map,
+        activity.id,
+        col,
+        row,
+        roof,
+        !!activity.open,
+        level,
+        assets?.cottages,
+      ),
+      level,
+      layers: cottageStage(roof, level, assets?.cottages)?.depthLayers,
+      construction: activity.construction,
+    }
+  })
+  const facades = plans.map(({ cottage }) => cottage)
   const drawables: Drawable[] = [
     ...terrainDrawables(map, frame, reserved, variantSeed),
     ...items.flatMap((item) => {
@@ -467,22 +500,11 @@ export function buildHomeScene({
       const { u, v } = meadowToIso(avatar.x, homeAvatarY(avatar.y))
       return avatarDrawable(frame, map, avatar, u, v)
     }),
-    ...houses.flatMap(({ activity, col, row, roof }) => {
-      const level = activity.construction?.level ?? cottageLevel(activity.cottageMilestones)
-      const cottage = houseDrawable(
-        frame,
-        map,
-        activity.id,
-        col,
-        row,
-        roof,
-        !!activity.open,
-        level,
-        assets?.cottages,
-      )
-      return activity.construction?.building
-        ? [cottage, constructionWatch(cottage, level, activity.construction.seconds)]
-        : [cottage]
+    ...plans.flatMap(({ cottage, level, layers, construction }) => {
+      const parts = cottageLayers(cottage, layers, facades)
+      return construction?.building
+        ? [...parts, constructionWatch(cottage, level, construction.seconds)]
+        : parts
     }),
   ]
   return { map, frame, drawables: sortDrawables(drawables), houses }
@@ -528,7 +550,7 @@ export function buildActivityScene({
   const cottage = houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit, level, cottages)
   const drawables: Drawable[] = [
     ...terrainDrawables(plotMap, plotFrame, new Set(["1,1"])),
-    cottage,
+    ...cottageLayers(cottage, cottageStage(roof, level, cottages)?.depthLayers),
     ...(constructionSeconds > 0 ? [constructionWatch(cottage, level, constructionSeconds)] : []),
     ...attendees.slice(0, PLOT_SPOTS.length).map((avatar, index) => {
       const [u, v] = PLOT_SPOTS[index]!

@@ -39,8 +39,8 @@ configured, migrated database. `PORT` defaults to 3001.
 ### Shared starter oak
 
 The signed-in Home Base offers one free oak for the whole garden. The
-authenticated `GET /api/v1/homebases/:homebaseId/garden` returns
-`{ oak: null }` or `{ oak: { itemId: "oak-tree", x, y } }`. To plant it,
+authenticated `GET /api/v1/homebases/:homebaseId/garden` includes the starter
+oak (`null` or `{ itemId: "oak-tree", x, y }`) and saved rewards. To plant it,
 `POST /api/v1/homebases/:homebaseId/garden/starter-oak` with world coordinates
 on the 8-pixel grid, such as `{ "x": 104, "y": 104 }`. The server uses the
 same terrain and clearance rules as the preview. Only members can read or
@@ -49,9 +49,14 @@ second oak returns HTTP 409. Migration 005 creates the coordinate-based garden
 table directly, with one oak per Home Base and grid bounds enforced in PostgreSQL.
 
 The app renders the same fixed map position on web and mobile after reopening
-or refreshing the Home Base. This does not consume milestone rewards and
-does not add moving or removing decorations. Run the database migrator
-before starting the updated API.
+or refreshing the Home Base. The starter oak does not consume milestone rewards.
+
+Migration 011 adds the optional ISO date `growthStartedAt` to newly planted
+oaks and newly placed rewards in the existing garden response. It is written
+once, independently of `placedAt`, which still changes when a reward is moved.
+Existing plants omit the field and are shown as fully grown. The migration does
+not update any existing placement or construction data. Run `pnpm --filter
+@beside/api db:migrate` before starting the updated API.
 
 ### API client example
 

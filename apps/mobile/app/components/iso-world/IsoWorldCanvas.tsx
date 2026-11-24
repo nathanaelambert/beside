@@ -40,9 +40,11 @@ import { FoliageSprite } from "./FoliageSprite"
 import { recolor } from "./islandPalettes"
 import { matureTreeAssets, treeFamilyAsset } from "./matureTreeAssets"
 import { paintGround, SEA_TILE, seaTile, waterGlints } from "./paint"
+import { pondGlintColor } from "./pondArt"
 import { isoToScreen, type MapFrame } from "./projection"
 import { type Drawable, type HitTarget } from "./scene"
 import { artImage, bitmapImage, sampling } from "./skia"
+import { paintSurfaceFinish } from "./surfaceFinish"
 import type { TileMap } from "./tilemap"
 import type { TreeFamilyId } from "./treeFamilyArt"
 import { voyagePoint, type VoyagePath } from "./voyage"
@@ -60,6 +62,17 @@ function groundFor(map: TileMap, frame: MapFrame, palette = 0) {
   return recolor(ground, palette)
 }
 
+const surfaceFinishes = new WeakMap<Bitmap, NonNullable<ReturnType<typeof paintSurfaceFinish>>>()
+function finishFor(map: TileMap, frame: MapFrame, ground: Bitmap) {
+  if (!map.surfaceFinish) return
+  let finish = surfaceFinishes.get(ground)
+  if (!finish) {
+    finish = paintSurfaceFinish(map, frame, groundFor(map, frame), ground)
+    if (finish) surfaceFinishes.set(ground, finish)
+  }
+  return finish
+}
+
 /** Rocks sit still; buoys bob between two frames, out of step with each other. */
 function SeaPropNode({
   prop,
@@ -70,7 +83,8 @@ function SeaPropNode({
   tick: SharedValue<number>
   detailed: boolean
 }) {
-  const frames = prop.kind === "buoy" ? [buoy(0), buoy(1)] : [seaRock(prop.seed, detailed)]
+  const frames =
+    prop.kind === "buoy" ? [buoy(0, detailed), buoy(1, detailed)] : [seaRock(prop.seed, detailed)]
   const phase = Math.floor(prop.seed * 8)
   const up = useDerivedValue(() => (Math.floor((tick.value + phase) / 6) % 2 === 1 ? 1 : 0))
   const down = useDerivedValue(() => 1 - up.value)
@@ -216,6 +230,11 @@ const DrawableNode = memo(function DrawableNode({
   const sprite = { drawable, image, tick, animateFoliage }
   return (
     <Group opacity={drawable.opacity ?? 1}>
+      {drawable.contactShadow && (
+        <Group transform={[{ translateX: drawable.x }, { translateY: drawable.y }]}>
+          <Path path={drawable.contactShadow} color="rgba(34, 46, 24, 0.44)" antiAlias={false} />
+        </Group>
+      )}
       {!!drawable.shadow && (
         <Group transform={[{ translateX: drawable.baseX }, { translateY: drawable.baseY }]}>
           <Path
@@ -241,14 +260,16 @@ function Glint({
   y,
   phase,
   tick,
+  color = "#e9f6ec",
 }: {
   x: number
   y: number
   phase: number
   tick: SharedValue<number>
+  color?: string
 }) {
   const opacity = useDerivedValue(() => (Math.floor((tick.value + phase) / 3) % 4 === 0 ? 0.95 : 0))
-  return <Rect x={x} y={y} width={3} height={1} color="#e9f6ec" opacity={opacity} />
+  return <Rect x={x} y={y} width={3} height={1} color={color} opacity={opacity} />
 }
 
 function Marker({ x, top, tick }: { x: number; top: number; tick: SharedValue<number> }) {
@@ -396,6 +417,7 @@ const IslandNodes = memo(function IslandNodes({
   // The island you're on shows its sign with the "you are here" pennant.
   const sign = focused ? (island.signHere ?? island.sign) : island.sign
   const ground = groundFor(map, frame, island.palette)
+  const finish = finishFor(map, frame, ground)
   const glints = useMemo(() => waterGlints(map, frame), [map, frame])
   const guidePath = useMemo(
     () => (guideTiles ?? []).map(({ col, row }) => diamondPath(frame, col, row, 0, 0.18)).join(""),
@@ -415,8 +437,25 @@ const IslandNodes = memo(function IslandNodes({
         height={frame.height}
         sampling={sampling}
       />
+      {finish && (
+        <Image
+          image={bitmapImage(finish.bitmap)}
+          x={finish.x}
+          y={finish.y}
+          width={finish.width}
+          height={finish.height}
+          sampling={sampling}
+        />
+      )}
       {glints.map(({ x, y, phase }) => (
-        <Glint key={`${x}-${y}`} x={x} y={y} phase={phase} tick={tick} />
+        <Glint
+          key={`${x}-${y}`}
+          x={x}
+          y={y}
+          phase={phase}
+          tick={tick}
+          color={map.surfaceFinish === "fine-grain" ? pondGlintColor : undefined}
+        />
       ))}
       {!!guidePath && <Guide path={guidePath} tick={tick} border={coastGuides} />}
       {!!previewPath && <Guide path={previewPath} tick={tick} strong border={coastGuides} />}

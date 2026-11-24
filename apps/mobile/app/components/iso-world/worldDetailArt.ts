@@ -1,7 +1,9 @@
 import { rewardItems, type PixelArt } from "@beside/rewards"
 
 import { bitmapToPixelArt, createBitmap, hash, isSet, noise, put, type Bitmap } from "./bitmap"
+import { compactGroundProp } from "./groundPropArt"
 import { harborLamp } from "./harborArt"
+import { detailedKeepsakeArt } from "./keepsakeArt"
 import { readingBenchArt } from "./picnicArt"
 import { fillPolygon, type Point } from "./props"
 
@@ -19,9 +21,6 @@ const ramps = {
   brass: ["#613726", "#945125", "#b97834", "#db9d46", "#efd06e", "#fff1ac", "#fffae0"],
   stone: ["#364344", "#4d5b58", "#66746b", "#8b9480", "#b5b49a", "#dbd4b7"],
   limestone: ["#4a4536", "#645543", "#857258", "#a18c6b", "#c5ad85", "#e5cba0"],
-  stoneCold: ["#2f4148", "#44565a", "#5c716e", "#7b928b", "#aac0ac", "#d4d8ba"],
-  clothRose: ["#512d3f", "#743b54", "#9d5168", "#bb6776", "#db8893", "#f5b8b0"],
-  clothBlue: ["#23344b", "#304d60", "#486b83", "#638da0", "#87b2ba", "#c0d4ca"],
   lilac: ["#3c3452", "#55446b", "#805689", "#9e74a5", "#c49dc8", "#e8bfd4"],
   paper: ["#a87b50", "#c5a372", "#e4c997", "#fcdfa9"],
 } as const
@@ -55,30 +54,6 @@ const materials: Record<string, readonly Group[]> = {
     ["lilac", "aedcb"],
     ["stem", "gkjih"],
   ],
-  "owl-statue": [
-    ["stoneCold", "afcbde"],
-    ["brass", "jihg"],
-    ["stem", "kml"],
-  ],
-  "star-statue": [
-    ["brass", "aecbd"],
-    ["stoneCold", "fjihg"],
-    ["stem", "kml"],
-  ],
-  "rose-pennant": [
-    ["clothRose", "glnmkf"],
-    ["brass", "adecb"],
-    ["wood", "hji"],
-    ["stone", "pvusr"],
-    ["stem", "otq"],
-  ],
-  "blue-banner": [
-    ["clothBlue", "egjnhi"],
-    ["brass", "adfcb"],
-    ["wood", "kml"],
-    ["stoneCold", "pvusr"],
-    ["stem", "otq"],
-  ],
   "stone-lantern": [
     ["limestone", "afedcb"],
     ["brass", "hijkl"],
@@ -109,10 +84,8 @@ function texturedColor(ramp: Ramp, index: number, x: number, y: number, seed: nu
   if (ramp === "wood") {
     const vein = hash(Math.floor(x / 2), Math.floor(y / 7), seed)
     index += vein > 0.77 && stroke < 3 ? 1 : vein < 0.17 && stroke > 2 ? -1 : 0
-  } else if (ramp === "stone" || ramp === "stoneCold" || ramp === "limestone") {
+  } else if (ramp === "stone" || ramp === "limestone") {
     index += cell > 0.7 && (y + Math.floor(x / 6)) % 5 === 0 ? 1 : cell < 0.19 ? -1 : 0
-  } else if (ramp === "clothRose" || ramp === "clothBlue") {
-    index += cell < 0.23 ? -1 : y % 4 === 1 && stroke > 4 ? 1 : 0
   } else {
     index += cell > 0.68 && stroke < 5 ? 1 : cell < 0.21 ? -1 : 0
   }
@@ -121,6 +94,8 @@ function texturedColor(ramp: Ramp, index: number, x: number, y: number, seed: nu
 
 function paintCatalog(id: string, original: PixelArt) {
   if (id === "reading-bench") return readingBenchArt
+  const keepsake = detailedKeepsakeArt(id)
+  if (keepsake) return keepsake
   const groups = materials[id]
   if (!groups) return original
   const bitmap = createBitmap(original.pixels[0]!.length, original.pixels.length)
@@ -202,31 +177,6 @@ function paintCatalog(id: string, original: PixelArt) {
     mark(16, 14, "#fff3bc")
     mark(16, 15, harborLamp.flame)
     mark(17, 15, "#f7c775")
-  } else if (id === "owl-statue") {
-    mark(11, 9, "#fff1ac")
-    mark(19, 9, "#fff1ac")
-    mark(12, 10, "#364344")
-    mark(20, 10, "#364344")
-    for (const [x, y] of [
-      [11, 16],
-      [13, 18],
-      [16, 17],
-      [11, 20],
-      [15, 21],
-      [18, 19],
-    ])
-      mark(x!, y!, "#a0a68a")
-  } else if (id === "star-statue") {
-    for (const [x, y] of [
-      [15, 3],
-      [16, 4],
-      [16, 5],
-      [13, 8],
-      [12, 8],
-      [14, 9],
-      [16, 10],
-    ])
-      mark(x!, y!, "#ffecad")
   } else if (id === "sunflower") {
     relief([
       [4, 15, 16, "#ffdfa0"],
@@ -273,18 +223,14 @@ function paintCatalog(id: string, original: PixelArt) {
       mark(x, y + 1, "#d199c1")
       mark(x + 1, y + 2, "#7b5589")
     }
-  } else if (id === "rose-pennant" || id === "blue-banner") {
-    for (const [x, y] of [
-      [13, 8],
-      [15, 8],
-      [17, 8],
-      [14, 14],
-      [16, 13],
-      [18, 12],
-    ])
-      mark(x!, y!, id === "rose-pennant" ? "#f5b8b0" : "#c0d4ca")
   }
-  return bitmapToPixelArt(bitmap)
+  // The short garden lamp retains its mossy plinth and samples the roof, amber
+  // pane and shaft separately so the flame stays legible in the smaller crown.
+  const finish =
+    id === "stone-lantern"
+      ? compactGroundProp(bitmap, [3, 6, 8, 10, 11, 12, 14, 16, 18, 20, 22, 25], 27, 0.78)
+      : bitmap
+  return bitmapToPixelArt(finish)
 }
 
 function treeStageArt(id: string, stage: "sprout" | "young") {

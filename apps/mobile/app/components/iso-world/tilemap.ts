@@ -24,6 +24,8 @@ export interface TileMap {
   coastFinish?: "picnic-headland"
   /** Opt-in surface art; tile shape, elevations and placement are unchanged. */
   art?: "detailed"
+  /** Native detail over the existing home picnic and pond pixels. */
+  surfaceFinish?: "fine-grain"
 }
 
 export function tileAt(map: TileMap, col: number, row: number): Tile | undefined {

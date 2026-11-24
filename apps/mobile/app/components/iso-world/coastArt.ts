@@ -171,6 +171,28 @@ function shoreCleavage(along: number, strata: number) {
   return strata > 0.27 && strata < 0.63 && Math.abs(along - (103 - 6 * strata)) < 1.34
 }
 
+/** Small broken courses inside the dry limestone, not a second shoreline mask. */
+function shoreStoneFacet(color: string, along: number, strata: number) {
+  if (
+    strata < 0.16 ||
+    strata > 0.71 ||
+    !(color === limestoneFace.sun || color === limestoneFace.mid || color === limestoneFace.turn)
+  )
+    return color
+  const course = Math.floor(strata * 3)
+  const step = along + course * 4
+  const block = Math.floor(step / 9)
+  const offset = step - block * 9
+  const wear = hash(block, course, 271)
+  const seam = 0.41 + (wear - 0.5) * 0.16
+  if (wear > 0.53 && Math.abs(strata - seam) < 0.045 && offset > 1 && offset < 6)
+    return shoreBlend(color, limestoneFace.joint, 0.42)
+  if (wear > 0.61 && offset > 1 && offset < 8 && strata < seam)
+    return shoreBlend(color, limestoneFace.cap, 0.32)
+  if (wear < 0.36 && offset < 7 && strata > seam) return shoreBlend(color, limestoneFace.turn, 0.31)
+  return color
+}
+
 /** Two wide dry shelves, a cool recess and short returns eroded into the same slab. */
 export function picnicShoreFinish(
   x: number,
@@ -221,9 +243,10 @@ export function picnicShoreFinish(
         strata < underside ? rock.sun : spacing < 7 || along > returnAt - 5 ? rock.turn : rock.mid
     }
   }
+  const face = shoreStoneFacet(color, along, strata)
   return weight === 1
-    ? color
-    : shoreBlend(coastRock("sandstone", "left", depth, x, y, true, height), color, weight)
+    ? face
+    : shoreBlend(coastRock("sandstone", "left", depth, x, y, true, height), face, weight)
 }
 
 /** Two short ivory tips follow the face, surrounded by a receding teal shoal. */

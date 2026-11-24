@@ -203,7 +203,7 @@ export function useHomeArchipelago(
       // Signs hang over each island's north corner, out in the channel above it.
       const signAt = { u: 0, v: 0, lift: 8 }
       const sign = (here: boolean) => {
-        const sprite = islandSign(homebase.name, here)
+        const sprite = islandSign(homebase.name, here, true)
         return { ...sprite, bitmap: detailedSpriteBitmap(sprite.bitmap, "sign") }
       }
       const layer: IslandLayer = {
