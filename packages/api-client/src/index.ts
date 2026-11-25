@@ -25,6 +25,12 @@ import type {
   UpdateMilestoneInput,
 } from "@beside/domain/api";
 import type { User } from "@beside/domain/types";
+import type { AvatarAppearance } from "@beside/domain/avatar";
+export {
+  avatarOptions,
+  randomAvatarAppearance,
+} from "@beside/domain/avatar-options";
+export type { AvatarAppearance } from "@beside/domain/avatar";
 export type * from "@beside/domain/api";
 export {
   COTTAGE_MILESTONE_CAP,
@@ -129,6 +135,13 @@ export class BesideClient {
   }
   homebases() {
     return this.request<ApiHomebase[]>("/homebases");
+  }
+  saveHomebaseAvatar(homebaseId: string, appearance: AvatarAppearance) {
+    return this.request<AvatarAppearance>(
+      `/homebases/${encodeURIComponent(homebaseId)}/avatar`,
+      "PUT",
+      appearance,
+    );
   }
   homebaseGarden(homebaseId: string) {
     return this.request<HomebaseGarden>(

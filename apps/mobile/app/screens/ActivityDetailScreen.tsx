@@ -25,7 +25,11 @@ import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { buildActivityScene, roofForIndex } from "@/components/iso-world/scene"
 import { worldArtAssets } from "@/components/iso-world/worldArtAssets"
 import { MilestoneReward, RewardChip, RewardLanded } from "@/components/MilestoneReward"
-import { avatarsForMembers } from "@/components/pixel-world/avatars"
+import {
+  avatarsForMembers,
+  avatarThumbnail,
+  memberAvatarAppearances,
+} from "@/components/pixel-world/avatars"
 import { catalogue } from "@/components/pixel-world/scene"
 import { RewardChangeSheet } from "@/components/RewardChangeSheet"
 import { Screen } from "@/components/Screen"
@@ -139,7 +143,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       .filter((membership) => membership.connectionId === activity?.connectionId)
       .map((membership) => data.users.find((user) => user.id === membership.userId))
       .filter((member) => member !== undefined) ?? []
-  const memberAvatars = avatarsForMembers(members)
+  const appearances = memberAvatarAppearances(data?.memberships ?? [], activity?.connectionId)
+  const memberAvatars = avatarsForMembers(members, appearances)
   const timeZone = schedules[0]?.configuration.timeZone ?? "America/Toronto"
   const snapshotTime = Date.parse(data?.serverTime ?? "")
   const now = Number.isFinite(snapshotTime)
@@ -247,6 +252,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       reward.requiredUserIds.map(
         (id) => data.users.find((u) => u.id === id) ?? { id, name: "Member" },
       ),
+      appearances,
     )
     if (!open) {
       const detail =
@@ -566,7 +572,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
               <View style={$members}>
                 {memberAvatars.map((avatar) => (
                   <View key={avatar.key} style={$member} accessibilityLabel={avatar.name}>
-                    <PixelArtSprite art={avatar.frames.idle} scale={3} />
+                    <PixelArtSprite art={avatarThumbnail(avatar.frames.idle)} scale={3} />
                     <Text
                       text={avatar.name.trim().split(/\s+/)[0]}
                       style={activityWorldStyles.muted}

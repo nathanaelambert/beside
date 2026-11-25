@@ -35,6 +35,7 @@ import {
   type SeaProp,
 } from "./archipelago"
 import { buoy, seaRock } from "./archipelagoProps"
+import { AvatarEditPopup } from "./AvatarEditPopup"
 import type { Bitmap } from "./bitmap"
 import { FoliageSprite } from "./FoliageSprite"
 import { recolor } from "./islandPalettes"
@@ -336,6 +337,7 @@ export type IsoWorldCanvasProps = SceneProps & {
   focusIslandKey?: string
   resetCamera?: number
   selectedKey?: string
+  editAvatarAction?: { memberId: string; onPress: () => void }
   guideTiles?: { col: number; row: number }[]
   coastGuides?: boolean
   /** Opt-in open-water artwork for the visual workshop. */
@@ -496,6 +498,7 @@ export function IsoWorldCanvas({
   focusIslandKey,
   resetCamera = 0,
   selectedKey,
+  editAvatarAction,
   guideTiles,
   coastGuides,
   detailedSea = false,
@@ -637,6 +640,10 @@ export function IsoWorldCanvas({
   const signZoom = useDerivedValue(() => camera.value.zoom)
   const signs = useDerivedValue<number>(() => (camera.value.zoom <= 1 ? 1 : 0))
   const enabled = interactive && !voyage
+  const avatarForEdit =
+    enabled && editAvatarAction && selectedKey === `avatar-${editAvatarAction.memberId}`
+      ? focused.drawables.find((drawable) => drawable.key === selectedKey)
+      : undefined
   const pan = Gesture.Pan()
     .minDistance(8)
     .enabled(enabled)
@@ -720,6 +727,19 @@ export function IsoWorldCanvas({
           </Group>
         </Canvas>
       </GestureDetector>
+      {editAvatarAction && avatarForEdit && (
+        <AvatarEditPopup
+          viewport={{ width, height }}
+          anchor={{
+            x: focused.offset.x + avatarForEdit.baseX,
+            top: focused.offset.y + avatarForEdit.y,
+            bottom: focused.offset.y + avatarForEdit.y + avatarForEdit.height,
+          }}
+          camera={camera}
+          ratio={ratio}
+          onPress={editAvatarAction.onPress}
+        />
+      )}
     </GestureHandlerRootView>
   )
 }

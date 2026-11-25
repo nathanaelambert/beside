@@ -13,6 +13,7 @@ import type { Request } from "express";
 import type { PoolClient } from "pg";
 import type { User } from "@beside/domain/types";
 import type { LoginInput, RegisterInput, Session } from "@beside/domain/api";
+import { randomAvatarAppearance } from "@beside/domain/avatar-options";
 import { id } from "@beside/domain/model";
 import { DatabaseService } from "./db/database.service.ts";
 import { createHomebase, joinHomebase } from "./homebases.ts";
@@ -95,7 +96,8 @@ export class AuthService {
         [user.id, passwordHash],
       );
       const inviteCode = input.inviteCode?.trim();
-      if (inviteCode) await joinHomebase(client, user.id, inviteCode);
+      if (inviteCode)
+        await joinHomebase(client, user.id, inviteCode, randomAvatarAppearance());
       else await createHomebase(client, user.id, `${user.name}'s home base`);
       return this.session(client, user);
     });

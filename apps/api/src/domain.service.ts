@@ -1,4 +1,5 @@
-import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import type { AvatarAppearance } from "@beside/domain/avatar";
 import type { CottageBuildSeconds } from "@beside/domain/cottage";
 import { execute } from "@beside/domain/model";
 import { settleExpiredMilestones } from "@beside/domain/expiry";
@@ -74,6 +75,18 @@ export class DomainService {
     return this.database.transaction(true, (client) =>
       createHomebase(client, userId, name),
     );
+  }
+  saveAvatar(userId: string, homebaseId: string, appearance: AvatarAppearance) {
+    return this.database.transaction(true, async (client) => {
+      const { rows } = await client.query<{ avatar_appearance: AvatarAppearance }>(
+        `UPDATE homebase_member SET avatar_appearance = $3
+          WHERE connection_id = $1 AND user_id = $2
+          RETURNING avatar_appearance`,
+        [homebaseId, userId, appearance],
+      );
+      if (!rows.length) throw new NotFoundException("Home base not found.");
+      return rows[0]!.avatar_appearance;
+    });
   }
   joinHomebase(userId: string, inviteCode: string) {
     return this.database.transaction(true, (client) =>

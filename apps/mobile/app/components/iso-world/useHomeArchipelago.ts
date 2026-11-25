@@ -23,7 +23,7 @@ import {
 import { useCottageClock } from "./useCottageClock"
 import { worldArtAssets } from "./worldArtAssets"
 import { detailedSpriteBitmap } from "./worldDetailArt"
-import { avatarsForMembers } from "../pixel-world/avatars"
+import { avatarsForMembers, memberAvatarAppearances } from "../pixel-world/avatars"
 import { detailedAvatar } from "../pixel-world/detailedAvatars"
 import { oakAt } from "../pixel-world/starterOak"
 
@@ -176,7 +176,8 @@ export function useHomeArchipelago(
         (memberId) =>
           data.state.users.find((u) => u.id === memberId) ?? { id: memberId, name: "Member" },
       )
-      const avatars = avatarsForMembers(members).map(detailedAvatar)
+      const appearances = memberAvatarAppearances(data.state.memberships, id)
+      const avatars = avatarsForMembers(members, appearances).map(detailedAvatar)
       const garden = data.gardens[id]
       const activities = homeActivities(data.state, id, now)
       const items: HomeGardenItem[] = [

@@ -57,9 +57,10 @@ export async function loadDatabase(client: PoolClient): Promise<Database> {
     );
     const records = result.rows.map((row: Record<string, unknown>) =>
       Object.fromEntries(
-        columns.map((column) => {
+        columns.flatMap((column) => {
           const value = row[sqlName(column)];
-          return [column, value instanceof Date ? value.toISOString() : value];
+          if (column === "avatarAppearance" && value === null) return [];
+          return [[column, value instanceof Date ? value.toISOString() : value]];
         }),
       ),
     );

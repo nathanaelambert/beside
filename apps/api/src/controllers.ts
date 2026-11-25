@@ -25,6 +25,7 @@ import {
 } from "@nestjs/swagger";
 import type { Request } from "express";
 import * as input from "@beside/domain/api";
+import { avatarAppearanceSchema } from "@beside/domain/avatar";
 import { AuthGuard, AuthService, type AuthenticatedRequest } from "./auth.ts";
 import { DatabaseService } from "./db/database.service.ts";
 import { DomainService } from "./domain.service.ts";
@@ -64,7 +65,7 @@ export class AuthController {
   @ApiOperation({
     summary: "Create an account and join or initialize a home base",
     description:
-      "An optional inviteCode joins that existing home base. Without a code, creates an inviteable home base. Invalid codes roll back registration. Returns a 30-day bearer session. Passwords must contain 12–128 characters. No email verification or password recovery in this first pass.",
+      "An optional inviteCode joins that existing home base and saves a random avatar for the new membership. Without a code, creates an inviteable home base. Invalid codes roll back registration. Returns a 30-day bearer session. Passwords must contain 12–128 characters. No email verification or password recovery in this first pass.",
   })
   async register(@Body() body: unknown, @Req() request: Request) {
     const data = input.registerSchema.parse(body);
@@ -131,6 +132,27 @@ export class DomainController {
   @ApiOkResponse({ schema: list("Homebase") })
   homebases(@Req() request: AuthenticatedRequest) {
     return this.domain.homebases(request.actor.id);
+  }
+  @Put("homebases/:homebaseId/avatar")
+  @ApiParam({ name: "homebaseId", type: String })
+  @ApiBody({ schema: ref("AvatarAppearance") })
+  @ApiOkResponse({ schema: ref("AvatarAppearance") })
+  @ApiNotFoundResponse({ schema: ref("Error") })
+  @ApiOperation({
+    summary: "Save the signed-in member's avatar for this home base",
+    description:
+      "Only the current member can change their avatar. Other memberships remain unchanged. Visible members receive the saved design on their membership in GET /api/v1/state.",
+  })
+  saveAvatar(
+    @Req() request: AuthenticatedRequest,
+    @Param("homebaseId") homebaseId: string,
+    @Body() body: unknown,
+  ) {
+    return this.domain.saveAvatar(
+      request.actor.id,
+      homebaseId,
+      avatarAppearanceSchema.parse(body),
+    );
   }
   @Get("homebases/:homebaseId/garden")
   @ApiParam({ name: "homebaseId", type: String })

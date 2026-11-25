@@ -24,7 +24,7 @@ import {
 import { IslandSwitcher } from "@/components/iso-world/IslandSwitcher"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { meadowToIso } from "@/components/iso-world/projection"
-import { catalogue, itemDrawable, type HitTarget } from "@/components/iso-world/scene"
+import { catalogue, homeAvatarY, itemDrawable, type HitTarget } from "@/components/iso-world/scene"
 import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
 import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
 import { detailedCatalogArt, hasGrowthArt } from "@/components/iso-world/worldDetailArt"
@@ -87,7 +87,7 @@ function HomeIslandScreen({
   archipelago: ReturnType<typeof useHomeArchipelago>
   retry: () => void
 }) {
-  const { logout } = useAuth()
+  const { logout, consumeAvatarOnboarding } = useAuth()
   const {
     data: shared,
     focused,
@@ -99,9 +99,28 @@ function HomeIslandScreen({
     setError,
   } = archipelago
   const homebase = focused?.homebase
+  const [selectedKey, setSelectedKey] = useState<string>()
+  const myMembership = shared?.state.memberships.find(
+    (member) => member.connectionId === homebase?.id && member.userId === userId,
+  )
+  const editAvatar = useCallback(() => {
+    if (!homebase || !myMembership) return
+    setSelectedKey(undefined)
+    navigation.navigate("AvatarEditor", {
+      connectionId: homebase.id,
+      homebaseName: homebase.name,
+      appearance: myMembership.avatarAppearance,
+    })
+  }, [homebase, myMembership, navigation])
+  useFocusEffect(
+    useCallback(() => {
+      // A restored session is not an invitation to replace a familiar avatar.
+      if (!busy && myMembership && consumeAvatarOnboarding() && !myMembership.avatarAppearance)
+        editAvatar()
+    }, [busy, consumeAvatarOnboarding, editAvatar, myMembership]),
+  )
   const data = shared && { state: shared.state, garden: focused?.garden }
   const [loggingOut, setLoggingOut] = useState(false)
-  const [selectedKey, setSelectedKey] = useState<string>()
   const [cameraReset, setCameraReset] = useState(0)
   const [zoom, setZoom] = useState<number>()
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -133,6 +152,7 @@ function HomeIslandScreen({
 
   const members = focused?.members ?? []
   const avatars = focused?.avatars ?? []
+  const myAvatar = myMembership && avatars.find((avatar) => avatar.key === myMembership.userId)
   const activities = focused?.activities ?? []
   const multipleIslands = islands.length > 1
   const stops = useMemo(() => zoomStops(PixelRatio.get(), multipleIslands), [multipleIslands])
@@ -170,6 +190,15 @@ function HomeIslandScreen({
     travel(id)
   }
   const selected = avatars.find((avatar) => avatar.key === selectedKey)
+  const selectedFriend = selected?.key === myAvatar?.key ? undefined : selected
+  const canEditAvatar = !!myAvatar && !busy && !voyage && !savingOak && !planting
+
+  function locateMyAvatar() {
+    if (!canEditAvatar || !myAvatar) return
+    setFocus({ x: myAvatar.x, y: homeAvatarY(myAvatar.y) })
+    setCameraReset((value) => value + 1)
+    setSelectedKey(myAvatar.key)
+  }
   const oak = data?.garden?.oak
   const placements = useMemo(() => placedRewards(data?.garden), [data?.garden])
   const placedIds = useMemo(() => new Set(placements.map((p) => p.rewardId)), [placements])
@@ -322,6 +351,10 @@ function HomeIslandScreen({
       return
     }
     if (!editing || !homebase || !target) {
+      if (hit?.type === "avatar" && hit.id === myAvatar?.key && hit.id === selectedKey) {
+        setSelectedKey(undefined)
+        return
+      }
       if (hit?.type === "house" && selectedKey === `house-${hit.id}`) openActivity(hit.id)
       else
         setSelectedKey(
@@ -503,6 +536,18 @@ function HomeIslandScreen({
         <View style={styles.headingRow}>
           <Text text={multipleIslands ? "YOUR ISLANDS" : "YOUR HOME BASE"} style={worldEyebrow} />
           <View style={styles.headerActions}>
+            {myAvatar && (
+              <Pressable
+                testID="homebase-locate-avatar"
+                accessibilityRole="button"
+                accessibilityLabel="Find my avatar"
+                disabled={!canEditAvatar}
+                onPress={locateMyAvatar}
+                style={styles.logout}
+              >
+                <Text text="My avatar" style={styles.smallText} />
+              </Pressable>
+            )}
             {homebase && (
               <Pressable
                 testID="homebase-bay-workshop"
@@ -569,6 +614,11 @@ function HomeIslandScreen({
               }
               resetCamera={cameraReset}
               selectedKey={editing ? undefined : selected ? `avatar-${selected.key}` : selectedKey}
+              editAvatarAction={
+                canEditAvatar && myAvatar && selectedKey === myAvatar.key
+                  ? { memberId: myAvatar.key, onPress: editAvatar }
+                  : undefined
+              }
               guideTiles={editing ? guideTiles : undefined}
               previewTile={
                 position ? { col: (position.x - 8) / 16, row: (position.y - 8) / 16 } : undefined
@@ -576,7 +626,7 @@ function HomeIslandScreen({
               onTap={tapWorld}
               onPinch={changeZoom}
               detailedSea
-              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${multipleIslands ? "Use the island buttons or tap another island to sail there. " : ""}${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend, cottage or reward to learn about it."}`}
+              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${multipleIslands ? "Use the island buttons or tap another island to sail there. " : ""}${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap your avatar to edit it, or tap a friend, cottage or reward to learn about it."}`}
             />
             <View
               pointerEvents="none"
@@ -836,7 +886,7 @@ function HomeIslandScreen({
               {growthLabel}
             </View>
           </View>
-        ) : !selected && nextUp && nextUpItem && !editing ? (
+        ) : !selectedFriend && nextUp && nextUpItem && !editing ? (
           <View style={[styles.detail, styles.waiting]} testID="homebase-reward-waiting">
             <View style={styles.thumbnail}>
               <RewardSprite item={nextUpItem} scale={1.5} />
@@ -868,14 +918,14 @@ function HomeIslandScreen({
           </View>
         ) : (
           <View style={styles.detail}>
-            {selected && (
+            {selectedFriend && (
               <View style={styles.thumbnail}>
                 <RewardSprite
                   item={{
-                    id: selected.key,
-                    name: selected.name,
+                    id: selectedFriend.key,
+                    name: selectedFriend.name,
                     category: "Friends",
-                    artifact: selected.frames.idle,
+                    artifact: selectedFriend.frames.idle,
                   }}
                   scale={1.5}
                 />
@@ -884,14 +934,14 @@ function HomeIslandScreen({
             <View style={styles.detailText}>
               <Text
                 testID="homebase-selected-member"
-                text={selected?.name ?? "Your people, together"}
+                text={selectedFriend?.name ?? "Your people, together"}
                 weight="semiBold"
                 style={styles.sectionTitle}
                 accessibilityLiveRegion="polite"
               />
               <Text
                 text={
-                  selected
+                  selectedFriend
                     ? "Part of your home base."
                     : "Tap a friend, cottage or reward on the island."
                 }

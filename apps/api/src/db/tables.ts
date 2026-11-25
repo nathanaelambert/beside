@@ -5,7 +5,11 @@ export const tables = [
   ["rewardItems", "reward_item", ["id", "name", "category", "artifact"]],
   ["users", "app_user", ["id", "name", "email", "color"]],
   ["connections", "homebase", ["id", "name"]],
-  ["memberships", "homebase_member", ["id", "connectionId", "userId"]],
+  [
+    "memberships",
+    "homebase_member",
+    ["id", "connectionId", "userId", "avatarAppearance"],
+  ],
   [
     "subjectTemplates",
     "subject_template",

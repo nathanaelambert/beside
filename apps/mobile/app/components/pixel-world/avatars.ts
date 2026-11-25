@@ -1,5 +1,7 @@
+import type { ApiState, AvatarAppearance } from "@beside/api-client"
 import type { PixelArt } from "@beside/rewards"
 
+import { customAvatarFrames } from "./avatarCreatorArt"
 import { GROUP_BLANKET } from "./terrain"
 
 // Hand-placed 16 × 20 chibi avatars. Same format as reward artifacts; "o" is the warm outline.
@@ -252,6 +254,26 @@ export const avatars: Avatar[] = [
 
 export const AVATAR_WIDTH = 16
 export const AVATAR_HEIGHT = 20
+const thumbnails = new WeakMap<PixelArt, PixelArt>()
+
+/** Sample portraits into the original small card footprint, not the island renderer. */
+export function avatarThumbnail(art: PixelArt): PixelArt {
+  const width = art.pixels[0]!.length
+  const height = art.pixels.length
+  if (width === AVATAR_WIDTH && height === AVATAR_HEIGHT) return art
+  const cached = thumbnails.get(art)
+  if (cached) return cached
+  const pixels = Array.from({ length: AVATAR_HEIGHT }, (_, y) => {
+    const row = art.pixels[Math.floor(((y + 0.5) * height) / AVATAR_HEIGHT)]!
+    return Array.from(
+      { length: AVATAR_WIDTH },
+      (_, x) => row[Math.floor(((x + 0.5) * width) / AVATAR_WIDTH)],
+    ).join("")
+  })
+  const thumbnail = { ...art, pixels }
+  thumbnails.set(art, thumbnail)
+  return thumbnail
+}
 
 // The prototype keeps its original two-person roster. Home bases opt into these four.
 export const memberAvatarStyles: Avatar[] = [
@@ -290,16 +312,35 @@ export function avatarForMember(name: string, index: number): Avatar {
   return { ...art, name, phase: index * 5 + 1 }
 }
 
-export function avatarsForMembers(members: { id: string; name: string }[]): Avatar[] {
-  return members.map((member, index) => ({
-    ...avatarForMember(member.name, index),
-    key: member.id,
-    x:
-      (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2 -
-      ((Math.min(4, members.length - Math.floor(index / 4) * 4) - 1) * 17) / 2 +
-      (index % 4) * 17,
-    y: 147 + Math.floor(index / 4) * 24,
-  }))
+export function memberAvatarAppearances(
+  memberships: ApiState["memberships"],
+  homebaseId: string | undefined,
+) {
+  const appearances = new Map<string, AvatarAppearance>()
+  for (const { connectionId, userId, avatarAppearance } of memberships) {
+    if (connectionId === homebaseId && avatarAppearance) appearances.set(userId, avatarAppearance)
+  }
+  return appearances
+}
+
+export function avatarsForMembers(
+  members: { id: string; name: string }[],
+  appearances?: ReadonlyMap<string, AvatarAppearance>,
+): Avatar[] {
+  return members.map((member, index) => {
+    const avatar = avatarForMember(member.name, index)
+    const appearance = appearances?.get(member.id)
+    return {
+      ...avatar,
+      frames: appearance ? customAvatarFrames(appearance) : avatar.frames,
+      key: member.id,
+      x:
+        (GROUP_BLANKET.x0 + GROUP_BLANKET.x1) / 2 -
+        ((Math.min(4, members.length - Math.floor(index / 4) * 4) - 1) * 17) / 2 +
+        (index % 4) * 17,
+      y: 147 + Math.floor(index / 4) * 24,
+    }
+  })
 }
 
 export function firstNamesLabel(members: { name: string }[]): string {

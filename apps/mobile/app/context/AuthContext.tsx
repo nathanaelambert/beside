@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react"
 import type { Session } from "@beside/api-client"
@@ -21,6 +22,7 @@ export type AuthContextType = {
   restoreError: string
   user: AuthUser | null
   completeSignIn: (session: Session) => Promise<void>
+  consumeAvatarOnboarding: () => boolean
   retryRestore: () => void
   logout: () => Promise<void>
 }
@@ -32,6 +34,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
   const [isRestoring, setIsRestoring] = useState(true)
   const [restoreError, setRestoreError] = useState("")
   const [restoreAttempt, setRestoreAttempt] = useState(0)
+  const avatarOnboarding = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -81,13 +84,21 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
       throw new Error("We couldn’t securely save your session. Please try again.")
     }
     besideApi.setToken(session.token)
+    avatarOnboarding.current = true
     setUser(session.user)
+  }, [])
+
+  const consumeAvatarOnboarding = useCallback(() => {
+    const pending = avatarOnboarding.current
+    avatarOnboarding.current = false
+    return pending
   }, [])
 
   const logout = useCallback(async () => {
     await sessionToken.clear()
     await besideApi.logout().catch(() => undefined)
     besideApi.setToken(null)
+    avatarOnboarding.current = false
     setUser(null)
     remove("NAVIGATION_STATE")
   }, [])
@@ -100,6 +111,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
         restoreError,
         user,
         completeSignIn,
+        consumeAvatarOnboarding,
         retryRestore: () => setRestoreAttempt((attempt) => attempt + 1),
         logout,
       }}

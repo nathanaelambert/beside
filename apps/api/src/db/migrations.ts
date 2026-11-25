@@ -1,1 +1,1 @@
-export const latestMigration = "010_activity_cottage_clock.sql";
+export const latestMigration = "012_homebase_avatar.sql";

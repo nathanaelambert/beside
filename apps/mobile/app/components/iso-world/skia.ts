@@ -32,7 +32,7 @@ export function bitmapImage(bitmap: Bitmap) {
   return image
 }
 
-const artImages = new Map<PixelArt, SkImage | null>()
+const artImages = new WeakMap<PixelArt, SkImage | null>()
 export function artImage(art: PixelArt) {
   let image = artImages.get(art)
   if (image === undefined) {

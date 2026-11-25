@@ -36,7 +36,11 @@ jest.mock("@/components/iso-world/IsoWorldCanvas", () => ({
 jest.mock("@/components/CottageThumbnail", () => ({ CottageThumbnail: () => null }))
 jest.mock("@/components/RewardSprite", () => ({ RewardSprite: () => null }))
 jest.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({ user: { id: "alice" }, logout: jest.fn() }),
+  useAuth: () => ({
+    user: { id: "alice" },
+    logout: jest.fn(),
+    consumeAvatarOnboarding: () => false,
+  }),
 }))
 jest.mock("@/utils/storage", () => ({ loadString: () => null, saveString: jest.fn() }))
 jest.mock("@/services/api/beside", () => ({
@@ -129,6 +133,42 @@ function openScreen(width = 390, linked?: { rewardId: string; place?: boolean })
 }
 
 const canvasProps = () => jest.mocked(IsoWorldCanvas).mock.calls.at(-1)![0]
+
+it("opens the avatar edit action only from your own avatar and clears it before editing", async () => {
+  jest.mocked(besideApi.state).mockResolvedValue({
+    ...state,
+    memberships: state.users.map(({ id }) => ({
+      id: `member-${id}`,
+      connectionId: base.id,
+      userId: id,
+    })),
+  })
+  const screen = openScreen()
+  await screen.findByTestId("homebase-locate-avatar")
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  const tap = (id?: string) =>
+    act(() => canvasProps().onTap!({ x: 0, y: 0, hit: id ? { type: "avatar", id } : undefined }))
+  tap("bob")
+  expect(screen.getByTestId("homebase-selected-member")).toHaveTextContent("Bob Brown")
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  tap("alice")
+  expect(canvasProps().selectedKey).toBe("avatar-alice")
+  expect(canvasProps().editAvatarAction?.memberId).toBe("alice")
+  tap("alice")
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  tap("alice")
+  tap()
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  fireEvent.press(screen.getByTestId("homebase-locate-avatar"))
+  expect(screen.navigation.navigate).not.toHaveBeenCalled()
+  act(() => canvasProps().editAvatarAction?.onPress())
+  expect(screen.navigation.navigate).toHaveBeenCalledWith("AvatarEditor", {
+    connectionId: base.id,
+    homebaseName: base.name,
+    appearance: undefined,
+  })
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+})
 
 it.each([390, 900])("preserves the roster and normal framing at width %i", async (width) => {
   const screen = openScreen(width)

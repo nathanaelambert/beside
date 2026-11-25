@@ -1,4 +1,5 @@
 import { ComponentProps } from "react"
+import type { AvatarAppearance } from "@beside/api-client"
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs"
 import {
   CompositeScreenProps,
@@ -25,6 +26,7 @@ export type AppStackParamList = {
   Activities: { connectionId: string }
   ActivityCreate: { connectionId: string }
   BayWorkshop: { connectionId: string }
+  AvatarEditor: { connectionId: string; homebaseName: string; appearance?: AvatarAppearance }
   /** `section` opens the activity at its first open or upcoming milestone. */
   ActivityDetail: { activityId: string; section?: "milestones" }
   Demo: NavigatorScreenParams<DemoTabParamList>

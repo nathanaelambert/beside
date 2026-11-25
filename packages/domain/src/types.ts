@@ -1,4 +1,5 @@
 import type { RewardItem } from "@beside/rewards";
+import type { AvatarAppearance } from "./avatar.ts";
 import type { CottageBuild } from "./cottage.ts";
 export type { PixelArt, RewardItem } from "@beside/rewards";
 
@@ -50,6 +51,7 @@ export interface Membership {
   id: string;
   connectionId: string;
   userId: string;
+  avatarAppearance?: AvatarAppearance;
 }
 export interface SubjectTemplate {
   id: string;

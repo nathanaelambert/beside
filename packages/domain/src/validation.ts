@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { avatarAppearanceSchema } from "./avatar.ts";
 import type { Database } from "./types.ts";
 import { COTTAGE_MILESTONE_CAP, MAX_COTTAGE_BUILD_SECONDS } from "./cottage.ts";
 import {
@@ -145,7 +146,14 @@ export const databaseSchema = z.object({
     }),
   ).min(1),
   connections: rows(z.object({ id: key, name: key })),
-  memberships: rows(z.object({ id: key, connectionId: key, userId: key })),
+  memberships: rows(
+    z.object({
+      id: key,
+      connectionId: key,
+      userId: key,
+      avatarAppearance: avatarAppearanceSchema.optional(),
+    }),
+  ),
   subjectTemplates: rows(
     z.object({ id: key, name: key, category, fields: z.array(key), unit: key }),
   ).min(1),

@@ -26,6 +26,9 @@ const state = {
     { id: "sam", name: "Sam" },
     { id: "lee", name: "Lee" },
   ],
+  memberships: bases.flatMap((base) =>
+    base.memberIds.map((id) => ({ id: `${base.id}-${id}`, connectionId: base.id, userId: id })),
+  ),
   activities: [
     { id: "a-family", name: "Read", connectionId: "family", createdAt: "2026-11-01" },
     { id: "a-project", name: "Build", connectionId: "project", createdAt: "2026-11-02" },

@@ -154,7 +154,7 @@ it(
       for (const [key, table, currentColumns] of tables) {
         const columns: string[] = currentColumns.filter(
           (column) =>
-            column !== "cottageMilestones" && column !== "cottageBuild",
+            !["cottageMilestones", "cottageBuild", "avatarAppearance"].includes(column),
         );
         if (key === "connections" || key === "activities")
           columns.push("personalOwnerId");
@@ -217,6 +217,12 @@ it(
             "../src/db/migrations/010_activity_cottage_clock.sql",
             import.meta.url,
           ),
+          "utf8",
+        ),
+      );
+      await client.query(
+        await readFile(
+          new URL("../src/db/migrations/012_homebase_avatar.sql", import.meta.url),
           "utf8",
         ),
       );

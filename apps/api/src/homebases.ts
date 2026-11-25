@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NotFoundException } from "@nestjs/common";
 import type { PoolClient } from "pg";
+import type { AvatarAppearance } from "@beside/domain/avatar";
 import { execute, id } from "@beside/domain/model";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
 
@@ -31,6 +32,7 @@ export async function joinHomebase(
   client: PoolClient,
   userId: string,
   inviteCode: string,
+  avatarAppearance?: AvatarAppearance,
 ) {
   const invite = await client.query(
     "SELECT homebase_id FROM homebase_invite WHERE code = $1",
@@ -54,6 +56,7 @@ export async function joinHomebase(
     id: id("member"),
     connectionId: homebaseId,
     userId,
+    ...(avatarAppearance ? { avatarAppearance } : {}),
   });
   const now = new Date().toISOString();
   for (const activity of after.activities.filter(

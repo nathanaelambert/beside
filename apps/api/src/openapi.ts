@@ -6,6 +6,7 @@ import {
 } from "@beside/domain/validation";
 import { createScheduleSchema, scheduleSchema } from "@beside/domain/schedules";
 import * as api from "@beside/domain/api";
+import { avatarAppearanceSchema } from "@beside/domain/avatar";
 
 export const schemas = {
   CreateSchedule: createScheduleSchema,
@@ -21,6 +22,7 @@ export const schemas = {
   UpdateMilestone: api.updateMilestoneSchema,
   JoinHomebase: api.joinHomebaseSchema,
   Homebase: api.homebaseSchema,
+  AvatarAppearance: avatarAppearanceSchema,
   HomebaseGarden: api.homebaseGardenSchema,
   PlantStarterOak: api.plantStarterOakSchema,
   PlaceReward: api.placeRewardSchema,

@@ -34,6 +34,24 @@ The migrator can be run again safely and uses a transaction and migration lock.
 Docs and liveness work before database configuration. Data routes require a
 configured, migrated database. `PORT` defaults to 3001.
 
+### Home base avatars
+
+`PUT /api/v1/homebases/:homebaseId/avatar` saves the signed-in member's
+appearance and returns the saved design. The JSON body is an
+`AvatarAppearance` (version 1): for example
+`{"version":1,"skin":"bronze","hair":"curly","hairColor":"copper","glasses":"round","outfit":"moss-jacket"}`.
+See OpenAPI for the allowed choices. A non-member receives 404; the caller
+cannot supply another member's ID. `GET /api/v1/state` includes the optional
+`avatarAppearance` on memberships already visible to the caller.
+
+Migration 012 adds a nullable column without backfilling old memberships.
+Registration with an invite code saves a random avatar in the new membership
+and opens the island directly. Existing memberships keep the original avatar
+unless the member saves a new one. Other interactive signup or sign-in flows
+can open an unsaved draft when there is no saved appearance; canceling leaves
+the original untouched. Saved appearances never reroll on login or session restore.
+On the island, members can tap their own avatar and select **Edit avatar**.
+
 ## Use the API
 
 ### Shared starter oak
