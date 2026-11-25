@@ -1,4 +1,5 @@
 import { ComponentProps } from "react"
+import type { AvatarAppearance } from "@beside/api-client"
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs"
 import {
   CompositeScreenProps,
@@ -20,11 +21,15 @@ export type AppStackParamList = {
   Welcome: undefined
   Login: undefined
   Register: undefined
+  GuestJoin: undefined
   /** `rewardId` focuses an earned reward; with `place`, starts placing it. */
   HomeBase: { connectionId?: string; rewardId?: string; place?: boolean } | undefined
   Activities: { connectionId: string }
   ActivityCreate: { connectionId: string }
-  ActivityDetail: { activityId: string }
+  BayWorkshop: { connectionId: string }
+  AvatarEditor: { connectionId: string; homebaseName: string; appearance?: AvatarAppearance }
+  /** `section` opens the activity at its first open or upcoming milestone. */
+  ActivityDetail: { activityId: string; section?: "milestones" }
   Demo: NavigatorScreenParams<DemoTabParamList>
   RewardItems: undefined
   PixelWorld: undefined

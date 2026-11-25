@@ -1,4 +1,6 @@
 import type { RewardItem } from "@beside/rewards";
+import type { AvatarAppearance } from "./avatar.ts";
+import type { CottageBuild } from "./cottage.ts";
 export type { PixelArt, RewardItem } from "@beside/rewards";
 
 export type Category =
@@ -14,7 +16,8 @@ export type ProgressMode = "position" | "sum" | "sessions";
 export interface User {
   id: string;
   name: string;
-  email: string;
+  /** Guests have no credentials or email address. */
+  email: string | null;
   color: "blue" | "rose" | "moss";
 }
 // Connection rows are home bases. Membership is identical for every base.
@@ -49,6 +52,7 @@ export interface Membership {
   id: string;
   connectionId: string;
   userId: string;
+  avatarAppearance?: AvatarAppearance;
 }
 export interface SubjectTemplate {
   id: string;
@@ -85,6 +89,9 @@ export interface Activity {
   progressMode: ProgressMode;
   unit: string;
   createdAt: string;
+  /** Permanent count of unlocked cottage milestones, capped at the final level. */
+  cottageMilestones?: number;
+  cottageBuild?: CottageBuild | null;
 }
 export interface ActivitySubject {
   id: string;

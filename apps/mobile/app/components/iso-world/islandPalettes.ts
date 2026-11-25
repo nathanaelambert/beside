@@ -3,7 +3,9 @@
 // colours, so a variant is a straight colour swap over the painted bitmaps.
 
 import { createBitmap, rgb, type Bitmap } from "./bitmap"
+import { meadowRamps } from "./meadowArt"
 import { palette } from "./paint"
+import { picnicClothRamp } from "./picnicArt"
 import type { Drawable } from "./scene"
 
 type Swap = Record<string, string>
@@ -26,7 +28,19 @@ export const islandPalettes: IslandPalette[] = [
       ...tones(palette.grass, ["#6a7d3b", "#7b8f43", "#8ea04b", "#a2b15a", "#b8c26d"]),
       [palette.grassLight]: "#d6d690",
       ...tones(palette.forest, ["#3d5a31", "#476836", "#52763d", "#5e8445"]),
+      ...tones(meadowRamps.grass, ["#6c783e", "#778343", "#858f49", "#929d50", "#a1aa59"]),
+      ...tones(meadowRamps.forest, ["#475532", "#505f37", "#58693b", "#647744"]),
       ...tones(palette.blanket, ["#2f4f7a", "#4f74a8", "#8fb0d6", "#f5e6cf"]),
+      ...tones(picnicClothRamp, [
+        "#3e546e",
+        "#597485",
+        "#aab8bc",
+        "#647f94",
+        "#839ba8",
+        "#98aebb",
+        "#e0ccb1",
+        "#ebdac0",
+      ]),
     },
   },
   {
@@ -36,7 +50,19 @@ export const islandPalettes: IslandPalette[] = [
       ...tones(palette.grass, ["#447a4a", "#4f8954", "#5b985d", "#6ca86a", "#82ba79"]),
       [palette.grassLight]: "#b4dc9a",
       ...tones(palette.forest, ["#2c5636", "#33623d", "#3c7044", "#467e4c"]),
+      ...tones(meadowRamps.grass, ["#457849", "#508451", "#5b9058", "#669c60", "#73aa69"]),
+      ...tones(meadowRamps.forest, ["#34523b", "#3a5c41", "#44674a", "#4d7451"]),
       ...tones(palette.blanket, ["#8a6a1f", "#c99a36", "#f2c96b", "#f5e6cf"]),
+      ...tones(picnicClothRamp, [
+        "#7e612d",
+        "#a08043",
+        "#d1ae75",
+        "#b49351",
+        "#c5aa6d",
+        "#d5b97b",
+        "#ead3a9",
+        "#efdfbc",
+      ]),
     },
   },
   {
@@ -44,7 +70,18 @@ export const islandPalettes: IslandPalette[] = [
     name: "spring",
     swap: {
       ...tones(palette.grass, ["#5a8a43", "#69994c", "#78a856", "#8bb862", "#a2c972"]),
+      ...tones(meadowRamps.grass, ["#5e8643", "#699149", "#749d4e", "#82aa55", "#91b75e"]),
       ...tones(palette.blanket, ["#24505a", "#3f8088", "#8cc4bd", "#f5e6cf"]),
+      ...tones(picnicClothRamp, [
+        "#375754",
+        "#537b72",
+        "#a8b8a2",
+        "#638f83",
+        "#82a695",
+        "#96b4a3",
+        "#decfb0",
+        "#e8dbc1",
+      ]),
     },
   },
 ]

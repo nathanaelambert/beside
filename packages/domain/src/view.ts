@@ -5,6 +5,7 @@ import { visibleActivities, visibleLogs, visibleSubjects } from "./model.ts";
 // API reads use this same boundary for every collection. Never return the
 // database-wide command snapshot to a client.
 export function stateForUser(db: Database, userId: string): ApiState {
+  const guest = db.users.find((user) => user.id === userId)?.email === null;
   const bases = new Set(
     db.memberships
       .filter((m) => m.userId === userId)
@@ -12,19 +13,24 @@ export function stateForUser(db: Database, userId: string): ApiState {
   );
   const activities = visibleActivities(db, userId);
   const activityIds = new Set(activities.map((a) => a.id));
-  const logs = visibleLogs(db, userId);
+  const logs = guest ? [] : visibleLogs(db, userId);
   const logIds = new Set(logs.map((log) => log.id));
-  const subjects = visibleSubjects(db, userId);
+  const subjects = guest ? [] : visibleSubjects(db, userId);
   const subjectIds = new Set(subjects.map((s) => s.id));
-  const participations = db.participations.filter((p) =>
-    activityIds.has(p.activityId),
-  );
+  const participations = guest
+    ? []
+    : db.participations.filter((p) => activityIds.has(p.activityId));
   const participationIds = new Set(participations.map((p) => p.id));
   const memberships = db.memberships.filter((m) => bases.has(m.connectionId));
-  const deliveries = db.deliveries.filter((d) => d.recipientUserId === userId);
+  const deliveries = guest
+    ? []
+    : db.deliveries.filter((d) => d.recipientUserId === userId);
   const eventIds = new Set(deliveries.map((d) => d.eventId));
   const events = db.events.filter((event) => eventIds.has(event.id));
-  const rewards = db.rewards.filter((reward) => bases.has(reward.homebaseId));
+  const rewards = db.rewards.filter(
+    (reward) => bases.has(reward.homebaseId) && (!guest || reward.obtainedAt !== null),
+  );
+  const rewardIds = new Set(rewards.map((reward) => reward.id));
   const users = new Set([
     userId,
     ...memberships.map((m) => m.userId),
@@ -55,9 +61,13 @@ export function stateForUser(db: Database, userId: string): ApiState {
       (link) =>
         activityIds.has(link.activityId) && subjectIds.has(link.subjectId),
     ),
-    milestones: db.milestones.filter((milestone) =>
-      activityIds.has(milestone.activityId),
-    ),
+    milestones: db.milestones
+      .filter((milestone) => activityIds.has(milestone.activityId))
+      .map((milestone) =>
+        guest && milestone.rewardId && !rewardIds.has(milestone.rewardId)
+          ? { ...milestone, rewardId: null }
+          : milestone,
+      ),
     logShares: db.logShares.filter(
       (share) => logIds.has(share.logId) && bases.has(share.connectionId),
     ),

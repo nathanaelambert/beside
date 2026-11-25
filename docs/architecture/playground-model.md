@@ -46,6 +46,31 @@ Database payloads now use version 3. Storage remains under `beside.playground.v1
 
 Import validation checks foreign keys, home-base membership, same-activity ancestry and cycles, one root per activity, unique successful user/milestone pairs, reward scope and completion, contribution attribution, schedule windows, and root/participation consistency. The browser remains a local sandbox with simulated identities and last-writer-wins storage; the SQL is a reference shape, not a deployed migration.
 
+## Activity cottage prototype
+
+Each activity owns one cottage in the mobile map. One and three distinct
+successful achievement milestones unlock its next stages automatically.
+The first valid success per achievement credits the shared cottage, once, even
+if more participants check in. No currency is awarded or spent, and the
+existing cooperative reward rule is unchanged. The construction count is
+stored separately from deletable logs, so missed sessions and milestone
+deletion never take away construction credit. Deleting the activity still
+removes its cottage. The map, activity list, and detail use the same level.
+On the map, selecting a cottage offers a **Milestones** shortcut that opens
+its activity at the open milestones, or at the upcoming list if none are open.
+
+A pocket watch marks a build in progress, with its hand advancing one pixel-art
+step per countdown second. The base starts at activity creation
+(10 seconds by default), the entrance starts at the first credited milestone
+(15 seconds), and the final stage at the third (20 seconds). If an earlier
+build is still running, the next waits for it. Durations are configured
+system-wide in the API environment; clients cannot override them. The backend
+uses its current setting when a stage is first queued, without changing saved
+deadlines or already built stages. Clients render countdowns against the server snapshot;
+opening the app later never resets construction. In the activity detail, the
+preview stays in place when the clock gives way to the built level, and the
+progress row keeps its height when there is no next level to preview.
+
 ## Editing and deletion
 
 All home-base members can manage its records. Home bases can be renamed; activities can change name and description, with personal targets applying only to the editor. Both the API workspace and the local experiment expose edit/delete controls.

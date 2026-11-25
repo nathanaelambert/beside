@@ -10,6 +10,14 @@ import type {
   Participation,
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
+import {
+  COTTAGE_MILESTONE_CAP,
+  DEFAULT_COTTAGE_BUILD_SECONDS,
+  cottageBuildSettings,
+  cottageLevel,
+  queueCottageLevel,
+  type CottageBuildSeconds,
+} from "./cottage.ts";
 import { logInputSchema, milestoneInputSchema } from "./validation.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
@@ -105,7 +113,11 @@ function emit(
     createdAt: new Date().toISOString(),
   };
   db.events.push(event);
-  for (const recipientUserId of new Set(recipients))
+  for (const recipientUserId of new Set(recipients)) {
+    if (
+      db.users.some((user) => user.id === recipientUserId && user.email === null)
+    )
+      continue;
     db.deliveries.push({
       id: id("delivery"),
       eventId: event.id,
@@ -113,6 +125,7 @@ function emit(
       connectionId,
       kind,
     });
+  }
 }
 function shareLog(
   db: Database,
@@ -333,6 +346,7 @@ export function execute(
   database: Database,
   command: Command,
   now = new Date().toISOString(),
+  cottageDurations: CottageBuildSeconds = DEFAULT_COTTAGE_BUILD_SECONDS,
 ): { db: Database; entityId: string; duplicate: boolean } {
   const db = structuredClone(database);
   const firstNewEvent = db.events.length;
@@ -682,6 +696,8 @@ export function execute(
           throw new Error("The subject must match the activity's category.");
       }
       entityId = id("activity");
+      const cottageBuild = cottageBuildSettings(cottageDurations);
+      queueCottageLevel(cottageBuild, 1, now, cottageDurations);
       db.activities.push({
         id: entityId,
         templateId: template.id,
@@ -693,6 +709,8 @@ export function execute(
         progressMode: template.progressMode,
         unit: template.unit,
         createdAt: now,
+        cottageMilestones: 0,
+        cottageBuild,
       });
       for (const subjectId of new Set(command.subjectIds))
         db.activitySubjects.push({
@@ -700,7 +718,13 @@ export function execute(
           activityId: entityId,
           subjectId,
         });
-      const participants = members(db, command.connectionId);
+      // Visitors are rendered on the island, but never join its activity/reward roster.
+      const guestIds = new Set(
+        db.users.filter((user) => user.email === null).map((user) => user.id),
+      );
+      const participants = members(db, command.connectionId).filter(
+        (userId) => !guestIds.has(userId),
+      );
       for (const userId of participants)
         db.participations.push({
           id: id("participation"),
@@ -972,6 +996,27 @@ export function execute(
         externalKey: input.externalKey || null,
         createdAt: now,
       };
+      if (
+        log.isSuccess &&
+        milestone.kind === "achievement" &&
+        (activity.cottageMilestones ?? 0) < COTTAGE_MILESTONE_CAP &&
+        !db.logs.some(
+          (entry) => entry.milestoneId === milestone.id && entry.isSuccess,
+        )
+      ) {
+        const previousLevel = cottageLevel(activity.cottageMilestones);
+        activity.cottageMilestones = (activity.cottageMilestones ?? 0) + 1;
+        const nextLevel = cottageLevel(activity.cottageMilestones);
+        if (previousLevel !== nextLevel) {
+          activity.cottageBuild ??= cottageBuildSettings(cottageDurations);
+          queueCottageLevel(
+            activity.cottageBuild,
+            nextLevel,
+            now,
+            cottageDurations,
+          );
+        }
+      }
       db.logs.push(log);
       emit(
         db,

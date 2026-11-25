@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { avatarAppearanceSchema } from "./avatar.ts";
 import type { Database } from "./types.ts";
+import { COTTAGE_MILESTONE_CAP, MAX_COTTAGE_BUILD_SECONDS } from "./cottage.ts";
 import {
   migrateDemoIdentity,
   migrateMilestones,
@@ -10,6 +12,20 @@ import { rewardItems } from "@beside/rewards";
 const key = z.string().min(1).max(200);
 const text = z.string().max(2000);
 const date = z.iso.datetime();
+const buildSeconds = z.number().int().min(1).max(MAX_COTTAGE_BUILD_SECONDS);
+export const cottageBuildSecondsSchema = z.strictObject({
+  base: buildSeconds,
+  entrance: buildSeconds,
+  finished: buildSeconds,
+});
+const cottageBuildSchema = z.object({
+  seconds: cottageBuildSecondsSchema,
+  readyAt: z.object({
+    base: date.nullable(),
+    entrance: date.nullable(),
+    finished: date.nullable(),
+  }),
+});
 const category = z.enum([
   "reading",
   "watching",
@@ -125,12 +141,19 @@ export const databaseSchema = z.object({
     z.object({
       id: key,
       name: key,
-      email: z.email(),
+      email: z.email().nullable(),
       color: z.enum(["blue", "rose", "moss"]),
     }),
   ).min(1),
   connections: rows(z.object({ id: key, name: key })),
-  memberships: rows(z.object({ id: key, connectionId: key, userId: key })),
+  memberships: rows(
+    z.object({
+      id: key,
+      connectionId: key,
+      userId: key,
+      avatarAppearance: avatarAppearanceSchema.optional(),
+    }),
+  ),
   subjectTemplates: rows(
     z.object({ id: key, name: key, category, fields: z.array(key), unit: key }),
   ).min(1),
@@ -167,6 +190,16 @@ export const databaseSchema = z.object({
       progressMode: mode,
       unit: key,
       createdAt: date,
+      cottageBuild: cottageBuildSchema.nullish(),
+      cottageMilestones: z
+        .number()
+        .int()
+        .min(0)
+        .max(COTTAGE_MILESTONE_CAP)
+        .optional()
+        .describe(
+          "Distinct successful achievement milestones credited to the cottage, capped at 3. Deleting a milestone does not lower this count.",
+        ),
     }),
   ),
   activitySubjects: rows(
@@ -288,7 +321,7 @@ export function parseDatabase(input: unknown): Database {
       (m) => m.connectionId === connectionId && m.userId === userId,
     );
   unique(
-    db.users.map((u) => u.email),
+    db.users.flatMap((u) => (u.email === null ? [] : [u.email])),
     "user email",
   );
   for (const m of db.memberships) {
@@ -614,5 +647,26 @@ export function parseDatabase(input: unknown): Database {
     db.deliveries.map((d) => `${d.eventId}:${d.recipientUserId}`),
     "event delivery",
   );
+  // Older playground snapshots did not store construction progress separately.
+  if (
+    db.activities.some((activity) => activity.cottageMilestones === undefined)
+  ) {
+    const successful = new Set(
+      db.logs.filter((log) => log.isSuccess).map((log) => log.milestoneId),
+    );
+    const counts = new Map<string, number>();
+    for (const milestone of db.milestones) {
+      if (milestone.kind === "achievement" && successful.has(milestone.id))
+        counts.set(
+          milestone.activityId,
+          (counts.get(milestone.activityId) ?? 0) + 1,
+        );
+    }
+    for (const activity of db.activities)
+      activity.cottageMilestones ??= Math.min(
+        COTTAGE_MILESTONE_CAP,
+        counts.get(activity.id) ?? 0,
+      );
+  }
   return db;
 }

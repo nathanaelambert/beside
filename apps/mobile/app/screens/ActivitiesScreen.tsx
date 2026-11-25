@@ -1,12 +1,13 @@
 import { useCallback, useState } from "react"
 import { ActivityIndicator, Pressable, ScrollView, StatusBar, StyleSheet, View } from "react-native"
-import type { ApiState } from "@beside/api-client"
+import { cottageConstruction, type ApiState } from "@beside/api-client"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { PixelArtSprite } from "@/components/BesideMark"
-import { cottageArt } from "@/components/iso-world/cottageArt"
+import { CottageCountdown } from "@/components/CottageConstruction"
+import { CottageThumbnail } from "@/components/CottageThumbnail"
 import { homeActivities } from "@/components/iso-world/homeWorld"
+import { useCottageClock } from "@/components/iso-world/useCottageClock"
 import { Text } from "@/components/Text"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { activityScheduleSummary } from "@/services/api/activitySummary"
@@ -22,6 +23,12 @@ type ActivityRow = {
 
 export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Activities">) {
   const [rows, setRows] = useState<ActivityRow[]>([])
+  const [clock, setClock] = useState<{ serverTime?: string; receivedAt: number }>()
+  const now = useCottageClock(
+    rows.map((row) => row.activity),
+    clock?.serverTime,
+    clock?.receivedAt,
+  )
   const [homeName, setHomeName] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -36,6 +43,7 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
       async function load() {
         try {
           const state = await besideApi.state()
+          const receivedAt = performance.now()
           const serverNow = Date.parse(state.serverTime ?? "")
           // Same order as the cottages on the island, so each row shows its own roof.
           const cottages = homeActivities(
@@ -66,6 +74,7 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
           )
           if (active) {
             setRows(next)
+            setClock({ serverTime: state.serverTime, receivedAt })
             setHomeName(
               state.connections.find((base) => base.id === route.params.connectionId)?.name ??
                 "Your home base",
@@ -126,25 +135,29 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
             />
           </View>
         ) : (
-          rows.map(({ activity, summary, index, open }) => (
-            <Pressable
-              key={activity.id}
-              testID={`activity-row-${activity.id}`}
-              accessibilityRole="button"
-              onPress={() => navigation.navigate("ActivityDetail", { activityId: activity.id })}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-            >
-              <View style={styles.calendar}>
-                <PixelArtSprite art={cottageArt(index, open)} scale={1} />
-              </View>
-              <View style={styles.rowContent}>
-                <Text text={activity.name} weight="semiBold" style={styles.activityName} />
-                <Text text={summary} style={styles.summary} />
-                {open && <Text text="● Lights on: open now" style={styles.open} />}
-              </View>
-              <Text text="›" style={styles.chevron} />
-            </Pressable>
-          ))
+          rows.map(({ activity, summary, index, open }) => {
+            const { level, building, seconds } = cottageConstruction(activity, now)
+            return (
+              <Pressable
+                key={activity.id}
+                testID={`activity-row-${activity.id}`}
+                accessibilityRole="button"
+                onPress={() => navigation.navigate("ActivityDetail", { activityId: activity.id })}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              >
+                <View style={styles.calendar}>
+                  <CottageThumbnail index={index} lit={open} level={level} />
+                </View>
+                <View style={styles.rowContent}>
+                  <Text text={activity.name} weight="semiBold" style={styles.activityName} />
+                  <Text text={summary} style={styles.summary} />
+                  {building && <CottageCountdown level={building} seconds={seconds} />}
+                  {open && <Text text="● Lights on: open now" style={styles.open} />}
+                </View>
+                <Text text="›" style={styles.chevron} />
+              </Pressable>
+            )
+          })
         )}
       </ScrollView>
     </SafeAreaView>

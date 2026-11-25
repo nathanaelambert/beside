@@ -34,13 +34,53 @@ The migrator can be run again safely and uses a transaction and migration lock.
 Docs and liveness work before database configuration. Data routes require a
 configured, migrated database. `PORT` defaults to 3001.
 
+### Home base avatars
+
+`PUT /api/v1/homebases/:homebaseId/avatar` saves the signed-in member's
+appearance and returns the saved design. The JSON body is an
+`AvatarAppearance` (version 1): for example
+`{"version":1,"skin":"bronze","hair":"curly","hairColor":"copper","glasses":"round","outfit":"moss-jacket"}`.
+See OpenAPI for the allowed choices. A non-member receives 404; the caller
+cannot supply another member's ID. `GET /api/v1/state` includes the optional
+`avatarAppearance` on memberships already visible to the caller.
+
+Migration 012 adds a nullable column without backfilling old memberships.
+Registration with an invite code saves a random avatar in the new membership
+and opens the island directly. Existing memberships keep the original avatar
+unless the member saves a new one. Other interactive signup or sign-in flows
+can open an unsaved draft when there is no saved appearance; canceling leaves
+the original untouched. Saved appearances never reroll on login or session restore.
+On the island, members can tap their own avatar and select **Edit avatar**.
+
+### Visit as a guest
+
+On the signed-out app, choose **Join as a guest**. Enter a display name and a
+Home Base invitation code. `POST /api/v1/auth/guest` accepts only `name` and
+`inviteCode`; a valid code opens the invited island with a saved starter avatar.
+An invalid code creates no guest or membership. Migration 014 is required.
+
+Guests may explore that island and edit their own avatar. They cannot retrieve
+its invitation code, read check-in history, join activities or other home bases
+as that guest, or change shared records. They do not count towards activity or
+reward rosters. See the [guest pilot notes](../../docs/experiments/quick-guest-onboarding.md)
+for permissions and session lifetime. Registration and login are unchanged.
+
 ## Use the API
+
+### Shared coastline
+
+`GET /api/v1/homebases/:homebaseId/expansion` reads the saved coastline.
+`PUT` on the same path adds one eligible tile from its `{ col, row }` body
+and returns the updated list. A repeat is a successful no-op. A guest can
+read their island’s coastline but cannot expand it. Run migration 013 before
+using these routes. See the [shared coastline pilot](../../docs/experiments/shared-island-expansion.md)
+for eligibility and walking behavior.
 
 ### Shared starter oak
 
 The signed-in Home Base offers one free oak for the whole garden. The
-authenticated `GET /api/v1/homebases/:homebaseId/garden` returns
-`{ oak: null }` or `{ oak: { itemId: "oak-tree", x, y } }`. To plant it,
+authenticated `GET /api/v1/homebases/:homebaseId/garden` includes the starter
+oak (`null` or `{ itemId: "oak-tree", x, y }`) and saved rewards. To plant it,
 `POST /api/v1/homebases/:homebaseId/garden/starter-oak` with world coordinates
 on the 8-pixel grid, such as `{ "x": 104, "y": 104 }`. The server uses the
 same terrain and clearance rules as the preview. Only members can read or
@@ -49,9 +89,14 @@ second oak returns HTTP 409. Migration 005 creates the coordinate-based garden
 table directly, with one oak per Home Base and grid bounds enforced in PostgreSQL.
 
 The app renders the same fixed map position on web and mobile after reopening
-or refreshing the Home Base. This does not consume milestone rewards and
-does not add moving or removing decorations. Run the database migrator
-before starting the updated API.
+or refreshing the Home Base. The starter oak does not consume milestone rewards.
+
+Migration 011 adds the optional ISO date `growthStartedAt` to newly planted
+oaks and newly placed rewards in the existing garden response. It is written
+once, independently of `placedAt`, which still changes when a reward is moved.
+Existing plants omit the field and are shown as fully grown. The migration does
+not update any existing placement or construction data. Run `pnpm --filter
+@beside/api db:migrate` before starting the updated API.
 
 ### API client example
 
@@ -101,7 +146,7 @@ later through `joinHomebase`. Joining initializes
 participation in existing activities without changing previously saved reward
 rosters. To require both people for a reward, have both join before planning it.
 Invitation codes grant membership to anyone who has them; members can retrieve
-their space's code through `GET /homebases`.
+their space's code through `GET /homebases`. Guests receive `inviteCode: null`.
 
 Registration/login returns a 30-day opaque bearer token. Send
 `Authorization: Bearer <token>`; `logout()` revokes it. Tokens are stored hashed
@@ -122,7 +167,7 @@ your computer's LAN address instead of localhost.
 All data routes are under `/api/v1` and require a bearer session. See the served
 OpenAPI document for request fields, response schemas, and HTTP status codes.
 
-- Auth: register, login, current user, logout.
+- Auth: register, login, guest invitation, current user, logout.
 - Home bases: list, create, join with invitation code, rename, delete.
 - Read: state, templates, catalog, subjects, activities, milestones, logs,
   rewards, events.
@@ -136,9 +181,9 @@ OpenAPI document for request fields, response schemas, and HTTP status codes.
   [the design note](../../docs/experiments/rewards-equal-value.md). For a local demo, run
   `scripts/seed-equal-rewards-demo.ts` (it wipes the local database it is given).
 
-Every home-base member can edit and delete its records; there are no owner/admin
-roles in this first pass. The playground exposes inline Edit/Delete controls, with
-a separate confirmation describing the deletion scope.
+Every credentialed home-base member can edit and delete its records; there are no
+owner/admin roles in this first pass. The playground exposes inline Edit/Delete
+controls, with a separate confirmation describing the deletion scope.
 
 Home-base edits change the name and keep membership/invitation codes. Activity
 edits change name, description, and optionally the caller's personal target;
@@ -161,6 +206,36 @@ deleted; the account can create or join another.
 `GET /state` is an audience-filtered projection rather than an import/export
 format. User profiles omit email, and deliveries are limited to the recipient.
 A shared log can refer to a milestone outside the viewer's visible activities.
+Each activity includes `cottageMilestones` (0–3), a permanent, shared construction
+count. The first successful check-in on a distinct achievement adds one;
+join logs, failed logs, and further check-ins on that achievement add nothing.
+The cottage upgrades at 1 and 3 without spending anything. Removing a milestone
+does not remove construction credit. Migration 009 backfills the count from
+existing successful achievements. Migration 010 adds cottage deadlines; apply
+both before running the updated API. Stage deadlines in `cottageBuild.readyAt`
+use server time and queue behind earlier stages. Old cottages keep their built
+levels.
+
+#### System-wide cottage timing
+
+`GET /api/v1/cottage-build-settings` is a read-only, bearer-authenticated
+endpoint documented in the [OpenAPI explorer](http://localhost:3001/docs).
+The default response is:
+
+```json
+{ "base": 10, "entrance": 15, "finished": 20 }
+```
+
+The backend operator can set `COTTAGE_BUILD_BASE_SECONDS`,
+`COTTAGE_BUILD_ENTRANCE_SECONDS`, and `COTTAGE_BUILD_FINISHED_SECONDS` in the
+API environment. Use whole seconds from 1 to 3600; invalid values fail API
+startup. Restart or deploy the API after changing them. The new durations apply
+when a stage is first scheduled, including stages on existing activities.
+They never rewrite a stored deadline, even if that stage is queued to start
+later. Per-activity `cottageBuildSeconds` is not accepted by activity creation
+or updates (HTTP 400); there is no write endpoint for these settings.
+`cottageBuild.seconds` in state retains the captured duration of already
+scheduled stages. Read the settings endpoint for current system values.
 
 `packages/domain` is the source of truth for types, validators, templates, and
 the command engine. Its build bundles JavaScript for Node/Vercel while browser

@@ -56,10 +56,7 @@ export class GardenService {
         "INSERT INTO homebase_starter_oak (homebase_id, x, y) VALUES ($1, $2, $3)",
         [homebaseId, x, y],
       );
-      return {
-        ...garden,
-        oak: { x, y, itemId: starterOakItemId },
-      } satisfies HomebaseGarden;
+      return this.read(client, userId, homebaseId);
     });
   }
 
@@ -108,15 +105,19 @@ export class GardenService {
     userId: string,
     homebaseId: string,
   ): Promise<HomebaseGarden> {
-    const { rows } = await client.query<{ x: number | null; y: number | null }>(
-      `SELECT oak.x, oak.y
+    const { rows } = await client.query<{
+      x: number | null;
+      y: number | null;
+      growthStartedAt: Date | null;
+    }>(
+      `SELECT oak.x, oak.y, oak.growth_started_at AS "growthStartedAt"
        FROM homebase_member AS member
        LEFT JOIN homebase_starter_oak AS oak ON oak.homebase_id = member.connection_id
        WHERE member.connection_id = $1 AND member.user_id = $2`,
       [homebaseId, userId],
     );
     if (!rows.length) throw new NotFoundException("Home base not found.");
-    const { x, y } = rows[0]!;
+    const { x, y, growthStartedAt } = rows[0]!;
     const placed = await client.query<{
       rewardId: string;
       itemId: string;
@@ -124,20 +125,35 @@ export class GardenService {
       y: number;
       placedByUserId: string | null;
       placedAt: Date;
+      growthStartedAt: Date | null;
     }>(
       `SELECT p.reward_id AS "rewardId", r.item_id AS "itemId", p.x, p.y,
-         p.placed_by AS "placedByUserId", p.placed_at AS "placedAt"
+         p.placed_by AS "placedByUserId", p.placed_at AS "placedAt",
+         p.growth_started_at AS "growthStartedAt"
        FROM reward_placement AS p JOIN reward AS r ON r.id = p.reward_id
        WHERE r.homebase_id = $1 AND r.obtained_at IS NOT NULL
        ORDER BY p.placed_at, p.reward_id`,
       [homebaseId],
     );
     return {
-      oak: x === null || y === null ? null : { x, y, itemId: starterOakItemId },
-      rewards: placed.rows.map((row): RewardPlacement => ({
-        ...row,
-        placedAt: row.placedAt.toISOString(),
-      })),
+      oak:
+        x === null || y === null
+          ? null
+          : {
+              x,
+              y,
+              itemId: starterOakItemId,
+              ...(growthStartedAt
+                ? { growthStartedAt: growthStartedAt.toISOString() }
+                : {}),
+            },
+      rewards: placed.rows.map(
+        ({ growthStartedAt: started, placedAt, ...row }): RewardPlacement => ({
+          ...row,
+          placedAt: placedAt.toISOString(),
+          ...(started ? { growthStartedAt: started.toISOString() } : {}),
+        }),
+      ),
     };
   }
 }

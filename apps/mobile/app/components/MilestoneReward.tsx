@@ -11,7 +11,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated"
 
-import type { Avatar } from "@/components/pixel-world/avatars"
+import { avatarThumbnail, type Avatar } from "@/components/pixel-world/avatars"
 import { footprint } from "@/components/pixel-world/scene"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { firstName, namesLabel, type RewardStatus } from "@/utils/rewardChoice"
@@ -144,7 +144,7 @@ export function MilestoneReward({
                 }`}
               >
                 <View style={!done && $faded}>
-                  <PixelArtSprite art={member.frames.idle} scale={2} />
+                  <PixelArtSprite art={avatarThumbnail(member.frames.idle)} scale={2} />
                 </View>
                 <Text
                   text={

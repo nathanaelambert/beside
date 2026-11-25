@@ -65,6 +65,12 @@ export function LoginScreen({ navigation }: AppStackScreenProps<"Login">) {
         onPress={login}
       />
       <AuthSwitchLink
+        testID="go-to-guest"
+        prompt="Have an invite?"
+        action="Join as a guest"
+        onPress={() => navigation.navigate("GuestJoin")}
+      />
+      <AuthSwitchLink
         testID="go-to-register"
         prompt="New to Beside?"
         action="Create an account"

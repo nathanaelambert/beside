@@ -177,6 +177,7 @@ for (const plan of plans) {
     base = await api<ApiHomebase>("/homebases", token, { name: plan.name });
     bases.push(base);
   }
+  if (!base.inviteCode) throw new Error(`Missing invite code for ${base.name}`);
   const people = [mosaab];
   for (const name of plan.people)
     people.push(await account(name, base.inviteCode));

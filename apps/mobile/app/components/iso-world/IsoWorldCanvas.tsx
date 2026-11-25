@@ -1,6 +1,17 @@
 import { memo, useEffect, useMemo, useRef } from "react"
 import { PixelRatio, StyleSheet } from "react-native"
-import { Canvas, Group, Image, ImageShader, Path, Rect } from "@shopify/react-native-skia"
+import {
+  Canvas,
+  ColorMatrix,
+  DashPathEffect,
+  Group,
+  Image,
+  ImageShader,
+  Path,
+  Rect,
+  useImage,
+  type SkImage,
+} from "@shopify/react-native-skia"
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler"
 import {
   cancelAnimation,
@@ -24,15 +35,23 @@ import {
   type SeaProp,
 } from "./archipelago"
 import { buoy, seaRock } from "./archipelagoProps"
+import { IslandActionPopup } from "./AvatarEditPopup"
 import type { Bitmap } from "./bitmap"
+import { coastHeight } from "./coastAccess"
+import { FoliageSprite } from "./FoliageSprite"
 import { recolor } from "./islandPalettes"
+import { matureTreeAssets, treeFamilyAsset } from "./matureTreeAssets"
 import { paintGround, SEA_TILE, seaTile, waterGlints } from "./paint"
+import { pondGlintColor } from "./pondArt"
 import { isoToScreen, type MapFrame } from "./projection"
 import { type Drawable, type HitTarget } from "./scene"
 import { artImage, bitmapImage, sampling } from "./skia"
+import { paintSurfaceFinish } from "./surfaceFinish"
 import type { TileMap } from "./tilemap"
+import type { TreeFamilyId } from "./treeFamilyArt"
 import { voyagePoint, type VoyagePath } from "./voyage"
 import { Boat } from "./VoyageBoat"
+import { detailedSpriteBitmap } from "./worldDetailArt"
 import type { Avatar } from "../pixel-world/avatars"
 
 // Kept out of JSX: the i18n test reads quoted tx props as translation keys.
@@ -45,9 +64,29 @@ function groundFor(map: TileMap, frame: MapFrame, palette = 0) {
   return recolor(ground, palette)
 }
 
+const surfaceFinishes = new WeakMap<Bitmap, NonNullable<ReturnType<typeof paintSurfaceFinish>>>()
+function finishFor(map: TileMap, frame: MapFrame, ground: Bitmap) {
+  if (!map.surfaceFinish) return
+  let finish = surfaceFinishes.get(ground)
+  if (!finish) {
+    finish = paintSurfaceFinish(map, frame, groundFor(map, frame), ground)
+    if (finish) surfaceFinishes.set(ground, finish)
+  }
+  return finish
+}
+
 /** Rocks sit still; buoys bob between two frames, out of step with each other. */
-function SeaPropNode({ prop, tick }: { prop: SeaProp; tick: SharedValue<number> }) {
-  const frames = prop.kind === "buoy" ? [buoy(0), buoy(1)] : [seaRock(prop.seed)]
+function SeaPropNode({
+  prop,
+  tick,
+  detailed,
+}: {
+  prop: SeaProp
+  tick: SharedValue<number>
+  detailed: boolean
+}) {
+  const frames =
+    prop.kind === "buoy" ? [buoy(0, detailed), buoy(1, detailed)] : [seaRock(prop.seed, detailed)]
   const phase = Math.floor(prop.seed * 8)
   const up = useDerivedValue(() => (Math.floor((tick.value + phase) / 6) % 2 === 1 ? 1 : 0))
   const down = useDerivedValue(() => 1 - up.value)
@@ -56,7 +95,11 @@ function SeaPropNode({ prop, tick }: { prop: SeaProp; tick: SharedValue<number> 
       {frames.map((sprite, index) => (
         <Image
           key={index}
-          image={bitmapImage(sprite.bitmap)}
+          image={bitmapImage(
+            detailed && prop.kind === "buoy"
+              ? detailedSpriteBitmap(sprite.bitmap, "buoy")
+              : sprite.bitmap,
+          )}
           x={prop.x - sprite.anchorX}
           y={prop.y - sprite.anchorY}
           width={sprite.bitmap.width}
@@ -133,16 +176,67 @@ function AvatarFrames({
   )
 }
 
+type SpriteNodeProps = {
+  drawable: Drawable
+  image: SkImage | null
+  tick: SharedValue<number>
+  animateFoliage: boolean
+  colorMatrix?: number[]
+}
+
+function SpriteNode({ drawable, image, tick, animateFoliage, colorMatrix }: SpriteNodeProps) {
+  const { x, y, width, height, foliage } = drawable
+  return animateFoliage && foliage ? (
+    <FoliageSprite drawable={drawable} kind={foliage} image={image} tick={tick} />
+  ) : (
+    <Image image={image} x={x} y={y} width={width} height={height} sampling={sampling}>
+      {colorMatrix && <ColorMatrix matrix={colorMatrix} />}
+    </Image>
+  )
+}
+
+function AssetSprite({ asset, image: fallback, ...props }: SpriteNodeProps & { asset: number }) {
+  const image = useImage(asset)
+  return (
+    <SpriteNode
+      {...props}
+      image={image ?? fallback}
+      colorMatrix={image ? props.drawable.artColorMatrix : undefined}
+    />
+  )
+}
+
 const DrawableNode = memo(function DrawableNode({
   drawable,
   tick,
+  animateFoliage = false,
+  matureTreeImage,
 }: {
   drawable: Drawable
   tick: SharedValue<number>
+  animateFoliage?: boolean
+  matureTreeImage?: SkImage | null
 }) {
-  const { source } = drawable
+  const { source, treeArt } = drawable
+  const artAsset =
+    treeArt && treeArt.stage !== "mature"
+      ? treeFamilyAsset(treeArt.id, treeArt.stage)
+      : drawable.artAsset
+  const image =
+    matureTreeImage ??
+    (source.type === "bitmap"
+      ? bitmapImage(source.bitmap)
+      : source.type === "art"
+        ? artImage(source.art)
+        : null)
+  const sprite = { drawable, image, tick, animateFoliage }
   return (
     <Group opacity={drawable.opacity ?? 1}>
+      {drawable.contactShadow && (
+        <Group transform={[{ translateX: drawable.x }, { translateY: drawable.y }]}>
+          <Path path={drawable.contactShadow} color="rgba(34, 46, 24, 0.44)" antiAlias={false} />
+        </Group>
+      )}
       {!!drawable.shadow && (
         <Group transform={[{ translateX: drawable.baseX }, { translateY: drawable.baseY }]}>
           <Path
@@ -154,15 +248,10 @@ const DrawableNode = memo(function DrawableNode({
       )}
       {source.type === "avatar" ? (
         <AvatarFrames drawable={drawable} avatar={source.avatar} tick={tick} />
+      ) : artAsset !== undefined ? (
+        <AssetSprite asset={artAsset} {...sprite} />
       ) : (
-        <Image
-          image={source.type === "bitmap" ? bitmapImage(source.bitmap) : artImage(source.art)}
-          x={drawable.x}
-          y={drawable.y}
-          width={drawable.width}
-          height={drawable.height}
-          sampling={sampling}
-        />
+        <SpriteNode {...sprite} />
       )}
     </Group>
   )
@@ -173,14 +262,16 @@ function Glint({
   y,
   phase,
   tick,
+  color = "#e9f6ec",
 }: {
   x: number
   y: number
   phase: number
   tick: SharedValue<number>
+  color?: string
 }) {
   const opacity = useDerivedValue(() => (Math.floor((tick.value + phase) / 3) % 4 === 0 ? 0.95 : 0))
-  return <Rect x={x} y={y} width={3} height={1} color="#e9f6ec" opacity={opacity} />
+  return <Rect x={x} y={y} width={3} height={1} color={color} opacity={opacity} />
 }
 
 function Marker({ x, top, tick }: { x: number; top: number; tick: SharedValue<number> }) {
@@ -200,14 +291,29 @@ function Guide({
   path,
   tick,
   strong,
+  border,
 }: {
   path: string
   tick: SharedValue<number>
   strong?: boolean
+  border?: boolean
 }) {
   const opacity = useDerivedValue(() =>
     strong ? 0.7 : Math.floor(tick.value / 5) % 2 === 0 ? 0.42 : 0.26,
   )
+  if (border)
+    return (
+      <Path
+        path={path}
+        color="#fff4cf"
+        opacity={strong ? 1 : 0.58}
+        style="stroke"
+        strokeWidth={strong ? 1.5 : 1}
+        antiAlias={false}
+      >
+        {!strong && <DashPathEffect intervals={[2, 2]} />}
+      </Path>
+    )
   return <Path path={path} color="#fff4cf" opacity={opacity} antiAlias={false} />
 }
 
@@ -223,6 +329,8 @@ type SceneProps =
   | { islands: IslandLayer[]; map?: never; frame?: never; drawables?: never }
   | { islands?: never; map: TileMap; frame: MapFrame; drawables: Drawable[] }
 
+type GuideTile = { col: number; row: number; lift?: number }
+
 export type IsoWorldCanvasProps = SceneProps & {
   width: number
   height: number
@@ -232,8 +340,13 @@ export type IsoWorldCanvasProps = SceneProps & {
   focusIslandKey?: string
   resetCamera?: number
   selectedKey?: string
-  guideTiles?: { col: number; row: number }[]
-  previewTile?: { col: number; row: number }
+  editAvatarAction?: { memberId: string; onPress: () => void }
+  walkAction?: GuideTile & { onPress: () => void }
+  guideTiles?: GuideTile[]
+  coastGuides?: boolean
+  /** Opt-in open-water artwork for the visual workshop. */
+  detailedSea?: boolean
+  previewTile?: GuideTile
   interactive?: boolean
   accessibilityLabel?: string
   voyage?: CanvasVoyage
@@ -284,34 +397,54 @@ const IslandNodes = memo(function IslandNodes({
   tick,
   selectedKey,
   guideTiles,
+  coastGuides,
   previewTile,
   signs,
   signZoom,
   ratio,
   focused,
+  animateFoliage,
+  matureTrees,
 }: {
   island: IslandLayer
   tick: SharedValue<number>
   selectedKey?: string
-  guideTiles?: { col: number; row: number }[]
-  previewTile?: { col: number; row: number }
+  guideTiles?: GuideTile[]
+  coastGuides?: boolean
+  previewTile?: GuideTile
   signs: SharedValue<number>
   signZoom: SharedValue<number>
   ratio: number
   focused: boolean
+  animateFoliage: boolean
+  matureTrees: Record<TreeFamilyId, SkImage | null>
 }) {
   const { map, frame, drawables, offset } = island
   // The island you're on shows its sign with the "you are here" pennant.
   const sign = focused ? (island.signHere ?? island.sign) : island.sign
   const ground = groundFor(map, frame, island.palette)
+  const finish = finishFor(map, frame, ground)
   const glints = useMemo(() => waterGlints(map, frame), [map, frame])
+  const coastGuideLift = coastGuides && map.coastTiles?.length ? coastHeight : 0
   const guidePath = useMemo(
-    () => (guideTiles ?? []).map(({ col, row }) => diamondPath(frame, col, row, 0, 0.18)).join(""),
-    [guideTiles, frame],
+    () =>
+      (guideTiles ?? [])
+        .map(({ col, row, lift }) => diamondPath(frame, col, row, lift ?? coastGuideLift, 0.18))
+        .join(""),
+    [guideTiles, frame, coastGuideLift],
   )
   const previewPath = previewTile
-    ? diamondPath(frame, previewTile.col, previewTile.row, 0, 0.06)
+    ? diamondPath(frame, previewTile.col, previewTile.row, previewTile.lift ?? 0, 0.06)
     : ""
+  // The live apron is just below a raised forest rim. Its open-water guides need
+  // to stay legible in front of those cliff sprites; Bay's local guides are unchanged.
+  const guidesAboveCliffs = coastGuides && !!map.coastTiles
+  const guides = (
+    <>
+      {!!guidePath && <Guide path={guidePath} tick={tick} border={coastGuides} />}
+      {!!previewPath && <Guide path={previewPath} tick={tick} strong border={coastGuides} />}
+    </>
+  )
   const selected = focused ? drawables.find((d) => d.key === selectedKey) : undefined
   return (
     <Group transform={[{ translateX: offset.x }, { translateY: offset.y }]}>
@@ -323,14 +456,39 @@ const IslandNodes = memo(function IslandNodes({
         height={frame.height}
         sampling={sampling}
       />
+      {finish && (
+        <Image
+          image={bitmapImage(finish.bitmap)}
+          x={finish.x}
+          y={finish.y}
+          width={finish.width}
+          height={finish.height}
+          sampling={sampling}
+        />
+      )}
       {glints.map(({ x, y, phase }) => (
-        <Glint key={`${x}-${y}`} x={x} y={y} phase={phase} tick={tick} />
+        <Glint
+          key={`${x}-${y}`}
+          x={x}
+          y={y}
+          phase={phase}
+          tick={tick}
+          color={map.surfaceFinish === "fine-grain" ? pondGlintColor : undefined}
+        />
       ))}
-      {!!guidePath && <Guide path={guidePath} tick={tick} />}
-      {!!previewPath && <Guide path={previewPath} tick={tick} strong />}
+      {!guidesAboveCliffs && guides}
       {drawables.map((drawable) => (
-        <DrawableNode key={drawable.key} drawable={drawable} tick={tick} />
+        <DrawableNode
+          key={drawable.key}
+          drawable={drawable}
+          tick={tick}
+          animateFoliage={animateFoliage && focused}
+          matureTreeImage={
+            drawable.treeArt?.stage === "mature" ? matureTrees[drawable.treeArt.id] : undefined
+          }
+        />
       ))}
+      {guidesAboveCliffs && guides}
       {selected && <Marker x={selected.baseX} top={selected.top} tick={tick} />}
       {sign && <IslandSign sign={sign} tick={tick} visible={signs} zoom={signZoom} ratio={ratio} />}
     </Group>
@@ -357,7 +515,11 @@ export function IsoWorldCanvas({
   focusIslandKey,
   resetCamera = 0,
   selectedKey,
+  editAvatarAction,
+  walkAction,
   guideTiles,
+  coastGuides,
+  detailedSea = false,
   previewTile,
   interactive = true,
   accessibilityLabel,
@@ -374,6 +536,18 @@ export function IsoWorldCanvas({
     [suppliedIslands, map, frame, drawables],
   )
   const ordered = useMemo(() => [...islands].sort((a, b) => a.offset.y - b.offset.y), [islands])
+  // Share each mature texture per canvas, not a separate image for every copy in the forest.
+  const hasTreeArt = islands.some((island) => island.map.art === "detailed")
+  const matureOak = useImage(hasTreeArt ? matureTreeAssets["oak-tree"] : null)
+  const maturePine = useImage(hasTreeArt ? matureTreeAssets["pine-tree"] : null)
+  const hasMatureCherry = islands.some((island) =>
+    island.drawables.some((d) => d.treeArt?.id === "cherry-tree" && d.treeArt.stage === "mature"),
+  )
+  const matureCherry = useImage(hasMatureCherry ? matureTreeAssets["cherry-tree"] : null)
+  const matureTrees = useMemo(
+    () => ({ "oak-tree": matureOak, "pine-tree": maturePine, "cherry-tree": matureCherry }),
+    [matureOak, maturePine, matureCherry],
+  )
   const focused = islands.find((island) => island.key === focusIslandKey) ?? islands[0]!
   const bounds = useMemo(() => archipelagoBounds(islands, islands.length > 1 ? 88 : 0), [islands])
   const ratio = PixelRatio.get()
@@ -484,6 +658,14 @@ export function IsoWorldCanvas({
   const signZoom = useDerivedValue(() => camera.value.zoom)
   const signs = useDerivedValue<number>(() => (camera.value.zoom <= 1 ? 1 : 0))
   const enabled = interactive && !voyage
+  const avatarForEdit =
+    enabled && editAvatarAction && selectedKey === `avatar-${editAvatarAction.memberId}`
+      ? focused.drawables.find((drawable) => drawable.key === selectedKey)
+      : undefined
+  const walkAnchor =
+    enabled && walkAction
+      ? islandPoint(focused, walkAction.col + 0.5, walkAction.row + 0.5, walkAction.lift)
+      : null
   const pan = Gesture.Pan()
     .minDistance(8)
     .enabled(enabled)
@@ -514,7 +696,7 @@ export function IsoWorldCanvas({
       if (e.scale > 1.2) runOnJS(onPinch)(1)
       else if (e.scale < 0.83) runOnJS(onPinch)(-1)
     })
-  const sea = bitmapImage(seaTile())
+  const sea = bitmapImage(seaTile(detailedSea))
   // Cover even very wide viewports at the minimum device-pixel zoom.
   const seaMargin = Math.max(width, height) * ratio + 128
   return (
@@ -537,7 +719,7 @@ export function IsoWorldCanvas({
               />
             </Rect>
             {props.map((prop) => (
-              <SeaPropNode key={prop.key} prop={prop} tick={tick} />
+              <SeaPropNode key={prop.key} prop={prop} tick={tick} detailed={detailedSea} />
             ))}
             {ordered.map((island) => (
               <IslandNodes
@@ -545,18 +727,52 @@ export function IsoWorldCanvas({
                 island={island}
                 tick={tick}
                 focused={island.key === focused.key}
+                animateFoliage={!reduceMotion}
+                matureTrees={matureTrees}
                 selectedKey={selectedKey}
                 guideTiles={island.key === focused.key ? guideTiles : undefined}
+                coastGuides={coastGuides}
                 previewTile={island.key === focused.key ? previewTile : undefined}
                 signs={signs}
                 signZoom={signZoom}
                 ratio={ratio}
               />
             ))}
-            {voyage && <Boat path={voyage.path} progress={boatProgress} avatar={voyage.avatar} />}
+            {voyage && (
+              <Boat
+                path={voyage.path}
+                progress={boatProgress}
+                avatar={voyage.avatar}
+                detailed={detailedSea}
+              />
+            )}
           </Group>
         </Canvas>
       </GestureDetector>
+      {editAvatarAction && avatarForEdit && (
+        <IslandActionPopup
+          action="edit-avatar"
+          viewport={{ width, height }}
+          anchor={{
+            x: focused.offset.x + avatarForEdit.baseX,
+            top: focused.offset.y + avatarForEdit.y,
+            bottom: focused.offset.y + avatarForEdit.y + avatarForEdit.height,
+          }}
+          camera={camera}
+          ratio={ratio}
+          onPress={editAvatarAction.onPress}
+        />
+      )}
+      {walkAction && walkAnchor && (
+        <IslandActionPopup
+          action="walk"
+          viewport={{ width, height }}
+          anchor={{ x: walkAnchor.x, top: walkAnchor.y, bottom: walkAnchor.y }}
+          camera={camera}
+          ratio={ratio}
+          onPress={walkAction.onPress}
+        />
+      )}
     </GestureHandlerRootView>
   )
 }

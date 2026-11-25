@@ -90,6 +90,50 @@ it(
 );
 
 it(
+  "preserves the coordinates and mature status of existing plants when enabling growth",
+  { skip: !process.env.TEST_DATABASE_URL },
+  async () => {
+    const pool = createPool(process.env.TEST_DATABASE_URL!);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SET LOCAL search_path TO pg_temp");
+      for (const table of ["homebase_starter_oak", "reward_placement"]) {
+        await client.query(
+          `CREATE TEMP TABLE ${table} (id text PRIMARY KEY, x int, y int)`,
+        );
+        await client.query(`INSERT INTO ${table} VALUES ('legacy', 104, 88)`);
+      }
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/011_garden_growth.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      for (const table of ["homebase_starter_oak", "reward_placement"]) {
+        const existing = await client.query(
+          `SELECT * FROM ${table} WHERE id = 'legacy'`,
+        );
+        assert.deepEqual(existing.rows, [
+          { id: "legacy", x: 104, y: 88, growth_started_at: null },
+        ]);
+        const inserted = await client.query(
+          `INSERT INTO ${table} (id, x, y) VALUES ('new', 88, 104) RETURNING growth_started_at`,
+        );
+        assert.ok(inserted.rows[0].growth_started_at instanceof Date);
+      }
+    } finally {
+      await client.query("ROLLBACK");
+      client.release();
+      await pool.end();
+    }
+  },
+);
+
+it(
   "upgrades populated v2 PostgreSQL data without losing progress, rewards or existing invitation codes",
   { skip: !process.env.TEST_DATABASE_URL },
   async () => {
@@ -108,7 +152,10 @@ it(
       );
       const seed = createSeed();
       for (const [key, table, currentColumns] of tables) {
-        const columns: string[] = [...currentColumns];
+        const columns: string[] = currentColumns.filter(
+          (column) =>
+            !["cottageMilestones", "cottageBuild", "avatarAppearance"].includes(column),
+        );
         if (key === "connections" || key === "activities")
           columns.push("personalOwnerId");
         for (const row of seed[key]) {
@@ -155,7 +202,35 @@ it(
           "utf8",
         ),
       );
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/009_activity_cottage_milestones.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/010_activity_cottage_clock.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      await client.query(
+        await readFile(
+          new URL("../src/db/migrations/012_homebase_avatar.sql", import.meta.url),
+          "utf8",
+        ),
+      );
       const upgraded = parseDatabase(await loadDatabase(client));
+      assert.ok(
+        upgraded.activities.every((activity) => activity.cottageBuild === null),
+      );
+      for (const activity of seed.activities) activity.cottageBuild = null;
       for (const key of Object.keys(seed) as (keyof typeof seed)[]) {
         if (key !== "logShares")
           assert.deepEqual(upgraded[key], seed[key], `Preserve ${key}`);

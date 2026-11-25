@@ -1,16 +1,22 @@
 import { z } from "zod";
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { databaseSchema } from "@beside/domain/validation";
+import {
+  cottageBuildSecondsSchema,
+  databaseSchema,
+} from "@beside/domain/validation";
 import { createScheduleSchema, scheduleSchema } from "@beside/domain/schedules";
 import * as api from "@beside/domain/api";
+import { avatarAppearanceSchema } from "@beside/domain/avatar";
 
 export const schemas = {
   CreateSchedule: createScheduleSchema,
   MilestoneSchedule: scheduleSchema,
   Register: api.registerSchema,
   Login: api.loginSchema,
+  JoinAsGuest: api.joinAsGuestSchema,
+  GuestSession: api.guestSessionSchema,
   Session: api.sessionSchema,
-  User: databaseSchema.shape.users.element,
+  User: api.authUserSchema,
   PublicUser: api.publicUserSchema,
   CreateHomebase: api.createHomebaseSchema,
   UpdateHomebase: api.updateHomebaseSchema,
@@ -18,12 +24,14 @@ export const schemas = {
   UpdateMilestone: api.updateMilestoneSchema,
   JoinHomebase: api.joinHomebaseSchema,
   Homebase: api.homebaseSchema,
+  AvatarAppearance: avatarAppearanceSchema,
   HomebaseGarden: api.homebaseGardenSchema,
   PlantStarterOak: api.plantStarterOakSchema,
   PlaceReward: api.placeRewardSchema,
   RewardAgreement: api.rewardAgreementSchema,
   CreateSubject: api.createSubjectSchema,
   CreateActivity: api.createActivitySchema,
+  CottageBuildSettings: cottageBuildSecondsSchema,
   LinkSubject: api.linkSubjectSchema,
   UpdateParticipation: api.participationSchema,
   CreateMilestone: api.createMilestoneSchema,

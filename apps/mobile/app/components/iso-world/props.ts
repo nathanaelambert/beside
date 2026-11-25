@@ -1,7 +1,11 @@
 // Procedural pixel-art props for the iso world: timber-framed houses (one per activity),
 // bushes and rocks. Each returns a bitmap plus the pixel that sits on the ground anchor.
 
-import { createBitmap, hash, outline, put, type Bitmap } from "./bitmap"
+import type { CottageSpriteLevel } from "@beside/api-client"
+
+import { createBitmap, outline, put, type Bitmap } from "./bitmap"
+import { shorelineBoulderColor } from "./coastArt"
+import { compactGroundProp } from "./groundPropArt"
 import { HALF_H, HALF_W } from "./projection"
 
 export interface Sprite {
@@ -61,143 +65,262 @@ const wall = { plaster: "#efe3c8", shade: "#d9c9a8", timber: "#6b4a33", base: "#
 const glass = { frame: "#4a3a33", pane: "#7fb0d0", light: "#d5ecf2", lit: "#f6d77a" }
 
 /**
- * A small two-storey cottage seen from the iso camera: a front-left wall with door and
- * windows, a gabled right end, and a shingled roof whose ridge runs along u.
- * `lit` turns the windows warm, used when the activity has a session open now.
+ * Low, wide silhouettes read clearly at the island's default zoom. Roof colors also give
+ * the timber lodge and clubhouse distinct profiles without changing any activity behavior.
  */
-export function house(roof: RoofColor = "clay", lit = false): Sprite {
-  const W = 64
-  const H = 66
-  const bitmap = createBitmap(W, H)
-  const ax = W / 2
-  const ay = H - 6
+export function house(
+  roof: RoofColor = "clay",
+  lit = false,
+  level: CottageSpriteLevel = 1,
+): Sprite {
+  const bitmap = createBitmap(64, 70)
+  const ax = 32
+  const ay = 60
   const P = (u: number, v: number, h: number): Point => [
     ax + (u - v) * HALF_W,
     ay + (u + v) * HALF_H - h,
   ]
-  const u0 = -0.4
-  const u1 = 0.4
-  const v0 = -0.33
-  const v1 = 0.33
+  const lodge = roof === "teal"
+  const club = roof === "slate"
+  const u0 = -0.52
+  const u1 = 0.52
+  const v0 = -0.4
+  const v1 = 0.4
+  if (level === 0) {
+    fillPolygon(bitmap, [P(u0, v1, 3), P(u1, v1, 3), P(u1, v0, 3), P(u0, v0, 3)], () => "#c0a57c")
+    fillPolygon(bitmap, [P(u0, v1, 0), P(u1, v1, 0), P(u1, v1, 3), P(u0, v1, 3)], () => wall.base)
+    fillPolygon(bitmap, [P(u1, v1, 0), P(u1, v0, 0), P(u1, v0, 3), P(u1, v1, 3)], () => "#777b73")
+    fillPolygon(
+      bitmap,
+      [P(-0.37, 0.08, 4), P(0.13, 0.08, 4), P(0.13, -0.13, 4), P(-0.37, -0.13, 4)],
+      () => wall.timber,
+    )
+    outline(bitmap, "#3b2a2e")
+    return { bitmap, anchorX: ax, anchorY: ay }
+  }
   const wallH = 19
-  const ridgeH = 14
-  const o = 0.08
+  const ridgeH = 12
+  const ridge = wallH + ridgeH
+  const o = 0.09
   const eave = wallH - 2
   const tones = roofColors[roof]
+  const pane = lit ? glass.lit : glass.pane
 
-  // Back slope first, then walls, then the front slope over the eaves.
   fillPolygon(
     bitmap,
-    [
-      P(u0 - o, 0, wallH + ridgeH),
-      P(u1 + o, 0, wallH + ridgeH),
-      P(u1 + o, v0 - o, eave),
-      P(u0 - o, v0 - o, eave),
-    ],
-    () => tones[1]!,
-  )
-  // Chimney on the back slope.
-  fillPolygon(
-    bitmap,
-    [
-      P(-0.2, -0.14, wallH + 6),
-      P(-0.08, -0.14, wallH + 6),
-      P(-0.08, -0.14, wallH + ridgeH + 5),
-      P(-0.2, -0.14, wallH + ridgeH + 5),
-    ],
-    (x, y) => ((y + (x % 2)) % 3 === 0 ? "#7d4436" : "#a35e4b"),
-  )
-  fillPolygon(
-    bitmap,
-    [
-      P(-0.08, -0.14, wallH + 6),
-      P(-0.08, -0.26, wallH + 6),
-      P(-0.08, -0.26, wallH + ridgeH + 5),
-      P(-0.08, -0.14, wallH + ridgeH + 5),
-    ],
-    () => "#7d4436",
+    [P(u0 - o, 0, ridge), P(u1 + o, 0, ridge), P(u1 + o, v0 - o, eave), P(u0 - o, v0 - o, eave)],
+    () => tones[0],
   )
 
-  // Right (gable) wall: u = u1, from v1 back to v0, with a peaked top.
+  // A single large window stands out on the shaded gable.
   fillPolygon(
     bitmap,
-    [P(u1, v1, 0), P(u1, v0, 0), P(u1, v0, wallH), P(u1, 0, wallH + ridgeH - 1), P(u1, v1, wallH)],
+    [P(u1, v1, 0), P(u1, v0, 0), P(u1, v0, wallH), P(u1, 0, ridge - 1), P(u1, v1, wallH)],
     (x, y) => {
       const v = u1 - (x + 0.5 - ax) / HALF_W
       const h = ay + (u1 + v) * HALF_H - (y + 0.5)
-      if (h < 2) return wall.base
-      if (Math.abs(v - v0) < 0.05 || Math.abs(v - v1) < 0.05) return wall.timber
-      if (Math.abs(h - wallH) < 0.9) return wall.timber
-      // Round attic window in the gable.
-      if (Math.hypot(v * 16, h - (wallH + 6)) < 2.8)
-        return Math.hypot(v * 16, h - (wallH + 6)) < 1.6
-          ? lit
-            ? glass.lit
-            : glass.pane
-          : glass.frame
-      // Ground-floor window.
-      if (Math.abs(v - 0.02) < 0.13 && h > 6 && h < 13)
-        return Math.abs(v - 0.02) > 0.09 || h < 7 || h > 12
-          ? glass.frame
-          : lit
-            ? glass.lit
-            : y % 3 === 0
-              ? glass.light
-              : glass.pane
-      return wall.shade
+      if (h < 2.5) return "#777b73"
+      if (Math.abs(v) > 0.35 || Math.abs(h - wallH) < 1) return wall.timber
+      if (level === 3 && !lodge && !club && Math.abs(v) < 0.26 && h > 2.5 && h < 7) {
+        if (h < 4.5) return "#844b35"
+        return Math.abs(v) < 0.09 ? "#edb25f" : "#426447"
+      }
+      if (Math.abs(v) < 0.27 && h > 5 && h < 15) {
+        if (Math.abs(v) > 0.2 || h < 6.5 || h > 13.5) return glass.frame
+        if (Math.abs(v) < 0.033) return wall.timber
+        return h > 11.5 && !lit ? glass.light : pane
+      }
+      if (lodge) return Math.floor(h) % 5 === 0 ? "#774828" : "#aa6b3c"
+      return "#c2a984"
     },
   )
 
-  // Front-left wall: v = v1, from u0 to u1.
+  // One legible entrance instead of several narrow columns and windows.
+  const doubleDoor = club && level >= 2
+  const door = doubleDoor ? 0.28 : 0.2
   fillPolygon(bitmap, [P(u0, v1, 0), P(u1, v1, 0), P(u1, v1, wallH), P(u0, v1, wallH)], (x, y) => {
     const u = (x + 0.5 - ax) / HALF_W + v1
     const h = ay + (u + v1) * HALF_H - (y + 0.5)
-    const s = (u - u0) / (u1 - u0)
-    if (h < 2) return wall.base
-    if (s < 0.06 || s > 0.94 || Math.abs(s - 0.5) < 0.035) return wall.timber
-    if (Math.abs(h - 10.5) < 0.6 && (s < 0.5 || s > 0.62)) return wall.timber
-    // Door, right of the centre beam.
-    if (s > 0.58 && s < 0.78 && h < 13) {
-      if (s < 0.61 || s > 0.75 || h > 12) return "#4a2f1e"
-      return s > 0.71 && h > 5.5 && h < 7 ? "#e7c66a" : "#83552f"
+    if (
+      doubleDoor &&
+      Math.abs(u + 0.07) < door + 0.08 &&
+      h >= 2 &&
+      h < 16 &&
+      (Math.abs(u + 0.07) >= door || h >= 14)
+    )
+      return "#969586"
+    if (Math.abs(u + 0.07) < door && h < 14) {
+      if (h > 12 || Math.abs(u + 0.07) > door - 0.065) return "#442c24"
+      if (doubleDoor && Math.abs(u + 0.07) < 0.04) return "#442c24"
+      return u > 0.01 && u < 0.09 && h > 5 && h < 7 ? "#eac779" : "#8c5535"
     }
-    // Windows on each storey.
-    for (const [ws, wh] of [
-      [0.25, 6.2],
-      [0.25, 14.6],
-      [0.8, 14.6],
-    ] as const) {
-      if (Math.abs(s - ws) < 0.1 && Math.abs(h - wh) < 2.8) {
-        if (Math.abs(s - ws) > 0.07 || Math.abs(h - wh) > 2.1) return glass.frame
-        return lit ? glass.lit : y % 3 === 0 ? glass.light : glass.pane
-      }
-    }
+    if (h < 2.5) return wall.base
+    if (Math.abs(u) > 0.45 || h > wallH - 2) return wall.timber
+    if (lodge) return Math.floor(h) % 5 === 0 ? "#965332" : "#ce9156"
     return wall.plaster
   })
 
-  // Front slope, with shingle courses and staggered joints.
-  const k = (ridgeH + 2) / (v1 + o)
+  // Broad roof planes with sparse courses remain distinct when zoomed out.
+  const pitch = (ridge - eave) / (v1 + o)
   fillPolygon(
     bitmap,
-    [
-      P(u0 - o, v1 + o, eave),
-      P(u1 + o, v1 + o, eave),
-      P(u1 + o, 0, wallH + ridgeH),
-      P(u0 - o, 0, wallH + ridgeH),
-    ],
+    [P(u0 - o, v1 + o, eave), P(u1 + o, v1 + o, eave), P(u1 + o, 0, ridge), P(u0 - o, 0, ridge)],
     (x, y) => {
       const px = x + 0.5 - ax
       const py = y + 0.5 - ay
-      const v = (py - px / 2 + wallH + ridgeH) / (2 * HALF_H + k)
-      const u = px / HALF_W + v
-      const course = Math.floor(v * 16)
-      const along = Math.floor((u + 1) * 12 + (course % 2) * 0.5)
-      if (v < 0.035) return tones[4]!
-      if (v * 16 - course < 0.22) return tones[1]!
-      if (along % 3 === 0 && hash(along, course, 31) > 0.4) return tones[2]!
-      return v > 0.25 ? tones[3]! : tones[2]!
+      const v = (py - px / 2 + ridge) / (2 * HALF_H + pitch)
+      if (v < 0.045) return tones[4]
+      if (v > 0.42) return tones[1]
+      return v > 0.25 ? tones[3] : tones[2]
     },
   )
+
+  // A low step on the front face upgrades the lodge and club without widening their lot.
+  if (level >= 2 && (lodge || club)) {
+    fillPolygon(
+      bitmap,
+      [P(-0.34, v1, 1), P(0.22, v1, 1), P(0.22, 0.61, 1), P(-0.34, 0.61, 1)],
+      () => "#a9a48d",
+    )
+    if (lodge) {
+      fillPolygon(
+        bitmap,
+        [P(-0.36, v1, 16), P(0.22, v1, 16), P(0.22, 0.62, 13), P(-0.36, 0.62, 13)],
+        () => tones[3],
+      )
+    }
+  }
+
+  if (lodge && level === 3) {
+    // The chimney stays readable as one shape even when its masonry does not.
+    const left = 0.05
+    const right = 0.29
+    const front = 0.18
+    const back = -0.04
+    const top = ridge + 6
+    fillPolygon(
+      bitmap,
+      [
+        P(left, front, top - 12),
+        P(right, front, top - 12),
+        P(right, front, top),
+        P(left, front, top),
+      ],
+      () => "#aa8a70",
+    )
+    fillPolygon(
+      bitmap,
+      [
+        P(right, front, top - 12),
+        P(right, back, top - 12),
+        P(right, back, top),
+        P(right, front, top),
+      ],
+      () => "#705844",
+    )
+    fillPolygon(
+      bitmap,
+      [P(left, front, top), P(right, front, top), P(right, back, top), P(left, back, top)],
+      () => "#c9a082",
+    )
+  } else if (club && level === 3) {
+    const [flagX, flagY] = P(-0.28, 0, ridge)
+    fillPolygon(
+      bitmap,
+      [
+        [flagX, flagY],
+        [flagX + 2, flagY],
+        [flagX + 2, flagY - 11],
+        [flagX, flagY - 11],
+      ],
+      () => "#7e5638",
+    )
+    fillPolygon(
+      bitmap,
+      [
+        [flagX + 1, flagY - 11],
+        [flagX + 11, flagY - 8],
+        [flagX + 1, flagY - 5],
+      ],
+      () => "#f1bc53",
+    )
+  } else if (!lodge && !club && level >= 2) {
+    if (level === 3) {
+      // A roof dormer reads above attendees, while the planter decorates the gable below.
+      const [x, y] = P(-0.08, 0.24, ridge - pitch * 0.24)
+      fillPolygon(
+        bitmap,
+        [
+          [x - 4, y + 3],
+          [x + 4, y + 7],
+          [x + 4, y - 1],
+          [x - 4, y - 5],
+        ],
+        () => wall.plaster,
+      )
+      fillPolygon(
+        bitmap,
+        [
+          [x - 2, y + 2],
+          [x + 2, y + 4],
+          [x + 2, y],
+          [x - 2, y - 2],
+        ],
+        () => pane,
+      )
+      fillPolygon(
+        bitmap,
+        [
+          [x - 5, y - 4],
+          [x + 5, y + 1],
+          [x + 1, y - 8],
+          [x - 2, y - 9],
+        ],
+        () => tones[0],
+      )
+    }
+    const left = -0.38
+    const right = 0.22
+    const front = 0.66
+    fillPolygon(
+      bitmap,
+      [P(left, v1, 1), P(right, v1, 1), P(right, front, 1), P(left, front, 1)],
+      () => wall.base,
+    )
+    for (const post of [left + 0.05, right - 0.05]) {
+      fillPolygon(
+        bitmap,
+        [
+          P(post - 0.055, front, 1),
+          P(post + 0.055, front, 1),
+          P(post + 0.055, front, 11),
+          P(post - 0.055, front, 11),
+        ],
+        () => wall.timber,
+      )
+    }
+    fillPolygon(
+      bitmap,
+      [
+        P(left, v1, 15.5),
+        P(right, v1, 15.5),
+        P(right, front + 0.025, 11),
+        P(left, front + 0.025, 11),
+      ],
+      () => tones[3],
+    )
+    fillPolygon(
+      bitmap,
+      [
+        P(left, front + 0.025, 11),
+        P(right, front + 0.025, 11),
+        P(right, front + 0.025, 9.5),
+        P(left, front + 0.025, 9.5),
+      ],
+      () => tones[1],
+    )
+  }
+
   outline(bitmap, "#3b2a2e")
   return { bitmap, anchorX: ax, anchorY: ay }
 }
@@ -235,7 +358,7 @@ export function bush(seed: number): Sprite {
 }
 
 /** A lumpy grey boulder with a lit top, sitting in its own shadow. */
-export function rock(seed: number): Sprite {
+export function rock(seed: number, detailed = false): Sprite {
   const W = 18
   const H = 14
   const bitmap = createBitmap(W, H)
@@ -255,13 +378,15 @@ export function rock(seed: number): Sprite {
         const lit = -nx * 0.45 - ny * 0.85 + Math.sqrt(1 - d * d) * 0.4
         best = Math.max(best, lit > 0.75 ? 3 : lit > 0.35 ? 2 : lit > -0.05 ? 1 : 0)
       }
-      if (best >= 0) put(bitmap, x, y, tones[best]!)
+      if (best >= 0) put(bitmap, x, y, detailed ? shorelineBoulderColor(x, y, best) : tones[best]!)
     }
   if (seed > 0.4) {
     put(bitmap, 5, 6, "#7fa65a")
     put(bitmap, 6, 6, "#7fa65a")
     put(bitmap, 6, 5, "#9ccb73")
   }
-  outline(bitmap, "#3b3f45")
-  return { bitmap, anchorX: W / 2, anchorY: H - 2 }
+  outline(bitmap, detailed ? "#464739" : "#3b3f45")
+  // Keep the wide, damp foot and step down only the upper limestone facets.
+  const finish = detailed ? compactGroundProp(bitmap, [3, 5, 7, 8, 9, 10], 11, 1) : bitmap
+  return { bitmap: finish, anchorX: W / 2, anchorY: H - 2 }
 }

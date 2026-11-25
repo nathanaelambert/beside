@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, PixelRatio, Pressable, StatusBar, StyleSheet, View } from "react-native"
-import { ApiError, type ApiState, type HomebaseGarden } from "@beside/api-client"
+import { ApiError, cottageLevel, type ApiState, type HomebaseGarden } from "@beside/api-client"
 import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { PixelArtSprite } from "@/components/BesideMark"
-import { cottageArt } from "@/components/iso-world/cottageArt"
+import { CottageCountdown } from "@/components/CottageConstruction"
+import { CottageThumbnail } from "@/components/CottageThumbnail"
+import {
+  focusedIslandLayers,
+  snapZoom,
+  stepZoom,
+  zoomStops,
+} from "@/components/iso-world/archipelago"
+import { coastHeight, walkSurfaceLift } from "@/components/iso-world/coastAccess"
+import { cottageProgressLabel } from "@/components/iso-world/cottageArt"
+import { HomeCoastAction, HomeCoastPanel } from "@/components/iso-world/HomeCoastPanel"
+import { homeCoastCenter, previewHomeCoast } from "@/components/iso-world/homeExpansion"
 import {
   homeFocus,
   nextSuggestion,
@@ -14,9 +24,23 @@ import {
   plantableTiles,
   plantingTap,
 } from "@/components/iso-world/homeWorld"
+import { IslandSwitcher } from "@/components/iso-world/IslandSwitcher"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
-import { meadowToIso } from "@/components/iso-world/projection"
-import { catalogue, itemDrawable, type HitTarget } from "@/components/iso-world/scene"
+import { lawnWalk, meadowCell, type LawnWalk } from "@/components/iso-world/lawnWalk"
+import { meadowToIso, screenToIso } from "@/components/iso-world/projection"
+import {
+  avatarDrawable,
+  catalogue,
+  homeAvatarY,
+  itemDrawable,
+  sortDrawables,
+  type HitTarget,
+} from "@/components/iso-world/scene"
+import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
+import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
+import { useHomeCoastEditor } from "@/components/iso-world/useHomeCoastEditor"
+import { useLawnWalk } from "@/components/iso-world/useLawnWalk"
+import { detailedCatalogArt, hasGrowthArt } from "@/components/iso-world/worldDetailArt"
 import { firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlaceRewardPanel } from "@/components/pixel-world/PlaceRewardPanel"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
@@ -28,16 +52,6 @@ import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { besideApi } from "@/services/api/beside"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { firstName, namesLabel, rewardMemory, rewardsToPlace } from "@/utils/rewardChoice"
-
-import {
-  focusedIslandLayers,
-  snapZoom,
-  stepZoom,
-  zoomStops,
-} from "@/components/iso-world/archipelago"
-import { IslandSwitcher } from "@/components/iso-world/IslandSwitcher"
-import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
-import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
 
 type PlacementTarget = { kind: "oak" } | { kind: "reward"; rewardId: string; itemId: string }
 const friends = { x: homeFocus.u * 16, y: homeFocus.v * 16 }
@@ -53,14 +67,22 @@ function placementMessage(rejection: string | null) {
 
 export function HomeBaseScreen(props: AppStackScreenProps<"HomeBase">) {
   const { user } = useAuth()
-  return <HomeArchipelagoScreen key={user?.id ?? "anonymous"} {...props} userId={user?.id} />
+  return (
+    <HomeArchipelagoScreen
+      key={user?.id ?? "anonymous"}
+      {...props}
+      userId={user?.id}
+      isGuest={user?.isGuest === true}
+    />
+  )
 }
 
 function HomeArchipelagoScreen({
   navigation,
   route,
   userId,
-}: AppStackScreenProps<"HomeBase"> & { userId?: string }) {
+  isGuest,
+}: AppStackScreenProps<"HomeBase"> & { userId?: string; isGuest: boolean }) {
   const [attempt, setAttempt] = useState(0)
   const archipelago = useHomeArchipelago(userId, route.params?.connectionId, attempt)
   return (
@@ -69,6 +91,7 @@ function HomeArchipelagoScreen({
       navigation={navigation}
       route={route}
       userId={userId}
+      isGuest={isGuest}
       archipelago={archipelago}
       retry={() => setAttempt((value) => value + 1)}
     />
@@ -79,28 +102,53 @@ function HomeIslandScreen({
   navigation,
   route,
   userId,
+  isGuest,
   archipelago,
   retry,
 }: AppStackScreenProps<"HomeBase"> & {
   userId?: string
+  isGuest: boolean
   archipelago: ReturnType<typeof useHomeArchipelago>
   retry: () => void
 }) {
-  const { logout } = useAuth()
+  const { logout, consumeAvatarOnboarding } = useAuth()
   const {
     data: shared,
     focused,
     islands,
     focusIsland,
     beginGardenUpdate,
+    acceptExpansion,
     busy,
     error,
     setError,
   } = archipelago
   const homebase = focused?.homebase
+  const expansion = focused?.expansion
+  const coast = useHomeCoastEditor(homebase?.id, expansion, acceptExpansion)
+  const coastDraft = !isGuest && !busy ? coast.draft : undefined
+  const [selectedKey, setSelectedKey] = useState<string>()
+  const myMembership = shared?.state.memberships.find(
+    (member) => member.connectionId === homebase?.id && member.userId === userId,
+  )
+  const editAvatar = useCallback(() => {
+    if (!homebase || !myMembership) return
+    setSelectedKey(undefined)
+    navigation.navigate("AvatarEditor", {
+      connectionId: homebase.id,
+      homebaseName: homebase.name,
+      appearance: myMembership.avatarAppearance,
+    })
+  }, [homebase, myMembership, navigation])
+  useFocusEffect(
+    useCallback(() => {
+      // A restored session is not an invitation to replace a familiar avatar.
+      if (!busy && myMembership && consumeAvatarOnboarding() && !myMembership.avatarAppearance)
+        editAvatar()
+    }, [busy, consumeAvatarOnboarding, editAvatar, myMembership]),
+  )
   const data = shared && { state: shared.state, garden: focused?.garden }
   const [loggingOut, setLoggingOut] = useState(false)
-  const [selectedKey, setSelectedKey] = useState<string>()
   const [cameraReset, setCameraReset] = useState(0)
   const [zoom, setZoom] = useState<number>()
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -112,6 +160,8 @@ function HomeIslandScreen({
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
   const [focus, setFocus] = useState<MeadowPoint>()
+  const [walkTarget, setWalkTarget] = useState<LawnWalk>()
+  const { feet, walking, walk } = useLawnWalk(homebase?.id)
   const plantingLock = useRef(false)
   const viewSession = useRef<object | undefined>(undefined)
   // Follow reward links after this island’s garden has loaded.
@@ -123,6 +173,7 @@ function HomeIslandScreen({
       viewSession.current = {}
       setSavingOak(plantingLock.current)
       setPlanting(undefined)
+      setWalkTarget(undefined)
       setGardenError("")
       return () => {
         viewSession.current = undefined
@@ -132,6 +183,7 @@ function HomeIslandScreen({
 
   const members = focused?.members ?? []
   const avatars = focused?.avatars ?? []
+  const myAvatar = myMembership && avatars.find((avatar) => avatar.key === myMembership.userId)
   const activities = focused?.activities ?? []
   const multipleIslands = islands.length > 1
   const stops = useMemo(() => zoomStops(PixelRatio.get(), multipleIslands), [multipleIslands])
@@ -145,7 +197,26 @@ function HomeIslandScreen({
         ? stepZoom(currentZoom, direction, stops)
         : Math.max(1, Math.min(4, currentZoom + direction)),
     )
-  const baseLayers = useMemo(() => islands.map((island) => island.layer), [islands])
+  const baseLayers = useMemo(
+    () =>
+      islands.map(({ layer }) => {
+        if (layer.key !== homebase?.id || !feet || !myAvatar) return layer
+        const { u, v } = meadowToIso(feet.x, feet.y)
+        const moved = avatarDrawable(
+          layer.frame,
+          layer.map,
+          myAvatar,
+          u,
+          v,
+          walkSurfaceLift(layer.map, u, v),
+        )
+        return {
+          ...layer,
+          drawables: sortDrawables(layer.drawables.map((d) => (d.key === moved.key ? moved : d))),
+        }
+      }),
+    [islands, homebase?.id, feet, myAvatar],
+  )
   const onArrive = useCallback(
     (id: string) => {
       focusIsland(id)
@@ -161,60 +232,113 @@ function HomeIslandScreen({
     onArrive,
   })
   function sailTo(id: string) {
-    if (plantingLock.current || voyage || busy || id === homebase?.id) return
+    if (coastDraft || coast.saving) return
+    if (walking || plantingLock.current || voyage || busy || id === homebase?.id) return
     setSelectedKey(undefined)
+    setWalkTarget(undefined)
     setPlanting(undefined)
     setGardenError("")
     setFocus(undefined)
     travel(id)
   }
   const selected = avatars.find((avatar) => avatar.key === selectedKey)
+  const selectedFriend = selected?.key === myAvatar?.key ? undefined : selected
+  const canEditAvatar =
+    !!myAvatar && !walking && !busy && !voyage && !savingOak && !planting && !coastDraft
+
+  function locateMyAvatar() {
+    if (!canEditAvatar || !myAvatar) return
+    setWalkTarget(undefined)
+    setFocus(feet ?? { x: myAvatar.x, y: homeAvatarY(myAvatar.y) })
+    setCameraReset((value) => value + 1)
+    setSelectedKey(myAvatar.key)
+  }
   const oak = data?.garden?.oak
   const placements = useMemo(() => placedRewards(data?.garden), [data?.garden])
   const placedIds = useMemo(() => new Set(placements.map((p) => p.rewardId)), [placements])
   const waiting = data && homebase ? rewardsToPlace(data.state, homebase.id, placedIds) : []
-  const canPlant = !!data?.garden && !oak && !busy && !voyage
+  const canPlant = !isGuest && !!data?.garden && !oak && !busy && !voyage && !coastDraft
   const target = planting?.homebaseId === homebase?.id ? planting?.target : undefined
   const editing =
     !!target && !!data?.garden && !busy && !voyage && (target.kind === "reward" || canPlant)
   const movingId = editing && target?.kind === "reward" ? target.rewardId : undefined
   const position = editing ? planting?.position : undefined
-  // Everything already standing except what is being placed, as the API sees it.
+  // Preserve the server's rules and leave room for your avatar if you walked onto the lawn.
   const occupied = useMemo(
-    () => [...(oak ? [oak] : []), ...placements.filter((p) => p.rewardId !== movingId)],
-    [oak, placements, movingId],
+    () => [
+      ...(oak ? [oak] : []),
+      ...placements.filter((p) => p.rewardId !== movingId),
+      ...(feet ? [feet] : []),
+    ],
+    [oak, placements, movingId, feet],
   )
   const guideTiles = useMemo(() => (editing ? plantableTiles(occupied) : []), [editing, occupied])
   const guide = guideTiles.map(({ col, row }) => ({ x: col * 16 + 8, y: row * 16 + 8 }))
-  const worldItems = focused?.items ?? []
+  const worldItems = useMemo(() => focused?.items ?? [], [focused?.items])
   const previewItemId = target?.kind === "reward" ? target.itemId : oakAt({ x: 0, y: 0 }).itemId
+  const previewStage = movingId
+    ? worldItems.find((item) => item.key === rewardKey(movingId))?.stage
+    : "sprout"
   const placingItem = target?.kind === "reward" ? catalogue.get(target.itemId) : undefined
+  const canOpenCoast = !isGuest && !!expansion && !editing && !coastDraft
+
+  function openCoast() {
+    if (
+      !canOpenCoast ||
+      busy ||
+      walking ||
+      voyage ||
+      plantingLock.current ||
+      !coast.candidates.length
+    )
+      return
+    setSelectedKey(undefined)
+    setWalkTarget(undefined)
+    coast.select(coast.candidates[0])
+  }
 
   const layers = useMemo(() => {
-    const editedLayers = baseLayers.map((layer) =>
-      layer.key === homebase?.id && movingId
+    const editedLayers = baseLayers.map((layer) => {
+      if (layer.key !== homebase?.id) return layer
+      if (coastDraft && coast.index >= 0) return previewHomeCoast(layer, coastDraft)
+      return movingId
         ? { ...layer, drawables: layer.drawables.filter((d) => d.key !== rewardKey(movingId)) }
-        : layer,
-    )
+        : layer
+    })
     const built = focused?.scene
     const point = position && meadowToIso(position.x, position.y)
     const preview =
       built &&
       point &&
-      itemDrawable(built.frame, built.map, "placement-preview", previewItemId, point.u, point.v, {
-        opacity: 0.72,
-        hit: undefined,
-      })
+      itemDrawable(
+        built.frame,
+        built.map,
+        "placement-preview",
+        previewItemId,
+        point.u,
+        point.v,
+        { opacity: 0.72, hit: undefined },
+        previewStage,
+      )
     return focusedIslandLayers(editedLayers, homebase?.id, userId, !!voyage, preview || undefined)
-  }, [baseLayers, homebase?.id, movingId, focused, position, previewItemId, userId, voyage])
+  }, [
+    baseLayers,
+    coastDraft,
+    coast.index,
+    homebase?.id,
+    movingId,
+    focused,
+    position,
+    previewItemId,
+    previewStage,
+    userId,
+    voyage,
+  ])
   const scene = focused?.scene
   const selectedHouse = scene?.houses.find((h) => `house-${h.activity.id}` === selectedKey)
-  const houseArt = selectedHouse
-    ? cottageArt(scene!.houses.indexOf(selectedHouse), !!selectedHouse.activity.open)
-    : undefined
 
   function openActivity(activityId: string) {
-    navigation.navigate("ActivityDetail", { activityId })
+    if (!isGuest) navigation.navigate("ActivityDetail", { activityId })
   }
 
   function rewardStory(state: ApiState, rewardId: string) {
@@ -225,8 +349,9 @@ function HomeIslandScreen({
   }
 
   function startPlanting() {
-    if (!homebase || !canPlant || editing || plantingLock.current || voyage) return
+    if (!homebase || !canPlant || editing || walking || plantingLock.current || voyage) return
     setSelectedKey(undefined)
+    setWalkTarget(undefined)
     setFocus(undefined)
     setGardenError("")
     setPlanting({ homebaseId: homebase.id, target: { kind: "oak" } })
@@ -239,12 +364,15 @@ function HomeIslandScreen({
     itemId: string,
     garden: HomebaseGarden,
   ) {
-    if (plantingLock.current || voyage || busy || homebaseId !== homebase?.id) return
+    if (isGuest || coastDraft) return
+    if (walking || plantingLock.current || voyage || busy || homebaseId !== homebase?.id) return
     const others = [
       ...(garden.oak ? [garden.oak] : []),
       ...placedRewards(garden).filter((p) => p.rewardId !== rewardId),
+      ...(feet ? [feet] : []),
     ]
     setSelectedKey(undefined)
+    setWalkTarget(undefined)
     setGardenError("")
     setFocus(undefined)
     setCameraReset((value) => value + 1)
@@ -299,12 +427,48 @@ function HomeIslandScreen({
     x: number
     y: number
   }) {
-    if (plantingLock.current || voyage) return
+    if (walking || plantingLock.current || voyage) return
+    if (coastDraft && focused) {
+      if (islandKey && islandKey !== homebase?.id) return
+      const { frame, offset } = focused.layer
+      const { u, v } = screenToIso(
+        frame,
+        x - (islandKey ? 0 : offset.x),
+        y - (islandKey ? 0 : offset.y),
+        coastHeight,
+      )
+      const tile = coast.candidates.find(
+        ({ col, row }) => col === Math.floor(u) && row === Math.floor(v),
+      )
+      if (tile) coast.select(tile)
+      return
+    }
     if (multipleIslands && islandKey && islandKey !== homebase?.id) {
       sailTo(islandKey)
       return
     }
     if (!editing || !homebase || !target) {
+      const destination =
+        !hit && canEditAvatar && scene && myAvatar
+          ? lawnWalk(
+              scene.map,
+              scene.frame,
+              feet ?? { x: myAvatar.x, y: homeAvatarY(myAvatar.y) },
+              { x, y },
+              [
+                ...scene.houses,
+                ...worldItems.map(meadowCell),
+                ...avatars
+                  .filter((avatar) => avatar.key !== myAvatar.key)
+                  .map((avatar) => meadowCell({ x: avatar.x, y: homeAvatarY(avatar.y) })),
+              ],
+            )
+          : undefined
+      setWalkTarget(destination)
+      if (hit?.type === "avatar" && hit.id === myAvatar?.key && hit.id === selectedKey) {
+        setSelectedKey(undefined)
+        return
+      }
       if (hit?.type === "house" && selectedKey === `house-${hit.id}`) openActivity(hit.id)
       else
         setSelectedKey(
@@ -315,6 +479,13 @@ function HomeIslandScreen({
     const { point, rejection } = plantingTap(scene!.frame, x, y, occupied)
     setPlanting({ homebaseId: homebase.id, target, position: rejection ? undefined : point })
     setGardenError(placementMessage(rejection))
+  }
+
+  function moveHere() {
+    if (!walkTarget || !canEditAvatar) return
+    setSelectedKey(undefined)
+    setWalkTarget(undefined)
+    walk(walkTarget.route)
   }
 
   function suggestSpot() {
@@ -384,7 +555,23 @@ function HomeIslandScreen({
 
   const selectedPlacement = placements.find((p) => rewardKey(p.rewardId) === selectedKey)
   const selectedItem = selected ? undefined : worldItems.find((item) => item.key === selectedKey)
-  const selectedArt = selectedItem && catalogue.get(selectedItem.itemId)
+  const selectedCatalog = selectedItem && catalogue.get(selectedItem.itemId)
+  const selectedArt = selectedCatalog && {
+    ...selectedCatalog,
+    artifact:
+      detailedCatalogArt(selectedCatalog.id, selectedItem?.stage) ?? selectedCatalog.artifact,
+  }
+  const growthPhase =
+    selectedItem && hasGrowthArt(selectedItem.itemId)
+      ? {
+          sprout: "Sprout",
+          young: selectedCatalog?.category === "Flowers" ? "Bud" : "Young",
+          mature: selectedCatalog?.category === "Flowers" ? "In bloom" : "Mature",
+        }[selectedItem.stage ?? "mature"]
+      : undefined
+  const growthLabel = growthPhase && (
+    <Text testID="homebase-plant-stage" text={growthPhase} style={styles.description} />
+  )
   const memory =
     selectedPlacement && data ? rewardMemory(data.state, selectedPlacement.rewardId) : undefined
   const selectedReward =
@@ -469,15 +656,40 @@ function HomeIslandScreen({
       <View style={styles.header}>
         <View style={styles.headingRow}>
           <Text text={multipleIslands ? "YOUR ISLANDS" : "YOUR HOME BASE"} style={worldEyebrow} />
-          <Pressable
-            testID="homebase-logout"
-            accessibilityRole="button"
-            onPress={signOut}
-            disabled={loggingOut}
-            style={styles.logout}
-          >
-            <Text text={loggingOut ? "Logging out…" : "Log out"} style={styles.smallText} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            {myAvatar && (
+              <Pressable
+                testID="homebase-locate-avatar"
+                accessibilityRole="button"
+                accessibilityLabel="Find my avatar"
+                disabled={!canEditAvatar}
+                onPress={locateMyAvatar}
+                style={styles.logout}
+              >
+                <Text text="My avatar" style={styles.smallText} />
+              </Pressable>
+            )}
+            {homebase && !isGuest && (
+              <Pressable
+                testID="homebase-bay-workshop"
+                accessibilityRole="button"
+                disabled={!!voyage || savingOak || !!coastDraft}
+                style={styles.logout}
+                onPress={() => navigation.navigate("BayWorkshop", { connectionId: homebase.id })}
+              >
+                <Text text="Bay prototype" style={styles.smallText} />
+              </Pressable>
+            )}
+            <Pressable
+              testID="homebase-logout"
+              accessibilityRole="button"
+              onPress={signOut}
+              disabled={loggingOut}
+              style={styles.logout}
+            >
+              <Text text={loggingOut ? "Logging out…" : "Log out"} style={styles.smallText} />
+            </Pressable>
+          </View>
         </View>
         <Text
           testID="homebase-name"
@@ -490,7 +702,7 @@ function HomeIslandScreen({
           <IslandSwitcher
             bases={islands.map((island) => island.homebase)}
             focusedId={homebase?.id}
-            disabled={!!voyage || savingOak || busy}
+            disabled={!!voyage || walking || savingOak || busy || !!coastDraft || coast.saving}
             onTravel={sailTo}
           />
         )}
@@ -507,7 +719,7 @@ function HomeIslandScreen({
               {...(multipleIslands
                 ? { islands: layers, focusIslandKey: homebase.id }
                 : {
-                    map: scene!.map,
+                    map: layers[0]!.map,
                     frame: scene!.frame,
                     drawables: layers[0]!.drawables,
                   })}
@@ -515,21 +727,39 @@ function HomeIslandScreen({
               onArrival={arrive}
               zoom={currentZoom}
               focus={
-                position
-                  ? meadowToIso(position.x, position.y)
-                  : focus && !editing
-                    ? meadowToIso(focus.x, focus.y)
-                    : homeFocus
+                coastDraft
+                  ? homeCoastCenter(coastDraft)
+                  : position
+                    ? meadowToIso(position.x, position.y)
+                    : focus && !editing
+                      ? meadowToIso(focus.x, focus.y)
+                      : homeFocus
               }
               resetCamera={cameraReset}
               selectedKey={editing ? undefined : selected ? `avatar-${selected.key}` : selectedKey}
-              guideTiles={editing ? guideTiles : undefined}
+              editAvatarAction={
+                canEditAvatar && myAvatar && selectedKey === myAvatar.key
+                  ? { memberId: myAvatar.key, onPress: editAvatar }
+                  : undefined
+              }
+              walkAction={
+                canEditAvatar && walkTarget
+                  ? { ...walkTarget.cell, lift: walkTarget.lift, onPress: moveHere }
+                  : undefined
+              }
+              guideTiles={coastDraft ? coast.candidates : editing ? guideTiles : undefined}
+              coastGuides={!!coastDraft}
               previewTile={
-                position ? { col: (position.x - 8) / 16, row: (position.y - 8) / 16 } : undefined
+                coastDraft && coast.index >= 0
+                  ? { ...coastDraft, lift: coastHeight }
+                  : position
+                    ? { col: (position.x - 8) / 16, row: (position.y - 8) / 16 }
+                    : walkTarget && { ...walkTarget.cell, lift: walkTarget.lift }
               }
               onTap={tapWorld}
               onPinch={changeZoom}
-              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${multipleIslands ? "Use the island buttons or tap another island to sail there. " : ""}${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend, cottage or reward to learn about it."}`}
+              detailedSea
+              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${multipleIslands && !coastDraft ? "Use the island buttons or tap another island to sail there. " : ""}${coastDraft ? "Tap a marked coastline tile to preview it, or use Next tile." : editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap free lawn to move, or a friend, cottage or reward to learn about it."}`}
             />
             <View
               pointerEvents="none"
@@ -545,20 +775,33 @@ function HomeIslandScreen({
               <View style={[styles.dot, editing && styles.guideDot]} />
               <Text
                 text={
-                  editing
-                    ? target?.kind === "reward"
-                      ? "Marked spots are free lawn"
-                      : "Marked spots are plantable"
-                    : voyage
-                      ? "Sailing…"
-                      : multipleIslands
-                        ? "The archipelago"
-                        : "The island"
+                  coastDraft
+                    ? "Coastline preview"
+                    : editing
+                      ? target?.kind === "reward"
+                        ? "Marked spots are free lawn"
+                        : "Marked spots are plantable"
+                      : walking
+                        ? "Walking…"
+                        : voyage
+                          ? "Sailing…"
+                          : multipleIslands
+                            ? "The archipelago"
+                            : "The island"
                 }
                 style={styles.labelText}
               />
             </View>
-            {!editing && !voyage && (
+            {canOpenCoast && (
+              <HomeCoastAction
+                count={expansion.additions.length}
+                done={!coast.candidates.length}
+                disabled={walking || busy || savingOak || !!voyage || coast.saving}
+                notice={coast.notice}
+                onOpen={openCoast}
+              />
+            )}
+            {!editing && !voyage && !coastDraft && (
               <View style={styles.cameraControls}>
                 <Pressable
                   testID="homebase-zoom-out"
@@ -631,7 +874,8 @@ function HomeIslandScreen({
                 testID="start-planting-oak"
                 accessibilityRole="button"
                 accessibilityState={{ expanded: editing }}
-                style={styles.secondary}
+                disabled={walking}
+                style={[styles.secondary, walking && styles.disabled]}
                 onPress={startPlanting}
               >
                 <Text text="Plant a tree" weight="medium" style={styles.secondaryText} />
@@ -650,7 +894,11 @@ function HomeIslandScreen({
         {selectedPlacement && memory && selectedArt ? (
           <View style={styles.detail} testID="homebase-reward-memory">
             <View style={styles.thumbnail}>
-              <RewardSprite item={selectedArt} scale={1.5} />
+              <RewardSprite
+                item={selectedArt}
+                scale={1.5}
+                growthStage={selectedItem?.stage ?? "mature"}
+              />
             </View>
             <View style={styles.detailText}>
               <Text
@@ -664,6 +912,7 @@ function HomeIslandScreen({
                 text={data ? rewardStory(data.state, selectedPlacement.rewardId) : ""}
                 style={styles.description}
               />
+              {growthLabel}
               <Text
                 text={[
                   selectedReward?.obtainedAt &&
@@ -678,7 +927,7 @@ function HomeIslandScreen({
                 style={styles.description}
               />
             </View>
-            {!editing && data?.garden && homebase && (
+            {!isGuest && !editing && !coastDraft && data?.garden && homebase && (
               <Pressable
                 testID="homebase-move-reward"
                 accessibilityRole="button"
@@ -696,10 +945,18 @@ function HomeIslandScreen({
               </Pressable>
             )}
           </View>
-        ) : selectedHouse && houseArt ? (
+        ) : selectedHouse ? (
           <View style={styles.detail}>
             <View style={styles.thumbnail}>
-              <PixelArtSprite art={houseArt} scale={1} />
+              <CottageThumbnail
+                index={scene!.houses.indexOf(selectedHouse)}
+                lit={!!selectedHouse.activity.open}
+                level={
+                  selectedHouse.activity.construction?.level ??
+                  cottageLevel(selectedHouse.activity.cottageMilestones)
+                }
+                detailed
+              />
             </View>
             <View style={styles.detailText}>
               <Text
@@ -707,29 +964,58 @@ function HomeIslandScreen({
                 weight="semiBold"
                 style={styles.sectionTitle}
               />
-              <Text
-                text={
-                  selectedHouse.activity.open
-                    ? "Lights are on: a session is open now."
-                    : "An activity cottage. Open it to plan or check in."
-                }
-                style={styles.description}
-              />
+              {selectedHouse.activity.construction?.building ? (
+                <CottageCountdown
+                  level={selectedHouse.activity.construction.building}
+                  seconds={selectedHouse.activity.construction.seconds}
+                />
+              ) : (
+                <Text
+                  testID="homebase-cottage-level"
+                  text={cottageProgressLabel(selectedHouse.activity.cottageMilestones)}
+                  style={styles.description}
+                />
+              )}
+              {selectedHouse.activity.open && (
+                <Text text="A session is open." style={styles.description} />
+              )}
             </View>
-            <Pressable
-              testID="homebase-open-activity"
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${selectedHouse.activity.name}`}
-              style={styles.placeButton}
-              onPress={() => openActivity(selectedHouse.activity.id)}
-            >
-              <Text text="Open" weight="medium" style={styles.primaryText} />
-            </Pressable>
+            {!isGuest && (
+              <View style={styles.houseActions}>
+                <Pressable
+                  testID="homebase-open-activity"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${selectedHouse.activity.name}`}
+                  style={styles.placeButton}
+                  onPress={() => openActivity(selectedHouse.activity.id)}
+                >
+                  <Text text="Open" weight="medium" style={styles.primaryText} />
+                </Pressable>
+                <Pressable
+                  testID="homebase-open-milestones"
+                  accessibilityRole="button"
+                  accessibilityLabel={`View milestones for ${selectedHouse.activity.name}`}
+                  style={styles.chip}
+                  onPress={() =>
+                    navigation.navigate("ActivityDetail", {
+                      activityId: selectedHouse.activity.id,
+                      section: "milestones",
+                    })
+                  }
+                >
+                  <Text text="Milestones" weight="medium" style={styles.smallText} />
+                </Pressable>
+              </View>
+            )}
           </View>
         ) : selectedItem && selectedArt ? (
           <View style={styles.detail}>
             <View style={styles.thumbnail}>
-              <RewardSprite item={selectedArt} scale={1.5} />
+              <RewardSprite
+                item={selectedArt}
+                scale={1.5}
+                growthStage={selectedItem.stage ?? "mature"}
+              />
             </View>
             <View style={styles.detailText}>
               <Text
@@ -746,9 +1032,10 @@ function HomeIslandScreen({
                 }
                 style={styles.description}
               />
+              {growthLabel}
             </View>
           </View>
-        ) : !selected && nextUp && nextUpItem && !editing ? (
+        ) : !isGuest && !selectedFriend && nextUp && nextUpItem && !editing && !coastDraft ? (
           <View style={[styles.detail, styles.waiting]} testID="homebase-reward-waiting">
             <View style={styles.thumbnail}>
               <RewardSprite item={nextUpItem} scale={1.5} />
@@ -780,30 +1067,30 @@ function HomeIslandScreen({
           </View>
         ) : (
           <View style={styles.detail}>
-            {selected && (
+            {selectedFriend && (
               <View style={styles.thumbnail}>
                 <RewardSprite
                   item={{
-                    id: selected.key,
-                    name: selected.name,
+                    id: selectedFriend.key,
+                    name: selectedFriend.name,
                     category: "Friends",
-                    artifact: selected.frames.idle,
+                    artifact: selectedFriend.frames.idle,
                   }}
-                  scale={3}
+                  scale={1.5}
                 />
               </View>
             )}
             <View style={styles.detailText}>
               <Text
                 testID="homebase-selected-member"
-                text={selected?.name ?? "Your people, together"}
+                text={selectedFriend?.name ?? "Your people, together"}
                 weight="semiBold"
                 style={styles.sectionTitle}
                 accessibilityLiveRegion="polite"
               />
               <Text
                 text={
-                  selected
+                  selectedFriend
                     ? "Part of your home base."
                     : "Tap a friend, cottage or reward on the island."
                 }
@@ -819,31 +1106,45 @@ function HomeIslandScreen({
             )}
           </View>
         )}
-        <View style={styles.actions}>
-          <Pressable
-            testID="homebase-create-activity"
-            accessibilityRole="button"
-            disabled={!homebase || !!voyage}
-            style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-            onPress={() =>
-              homebase && navigation.navigate("ActivityCreate", { connectionId: homebase.id })
-            }
-          >
-            <Text text="New activity" weight="medium" style={styles.primaryText} />
-          </Pressable>
-          <Pressable
-            testID="homebase-activities"
-            accessibilityRole="button"
-            disabled={!homebase || !!voyage}
-            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
-            onPress={() =>
-              homebase && navigation.navigate("Activities", { connectionId: homebase.id })
-            }
-          >
-            <Text text="Activities" weight="medium" style={styles.secondaryText} />
-          </Pressable>
-        </View>
+        {!isGuest && (
+          <View style={styles.actions}>
+            <Pressable
+              testID="homebase-create-activity"
+              accessibilityRole="button"
+              disabled={!homebase || !!voyage || !!coastDraft}
+              style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
+              onPress={() =>
+                homebase && navigation.navigate("ActivityCreate", { connectionId: homebase.id })
+              }
+            >
+              <Text text="New activity" weight="medium" style={styles.primaryText} />
+            </Pressable>
+            <Pressable
+              testID="homebase-activities"
+              accessibilityRole="button"
+              disabled={!homebase || !!voyage || !!coastDraft}
+              style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
+              onPress={() =>
+                homebase && navigation.navigate("Activities", { connectionId: homebase.id })
+              }
+            >
+              <Text text="Activities" weight="medium" style={styles.secondaryText} />
+            </Pressable>
+          </View>
+        )}
       </View>
+      {coastDraft && expansion && (
+        <HomeCoastPanel
+          count={expansion.additions.length}
+          index={coast.index}
+          choices={coast.candidates.length}
+          saving={coast.saving}
+          error={coast.error}
+          onNext={coast.next}
+          onCancel={() => coast.select()}
+          onConfirm={() => void coast.confirm()}
+        />
+      )}
       {editing && target?.kind === "reward" && placingItem && data && (
         <PlaceRewardPanel
           item={placingItem}
@@ -917,7 +1218,9 @@ const styles = StyleSheet.create({
     width: 8,
   },
   header: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 8 },
+  headerActions: { flexDirection: "row" },
   headingRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  houseActions: { gap: 4 },
   labelText: { color: world.text, fontSize: 11, lineHeight: 16 },
   loading: {
     alignItems: "center",

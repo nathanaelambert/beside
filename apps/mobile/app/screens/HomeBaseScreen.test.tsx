@@ -1,10 +1,11 @@
 import type { EffectCallback } from "react"
-import { useReducedMotion } from "react-native-reanimated"
 import { ApiError, type ApiHomebase, type ApiState } from "@beside/api-client"
 import { checkMeadowPlacement } from "@beside/api-client/garden"
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native"
+import { useReducedMotion } from "react-native-reanimated"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 
+import { coastHeight } from "@/components/iso-world/coastAccess"
 import { plantableTiles, tileCentre } from "@/components/iso-world/homeWorld"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { isoToScreen } from "@/components/iso-world/projection"
@@ -13,6 +14,8 @@ import { besideApi } from "@/services/api/beside"
 import { ThemeProvider } from "@/theme/context"
 
 import { HomeBaseScreen } from "./HomeBaseScreen"
+
+let mockIsGuest = false
 
 jest.mock("@react-navigation/native", () => ({
   ...jest.requireActual("@react-navigation/native"),
@@ -33,10 +36,14 @@ jest.mock("@/components/iso-world/IsoWorldCanvas", () => ({
     return <View testID="world-canvas" accessibilityLabel={accessibilityLabel} />
   }),
 }))
-jest.mock("@/components/BesideMark", () => ({ PixelArtSprite: () => null }))
+jest.mock("@/components/CottageThumbnail", () => ({ CottageThumbnail: () => null }))
 jest.mock("@/components/RewardSprite", () => ({ RewardSprite: () => null }))
 jest.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({ user: { id: "alice" }, logout: jest.fn() }),
+  useAuth: () => ({
+    user: { id: "alice", isGuest: mockIsGuest },
+    logout: jest.fn(),
+    consumeAvatarOnboarding: () => false,
+  }),
 }))
 jest.mock("@/utils/storage", () => ({ loadString: () => null, saveString: jest.fn() }))
 jest.mock("@/services/api/beside", () => ({
@@ -44,6 +51,8 @@ jest.mock("@/services/api/beside", () => ({
     homebases: jest.fn(),
     state: jest.fn(),
     homebaseGarden: jest.fn(),
+    homebaseExpansion: jest.fn(),
+    expandHomebase: jest.fn(),
     plantStarterOak: jest.fn(),
     placeReward: jest.fn(),
   },
@@ -83,10 +92,13 @@ const roster = "Our garden, an island garden. 2 members: Alice Green, Bob Brown.
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockIsGuest = false
   jest.mocked(useReducedMotion).mockReturnValue(true)
   jest.mocked(besideApi.homebases).mockResolvedValue([base])
   jest.mocked(besideApi.state).mockResolvedValue(state)
   jest.mocked(besideApi.homebaseGarden).mockReset().mockResolvedValue({ oak: null, rewards: [] })
+  jest.mocked(besideApi.homebaseExpansion).mockReset().mockResolvedValue({ additions: [] })
+  jest.mocked(besideApi.expandHomebase).mockReset()
   jest.mocked(besideApi.plantStarterOak).mockReset().mockResolvedValue(plantedGarden)
   jest.mocked(besideApi.placeReward).mockReset()
 })
@@ -129,6 +141,126 @@ function openScreen(width = 390, linked?: { rewardId: string; place?: boolean })
 }
 
 const canvasProps = () => jest.mocked(IsoWorldCanvas).mock.calls.at(-1)![0]
+
+it("previews and cancels one coastal tile without writing, then confirms only the tapped tile", async () => {
+  const tile = { col: 10, row: 15 }
+  const other = { col: 11, row: 15 }
+  jest.mocked(besideApi.expandHomebase).mockResolvedValue({ additions: [other] })
+  const screen = openScreen()
+  const open = await screen.findByTestId("homebase-expand-coast")
+  const frame = canvasProps().frame!
+  expect(canvasProps().map?.coastTiles).toBeUndefined()
+  fireEvent.press(open)
+  expect(canvasProps().previewTile).toEqual({ ...tile, lift: coastHeight })
+  expect(canvasProps().map?.coastTiles).toMatchObject([tile])
+  fireEvent.press(screen.getByTestId("homebase-expansion-next"))
+  expect(canvasProps().map?.coastTiles).toMatchObject([other])
+  fireEvent.press(screen.getByTestId("homebase-expansion-cancel"))
+  expect(besideApi.expandHomebase).not.toHaveBeenCalled()
+  expect(canvasProps().map?.coastTiles).toBeUndefined()
+  expect(canvasProps().frame).toBe(frame)
+
+  fireEvent.press(screen.getByTestId("homebase-expand-coast"))
+  act(() => canvasProps().onTap!(isoToScreen(frame, 11.5, 15.5, coastHeight)))
+  expect(canvasProps().previewTile).toEqual({ ...other, lift: coastHeight })
+  fireEvent.press(screen.getByTestId("homebase-expansion-confirm"))
+  expect(await screen.findByTestId("homebase-expansion-status")).toHaveTextContent(
+    "Coastline saved",
+  )
+  expect(besideApi.expandHomebase).toHaveBeenCalledTimes(1)
+  expect(besideApi.expandHomebase).toHaveBeenCalledWith(base.id, other)
+  expect(canvasProps().previewTile).toBeUndefined()
+  expect(canvasProps().map?.coastTiles).toMatchObject([other])
+  expect(canvasProps().frame).toBe(frame)
+})
+
+it("renders the saved coastline for a guest without shared edit controls", async () => {
+  mockIsGuest = true
+  const tile = { col: 10, row: 15 }
+  jest.mocked(besideApi.homebaseExpansion).mockResolvedValue({ additions: [tile] })
+  jest.mocked(besideApi.state).mockResolvedValue({
+    ...state,
+    memberships: [{ id: "your-membership", connectionId: base.id, userId: "alice" }],
+  })
+  const screen = openScreen()
+  await screen.findByTestId("homebase-locate-avatar")
+  expect(canvasProps().map?.coastTiles).toMatchObject([tile])
+  for (const testID of [
+    "homebase-expand-coast",
+    "homebase-bay-workshop",
+    "start-planting-oak",
+    "homebase-create-activity",
+    "homebase-activities",
+  ])
+    expect(screen.queryByTestId(testID)).toBeNull()
+  fireEvent.press(screen.getByTestId("homebase-locate-avatar"))
+  expect(canvasProps().editAvatarAction?.memberId).toBe("alice")
+})
+
+it("moves only your avatar to a grass center and leaves planting in its own mode", async () => {
+  jest.mocked(besideApi.state).mockResolvedValue({
+    ...state,
+    memberships: state.users.map(({ id }) => ({
+      id: `walk-${id}`,
+      connectionId: base.id,
+      userId: id,
+    })),
+  })
+  const screen = openScreen()
+  await screen.findByTestId("homebase-locate-avatar")
+  const frame = canvasProps().frame!
+  const drawable = (id: string) => canvasProps().drawables!.find((d) => d.key === `avatar-${id}`)
+  const first = drawable("alice")
+  const friend = drawable("bob")
+  const target = isoToScreen(frame, 8.5, 5.5)
+  act(() => canvasProps().onTap!(target))
+  expect(canvasProps().walkAction).toMatchObject({ col: 8, row: 5 })
+  expect(drawable("alice")).toBe(first)
+  act(() => canvasProps().walkAction?.onPress())
+  expect(drawable("alice")).toMatchObject({ baseX: target.x, baseY: target.y })
+  expect(drawable("bob")).toBe(friend)
+  expect(canvasProps().walkAction).toBeUndefined()
+  fireEvent.press(screen.getByTestId("start-planting-oak"))
+  act(() => canvasProps().onTap!(isoToScreen(frame, 6.5, 5.5)))
+  expect(canvasProps().walkAction).toBeUndefined()
+  expect(canvasProps().guideTiles?.length).toBeGreaterThan(0)
+})
+
+it("opens the avatar edit action only from your own avatar and clears it before editing", async () => {
+  jest.mocked(besideApi.state).mockResolvedValue({
+    ...state,
+    memberships: state.users.map(({ id }) => ({
+      id: `member-${id}`,
+      connectionId: base.id,
+      userId: id,
+    })),
+  })
+  const screen = openScreen()
+  await screen.findByTestId("homebase-locate-avatar")
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  const tap = (id?: string) =>
+    act(() => canvasProps().onTap!({ x: 0, y: 0, hit: id ? { type: "avatar", id } : undefined }))
+  tap("bob")
+  expect(screen.getByTestId("homebase-selected-member")).toHaveTextContent("Bob Brown")
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  tap("alice")
+  expect(canvasProps().selectedKey).toBe("avatar-alice")
+  expect(canvasProps().editAvatarAction?.memberId).toBe("alice")
+  tap("alice")
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  tap("alice")
+  tap()
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+  fireEvent.press(screen.getByTestId("homebase-locate-avatar"))
+  expect(screen.navigation.navigate).not.toHaveBeenCalled()
+  act(() => canvasProps().editAvatarAction?.onPress())
+  expect(screen.navigation.navigate).toHaveBeenCalledWith("AvatarEditor", {
+    connectionId: base.id,
+    homebaseName: base.name,
+    appearance: undefined,
+  })
+  expect(canvasProps().editAvatarAction).toBeUndefined()
+})
 
 it.each([390, 900])("preserves the roster and normal framing at width %i", async (width) => {
   const screen = openScreen(width)
@@ -383,6 +515,11 @@ it("follows the activity landing link into island placement and opens a cottage"
   act(() => canvasProps().onTap!({ x: 0, y: 0, hit: { type: "house", id: "read" } }))
   fireEvent.press(screen.getByTestId("homebase-open-activity"))
   expect(screen.navigation.navigate).toHaveBeenCalledWith("ActivityDetail", { activityId: "read" })
+  fireEvent.press(screen.getByRole("button", { name: "View milestones for Book club" }))
+  expect(screen.navigation.navigate).toHaveBeenLastCalledWith("ActivityDetail", {
+    activityId: "read",
+    section: "milestones",
+  })
 })
 
 it("refreshes shared occupancy after a placement race without closing the reward editor", async () => {

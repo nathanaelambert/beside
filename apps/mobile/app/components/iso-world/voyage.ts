@@ -1,4 +1,4 @@
-import { islandPoint, onIsland, type IslandLayer } from "./archipelago"
+import { islandPoint, landRectangles, onIsland, type IslandLayer } from "./archipelago"
 import { screenToIso, type ScreenPoint } from "./projection"
 
 export interface VoyagePath {
@@ -17,23 +17,25 @@ function crossesLand(a: ScreenPoint, b: ScreenPoint, island: IslandLayer) {
   return [0, -14].some((lift) => {
     const p = screenToIso(island.frame, a.x - island.offset.x, a.y - island.offset.y, lift)
     const q = screenToIso(island.frame, b.x - island.offset.x, b.y - island.offset.y, lift)
-    let near = 0
-    let far = 1
-    for (const [start, delta, max] of [
-      [p.u, q.u - p.u, island.map.cols],
-      [p.v, q.v - p.v, island.map.rows],
-    ]) {
-      if (Math.abs(delta!) < 0.000001) {
-        if (start! < 0 || start! > max!) return false
-      } else {
-        const t0 = -start! / delta!
-        const t1 = (max! - start!) / delta!
-        near = Math.max(near, Math.min(t0, t1))
-        far = Math.min(far, Math.max(t0, t1))
-        if (near > far) return false
+    return landRectangles(island.map).some(({ left, top, right, bottom }) => {
+      let near = 0
+      let far = 1
+      for (const [start, delta, min, max] of [
+        [p.u, q.u - p.u, left, right],
+        [p.v, q.v - p.v, top, bottom],
+      ] as const) {
+        if (Math.abs(delta) < 0.000001) {
+          if (start < min || start > max) return false
+        } else {
+          const t0 = (min - start) / delta
+          const t1 = (max - start) / delta
+          near = Math.max(near, Math.min(t0, t1))
+          far = Math.min(far, Math.max(t0, t1))
+          if (near > far) return false
+        }
       }
-    }
-    return near <= far
+      return near <= far
+    })
   })
 }
 

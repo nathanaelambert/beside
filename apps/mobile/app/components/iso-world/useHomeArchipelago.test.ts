@@ -11,7 +11,12 @@ jest.mock("@react-navigation/native", () => ({
     jest.requireActual("react").useEffect(callback, [callback]),
 }))
 jest.mock("@/services/api/beside", () => ({
-  besideApi: { homebases: jest.fn(), state: jest.fn(), homebaseGarden: jest.fn() },
+  besideApi: {
+    homebases: jest.fn(),
+    state: jest.fn(),
+    homebaseGarden: jest.fn(),
+    homebaseExpansion: jest.fn(),
+  },
 }))
 jest.mock("@/utils/storage", () => ({ loadString: jest.fn(), saveString: jest.fn() }))
 
@@ -26,6 +31,9 @@ const state = {
     { id: "sam", name: "Sam" },
     { id: "lee", name: "Lee" },
   ],
+  memberships: bases.flatMap((base) =>
+    base.memberIds.map((id) => ({ id: `${base.id}-${id}`, connectionId: base.id, userId: id })),
+  ),
   activities: [
     { id: "a-family", name: "Read", connectionId: "family", createdAt: "2026-11-01" },
     { id: "a-project", name: "Build", connectionId: "project", createdAt: "2026-11-02" },
@@ -41,6 +49,7 @@ beforeEach(() => {
   jest.mocked(loadString).mockReturnValue(null)
   jest.mocked(besideApi.homebases).mockResolvedValue(bases)
   jest.mocked(besideApi.state).mockResolvedValue(state)
+  jest.mocked(besideApi.homebaseExpansion).mockReset().mockResolvedValue({ additions: [] })
   jest.mocked(besideApi.homebaseGarden).mockImplementation(async (id) => ({
     oak: null,
     rewards:
@@ -57,6 +66,33 @@ beforeEach(() => {
           ]
         : [],
   }))
+})
+
+it("loads shared coastlines by island and cannot roll back a confirmed tile on refocus", async () => {
+  const shared = { col: 10, row: 15 }
+  const added = { col: 11, row: 15 }
+  jest.mocked(besideApi.homebaseExpansion).mockImplementation(async (id) => ({
+    additions: id === "family" ? [shared] : [],
+  }))
+  const { result, rerender } = renderHook(
+    ({ attempt }: { attempt: number }) => useHomeArchipelago("you", "family", attempt),
+    { initialProps: { attempt: 0 } },
+  )
+  await waitFor(() => expect(result.current.busy).toBe(false), { timeout: 10_000 })
+  expect(result.current.focused?.scene.map.coastTiles).toMatchObject([shared])
+  act(() => result.current.acceptExpansion("family", { additions: [shared, added] }))
+  rerender({ attempt: 1 })
+  await waitFor(
+    () => {
+      expect(besideApi.homebaseExpansion).toHaveBeenCalledTimes(6)
+      expect(result.current.busy).toBe(false)
+    },
+    { timeout: 10_000 },
+  )
+  expect(result.current.focused?.expansion?.additions).toEqual([shared, added])
+  expect(
+    result.current.islands.find((island) => island.homebase.id === "project")?.scene.map.coastTiles,
+  ).toBeUndefined()
 })
 
 it("loads every garden and scopes members, cottages and rewards to each base", async () => {

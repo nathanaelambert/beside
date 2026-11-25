@@ -8,6 +8,7 @@ import { loadDatabase } from "../src/db/storage.ts";
 import { parseDatabase } from "@beside/domain/validation";
 import { schemas } from "../src/openapi.ts";
 import type { Session, ApiState } from "@beside/domain/api";
+import { avatarAppearanceSchema } from "@beside/domain/avatar";
 import { checkMeadowPlacement, meadowPlacements } from "@beside/domain/garden";
 
 describe("public API contract without a database", () => {
@@ -84,10 +85,31 @@ describe("public API contract without a database", () => {
       assert.ok(body.components.schemas[schema]);
     }
     assert.ok(body.paths["/api/v1/state"].get.security);
+    const avatar = body.paths["/api/v1/homebases/{homebaseId}/avatar"].put;
+    assert.ok(avatar.security);
+    assert.equal(
+      avatar.requestBody.content["application/json"].schema.$ref,
+      "#/components/schemas/AvatarAppearance",
+    );
+    const settings = body.paths["/api/v1/cottage-build-settings"];
+    assert.ok(settings.get.security);
+    assert.equal(
+      settings.get.responses[200].content["application/json"].schema.$ref,
+      "#/components/schemas/CottageBuildSettings",
+    );
+    assert.equal(settings.patch, undefined);
+    for (const schema of ["CreateActivity", "UpdateActivity"])
+      assert.equal(
+        body.components.schemas[schema].properties.cottageBuildSeconds,
+        undefined,
+      );
     await request(server).get("/openapi.yaml").expect(200);
   });
   it("requires a session and validates credentials before touching the database", async () => {
     await request(app.getHttpServer()).get("/api/v1/state").expect(401);
+    await request(app.getHttpServer())
+      .get("/api/v1/cottage-build-settings")
+      .expect(401);
     const { body } = await request(app.getHttpServer())
       .post("/api/v1/auth/register")
       .send({ name: "Test", email: "invalid", password: "short" })
@@ -285,6 +307,18 @@ describe(
         })
         .expect(201);
       const snapshot = await state(friend);
+      const appearance = avatarAppearanceSchema.parse(
+        snapshot.memberships.find(
+          (row) =>
+            row.connectionId === aliceBaseId && row.userId === friend.user.id,
+        )?.avatarAppearance,
+      );
+      assert.deepEqual(
+        snapshot.memberships.find((row) => row.userId === alice.user.id)
+          ?.avatarAppearance,
+        before.memberships.find((row) => row.userId === alice.user.id)
+          ?.avatarAppearance,
+      );
       assert.deepEqual(
         snapshot.connections.map((base) => base.id),
         [aliceBaseId],
@@ -331,7 +365,13 @@ describe(
         { inviteCode: bases[0].inviteCode },
         200,
       );
-      assert.equal((await state(friend)).logs.length, snapshot.logs.length);
+      const afterJoin = await state(friend);
+      assert.equal(afterJoin.logs.length, snapshot.logs.length);
+      assert.deepEqual(
+        afterJoin.memberships.find((row) => row.userId === friend.user.id)
+          ?.avatarAppearance,
+        appearance,
+      );
     });
     it("rolls invalid signup invitations back entirely and treats a blank code as no invitation", async () => {
       const email = `retry.${nonce}@example.test`;
@@ -654,6 +694,7 @@ describe(
       assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);
       const garden = results.find(({ status }) => status === 200)!.body;
       assert.equal(garden.oak.itemId, "oak-tree");
+      assert.ok(Number.isFinite(Date.parse(garden.oak.growthStartedAt)));
       await get(bob).expect(200, garden);
       await plant(alice, garden.oak.x, garden.oak.y).expect(200, garden);
       await get(stranger).expect(404);
@@ -760,6 +801,10 @@ describe(
       await place(alice, spot!.x, spot!.y + 1).expect(400); // Off the grid.
       await place(stranger, spot!.x, spot!.y).expect(404);
       const placed = (await place(alice, spot!.x, spot!.y).expect(200)).body;
+      assert.equal(
+        placed.rewards[0].growthStartedAt,
+        placed.rewards[0].placedAt,
+      );
       assert.deepEqual(
         placed.rewards.map(
           (r: {
@@ -782,6 +827,10 @@ describe(
         .send(spot)
         .expect(400);
       const moved = (await place(bob, other!.x, other!.y).expect(200)).body;
+      assert.equal(
+        moved.rewards[0].growthStartedAt,
+        placed.rewards[0].growthStartedAt,
+      );
       assert.deepEqual(
         [
           moved.rewards[0].x,
@@ -1095,6 +1144,154 @@ describe(
         }),
         (error: unknown) => (error as { code: string }).code === "23505",
       );
+    });
+    it("unlocks cottage levels once per achievement and never regresses on milestone deletion", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", {
+        name: "Cottage workshop",
+      });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const { entityId: activityId } = await create(alice, "activities", {
+        connectionId: base.id,
+        templateId: "read-book",
+        name: "Build a cottage",
+        description: "",
+        subjectIds: [],
+        target: 10,
+      });
+      const progress = async (session = alice) =>
+        (await state(session)).activities.find((row) => row.id === activityId)!
+          .cottageMilestones;
+      const remove = async (milestoneId: string) =>
+        request(server)
+          .delete(`/api/v1/milestones/${milestoneId}`)
+          .set(auth(alice))
+          .expect(200);
+      assert.equal(await progress(), 0); // Automatic join logs did not count.
+      const build = async () =>
+        (await state(alice)).activities.find((row) => row.id === activityId)!
+          .cottageBuild!;
+      assert.deepEqual((await build()).seconds, {
+        base: 10,
+        entrance: 15,
+        finished: 20,
+      });
+      await request(server)
+        .get("/api/v1/cottage-build-settings")
+        .set(auth(bob))
+        .expect(200, { base: 10, entrance: 15, finished: 20 });
+      await request(server)
+        .patch("/api/v1/cottage-build-settings")
+        .set(auth(bob))
+        .send({ base: 2, entrance: 7, finished: 3 })
+        .expect(404);
+      const patchTimes = (session: Session, entrance: number) =>
+        request(server)
+          .patch(`/api/v1/activities/${activityId}`)
+          .set(auth(session))
+          .send({ cottageBuildSeconds: { base: 2, entrance, finished: 3 } })
+          .expect(400);
+      await patchTimes(stranger, 7);
+      await patchTimes(bob, 7);
+      await create(
+        bob,
+        "activities",
+        {
+          connectionId: base.id,
+          templateId: "read-book",
+          name: "Client override",
+          description: "",
+          subjectIds: [],
+          target: 1,
+          cottageBuildSeconds: { base: 2, entrance: 7, finished: 3 },
+        },
+        400,
+      );
+      assert.equal((await build()).seconds.entrance, 15);
+      const milestones = [];
+      for (let i = 0; i < 4; i++)
+        milestones.push(
+          (await create(alice, "milestones", milestoneBody(activityId)))
+            .entityId as string,
+        );
+      const [first, second, third, extra] = milestones as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      await create(
+        alice,
+        "logs",
+        { ...logBody(first, "cottage-failure"), isSuccess: false },
+        200,
+      );
+      assert.equal(await progress(), 0);
+      const log = logBody(first, "cottage-first");
+      await create(alice, "logs", log, 200);
+      assert.equal((await create(alice, "logs", log, 200)).duplicate, true);
+      await create(bob, "logs", logBody(first, "cottage-first-bob"), 200);
+      assert.equal(await progress(bob), 1);
+      const queuedEntrance = (await build()).readyAt.entrance;
+      assert.ok(queuedEntrance);
+      await patchTimes(bob, 8);
+      await remove(first);
+      assert.equal(await progress(), 1);
+      assert.equal((await build()).readyAt.entrance, queuedEntrance);
+      await create(alice, "logs", logBody(second, "cottage-second"), 200);
+      assert.equal(await progress(), 2);
+      await create(alice, "logs", logBody(third, "cottage-third"), 200);
+      assert.equal(await progress(bob), 3);
+      await remove(third);
+      assert.equal(await progress(bob), 3);
+      await create(alice, "logs", logBody(extra, "cottage-extra"), 200);
+      assert.equal(await progress(), 3);
+      assert.ok(
+        !(await state(alice)).milestones.some(
+          (row) => row.id === first || row.id === third,
+        ),
+      );
+    });
+    it("saves only the caller's avatar in the selected home base", async () => {
+      const server = app.getHttpServer();
+      const { id: firstId, inviteCode } = await create(alice, "homebases", {
+        name: "Avatar workshop",
+      });
+      const { id: secondId } = await create(alice, "homebases", {
+        name: "Another avatar workshop",
+      });
+      await create(bob, "homebases/join", { inviteCode }, 200);
+      const appearance = {
+        version: 1,
+        skin: "bronze",
+        hair: "curly",
+        hairColor: "copper",
+        glasses: "round",
+        outfit: "moss-jacket",
+      };
+      const url = `/api/v1/homebases/${firstId}/avatar`;
+      const read = async (session: Session, base: string, user: Session) =>
+        (await state(session)).memberships.find(
+          (m) => m.connectionId === base && m.userId === user.user.id,
+        );
+      assert.equal((await read(alice, firstId, alice))?.avatarAppearance, undefined);
+      await request(server).put(url).send(appearance).expect(401);
+      await request(server).put(url).set(auth(stranger)).send(appearance).expect(404);
+      await request(server)
+        .put(url)
+        .set(auth(bob))
+        .send({ ...appearance, userId: alice.user.id })
+        .expect(400);
+      await request(server)
+        .put(url)
+        .set(auth(alice))
+        .send({ ...appearance, hair: "unknown" })
+        .expect(400);
+      await request(server).put(url).set(auth(alice)).send(appearance).expect(200, appearance);
+      assert.deepEqual((await read(bob, firstId, alice))?.avatarAppearance, appearance);
+      assert.equal((await read(alice, firstId, bob))?.avatarAppearance, undefined);
+      assert.equal((await read(alice, secondId, alice))?.avatarAppearance, undefined);
+      assert.equal(await read(stranger, firstId, alice), undefined);
     });
     it("revokes a bearer session on logout", async () => {
       await request(app.getHttpServer())

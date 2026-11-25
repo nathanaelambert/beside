@@ -13,6 +13,10 @@ import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { AuthGuard, AuthService } from "./auth.ts";
 import {
+  COTTAGE_BUILD_DURATIONS,
+  readCottageBuildDurations,
+} from "./cottage-build.config.ts";
+import {
   AuthController,
   DomainController,
   HealthController,
@@ -25,6 +29,8 @@ import {
 import { SchedulingService } from "./scheduling.service.ts";
 import { DomainService } from "./domain.service.ts";
 import { GardenService } from "./garden.service.ts";
+import { HomebaseExpansionController } from "./homebase-expansion.controller.ts";
+import { HomebaseExpansionService } from "./homebase-expansion.service.ts";
 import { RewardsService } from "./rewards.service.ts";
 import { SwaggerAssetsController } from "./swagger-assets.controller.ts";
 import { openApiSchema, ref, schemas } from "./openapi.ts";
@@ -83,12 +89,15 @@ class ApiExceptionFilter implements ExceptionFilter {
     HealthController,
     AuthController,
     DomainController,
+    HomebaseExpansionController,
     SwaggerAssetsController,
   ],
   providers: [
+    { provide: COTTAGE_BUILD_DURATIONS, useFactory: readCottageBuildDurations },
     DatabaseService,
     DomainService,
     GardenService,
+    HomebaseExpansionService,
     RewardsService,
     SchedulingService,
     AuthService,

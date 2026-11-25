@@ -75,7 +75,7 @@ type Frame = "idle" | "blink" | "breathe"
 // A slow idle loop: breathe in and out, with an occasional blink. Each avatar is offset.
 const CYCLE: Frame[] = ["idle", "idle", "breathe", "idle", "idle", "blink", "idle", "breathe"]
 
-function useIdleFrame(animated: boolean) {
+export function useIdleFrame(animated: boolean) {
   const [tick, setTick] = useState(0)
   const [reduceMotion, setReduceMotion] = useState(false)
 
