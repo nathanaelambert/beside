@@ -3,6 +3,7 @@
 // continuous isometric geometry, so neighbouring tiles meet without seams or overlaps.
 
 import { createBitmap, hash, noise, put, type Bitmap } from "./bitmap"
+import { coastHeight, coastRampLift, coastRimV, coastStair } from "./coastAccess"
 import {
   coastPaving,
   coastRock,
@@ -17,7 +18,7 @@ import { meadowSurfaceColor } from "./meadowArt"
 import { pondSandColor, stonePathColor } from "./pavingArt"
 import { wovenBlanketColor } from "./picnicArt"
 import { HALF_H, HALF_W, isoToScreen, screenToIso, TILE_H, type MapFrame } from "./projection"
-import { tileAt, type Tile, type TileKind, type TileMap } from "./tilemap"
+import { groundTiles, tileAt, type Tile, type TileKind, type TileMap } from "./tilemap"
 import { paintOpenWater, pondWaterColor } from "./waterArt"
 
 /** How far the island's base slab drops below the ground, in art pixels. */
@@ -93,7 +94,24 @@ function topColor(map: TileMap, tile: Tile, fu: number, fv: number, x: number, y
     const rim =
       (fu < 0.07 && tileAt(map, tile.col - 1, tile.row)?.lift !== tile.lift) ||
       (fv < 0.07 && tileAt(map, tile.col, tile.row - 1)?.lift !== tile.lift)
-    return meadowSurfaceColor(x, y, kind === "forest", rim, homeFinish)
+    const coast = map.coastTiles
+    const shoreGrass = tile.row === map.rows && !!coast?.length
+    // Olive at the join, opening into the main meadow green away from the rim.
+    const shaded = shoreGrass && fv < 0.34 && hash(x, y, 120) > fv * 2
+    if (coast?.length && kind === "forest" && tile.row === map.rows - 1) {
+      const u = tile.col + fu
+      const start = Math.min(coastStair.walkingU, ...coast.map(({ col }) => col + 0.5))
+      const end = Math.max(coastStair.walkingU, ...coast.map(({ col }) => col + 0.5))
+      const edge = noise(x, y, 5, 37)
+      if (
+        u >= start - 0.18 &&
+        u <= end + 0.18 &&
+        fv >= 0.76 + edge * 0.07 &&
+        fv < (coastRimV % 1) - edge * 0.065
+      )
+        return edge < 0.55 ? "#67774c" : "#718052"
+    }
+    return meadowSurfaceColor(x, y, kind === "forest" || shaded, rim, homeFinish)
   }
   if (detailed && kind === "path") {
     return stonePathColor(tile.col + fu, tile.row + fv, x, y, exposedPathEdge(map, tile, fu, fv))
@@ -227,6 +245,42 @@ function paintTop(bitmap: Bitmap, frame: MapFrame, map: TileMap, tile: Tile, ox 
   )
 }
 
+/** A short sloping set of limestone treads. Its collision surface uses the same rise. */
+function paintCoastStair(bitmap: Bitmap, frame: MapFrame) {
+  const { left, right, back, front } = coastStair
+  const slope = coastHeight / (front - back)
+  const corners = [
+    isoToScreen(frame, left, back),
+    isoToScreen(frame, right, back),
+    isoToScreen(frame, left, front, coastHeight),
+    isoToScreen(frame, right, front, coastHeight),
+  ]
+  const minX = Math.floor(Math.min(...corners.map((point) => point.x)))
+  const maxX = Math.ceil(Math.max(...corners.map((point) => point.x)))
+  const minY = Math.floor(Math.min(...corners.map((point) => point.y)))
+  const maxY = Math.ceil(Math.max(...corners.map((point) => point.y)))
+  // Visible right shoulder, joining the original unraised limestone.
+  for (let x = minX; x < maxX; x++) {
+    const v = right - (x + 0.5 - frame.originX) / HALF_W
+    if (v < back || v >= front) continue
+    const top = isoToScreen(frame, right, v, coastRampLift(v)).y
+    const ground = isoToScreen(frame, right, v).y
+    for (let y = Math.ceil(top - 0.5); y < ground - 0.5; y++) put(bitmap, x, y, "#8d7958")
+  }
+  for (let y = minY; y < maxY; y++) {
+    for (let x = minX; x < maxX; x++) {
+      const horizontal = (x + 0.5 - frame.originX) / HALF_W
+      const v = (y + 0.5 - frame.originY - HALF_H * horizontal - slope * back) / (TILE_H - slope)
+      const u = horizontal + v
+      if (u < left || u >= right || v < back || v >= front) continue
+      const tread = ((v - back) * 4) / (front - back)
+      const edge = tread % 1 > 0.68 || (u < left + 0.04 && hash(x, y, 112) > 0.5)
+      const color = edge ? "#d6c39a" : hash(x, y, 111) > 0.55 ? "#b5a379" : "#ad9a70"
+      put(bitmap, x, y, color)
+    }
+  }
+}
+
 /** Paint the two front faces wherever this tile stands above its neighbour (or the void). */
 function paintSides(bitmap: Bitmap, frame: MapFrame, map: TileMap, tile: Tile, ox = 0, oy = 0) {
   const { col, row, lift } = tile
@@ -272,13 +326,14 @@ export const isRaised = (tile: Tile) => tile.lift > 0
 export function paintGround(map: TileMap, frame: MapFrame): Bitmap {
   const bitmap = createBitmap(frame.width, frame.height)
   if (map.coast) paintCoastFoam(bitmap, frame, map, SLAB)
-  const ordered = [...map.tiles]
+  const ordered = groundTiles(map)
     .filter((tile) => tile.kind !== "void" && !isRaised(tile))
     .sort((a, b) => a.col + a.row - (b.col + b.row) || a.col - b.col)
   for (const tile of ordered) {
     paintSides(bitmap, frame, map, tile)
     paintTop(bitmap, frame, map, tile)
   }
+  if (map.coastTiles?.length) paintCoastStair(bitmap, frame)
   return bitmap
 }
 

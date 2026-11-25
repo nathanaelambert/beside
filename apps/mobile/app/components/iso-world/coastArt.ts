@@ -1,6 +1,6 @@
 import { hash, noise, put, rgb, type Bitmap } from "./bitmap"
 import { HALF_W, isoToScreen, type MapFrame } from "./projection"
-import { tileAt, type CoastMaterial, type Tile, type TileMap } from "./tilemap"
+import { groundTiles, tileAt, type CoastMaterial, type Tile, type TileMap } from "./tilemap"
 import { shoreFoamColor } from "./waterArt"
 
 const stones = {
@@ -85,7 +85,7 @@ export function picnicShoreInfluence(
   if (
     map.coastFinish !== "picnic-headland" ||
     map.art !== "detailed" ||
-    tile.row !== map.rows - 1 ||
+    (tile.row !== map.rows - 1 && tile.row !== map.rows) ||
     dc !== 0 ||
     dr !== 1
   )
@@ -283,7 +283,7 @@ export function paintCoastFoam(bitmap: Bitmap, frame: MapFrame, map: TileMap, sl
     [-1, 0, 0, 0, 0, 1, -1],
     [0, -1, 0, 0, 1, 0, 1],
   ] as const
-  for (const tile of map.tiles) {
+  for (const tile of groundTiles(map)) {
     if (tile.kind === "void") continue
     for (const [dc, dr, u0, v0, u1, v1, side] of edges) {
       if (tileAt(map, tile.col + dc, tile.row + dr)) continue

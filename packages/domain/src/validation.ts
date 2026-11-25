@@ -141,7 +141,7 @@ export const databaseSchema = z.object({
     z.object({
       id: key,
       name: key,
-      email: z.email(),
+      email: z.email().nullable(),
       color: z.enum(["blue", "rose", "moss"]),
     }),
   ).min(1),
@@ -321,7 +321,7 @@ export function parseDatabase(input: unknown): Database {
       (m) => m.connectionId === connectionId && m.userId === userId,
     );
   unique(
-    db.users.map((u) => u.email),
+    db.users.flatMap((u) => (u.email === null ? [] : [u.email])),
     "user email",
   );
   for (const m of db.memberships) {

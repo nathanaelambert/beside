@@ -9,11 +9,14 @@ export type {
 import type {
   ApiHomebase,
   ApiState,
+  AuthUser,
   CreateActivityInput,
   CreateLogInput,
   CreateMilestoneInput,
   CreateSubjectInput,
   HomebaseGarden,
+  GuestSession,
+  JoinAsGuestInput,
   LoginInput,
   MutationResult,
   RegisterInput,
@@ -24,8 +27,11 @@ import type {
   UpdateActivityInput,
   UpdateMilestoneInput,
 } from "@beside/domain/api";
-import type { User } from "@beside/domain/types";
 import type { AvatarAppearance } from "@beside/domain/avatar";
+import type {
+  HomebaseExpansion,
+  HomeCoastTile,
+} from "@beside/domain/homebase-expansion";
 export {
   avatarOptions,
   randomAvatarAppearance,
@@ -123,12 +129,21 @@ export class BesideClient {
     this.setToken(session.token);
     return session;
   }
+  async joinAsGuest(input: JoinAsGuestInput) {
+    const session = await this.request<GuestSession>(
+      "/auth/guest",
+      "POST",
+      input,
+    );
+    this.setToken(session.token);
+    return session;
+  }
   async logout() {
     await this.request<void>("/auth/logout", "POST");
     this.setToken(null);
   }
   me() {
-    return this.request<User>("/auth/me");
+    return this.request<AuthUser>("/auth/me");
   }
   state() {
     return this.request<ApiState>("/state");
@@ -146,6 +161,18 @@ export class BesideClient {
   homebaseGarden(homebaseId: string) {
     return this.request<HomebaseGarden>(
       `/homebases/${encodeURIComponent(homebaseId)}/garden`,
+    );
+  }
+  homebaseExpansion(homebaseId: string) {
+    return this.request<HomebaseExpansion>(
+      `/homebases/${encodeURIComponent(homebaseId)}/expansion`,
+    );
+  }
+  expandHomebase(homebaseId: string, tile: HomeCoastTile) {
+    return this.request<HomebaseExpansion>(
+      `/homebases/${encodeURIComponent(homebaseId)}/expansion`,
+      "PUT",
+      tile,
     );
   }
   plantStarterOak(homebaseId: string, position: PlantStarterOakInput) {

@@ -59,18 +59,30 @@ export function archipelagoBounds(islands: readonly IslandLayer[], margin = 64) 
   }
 }
 
-/** The whole land diamond, including the slab below its top face. */
+/** The baseline diamond and the exact sparse apron, in tile space. */
+export function landRectangles({ cols, rows, coastTiles }: TileMap) {
+  return [
+    { left: 0, top: 0, right: cols, bottom: rows },
+    ...(coastTiles ?? []).map(({ col, row }) => ({
+      left: col,
+      top: row,
+      right: col + 1,
+      bottom: row + 1,
+    })),
+  ]
+}
+
+/** The whole land footprint, including the slab below its top face. */
 export function onIsland(island: IslandLayer, point: ScreenPoint, padding = 0) {
   const x = point.x - island.offset.x
   const y = point.y - island.offset.y
   // Test both top and slab planes, conservatively treating the island's pond as land too.
+  const rectangles = landRectangles(island.map)
   return [0, -14].some((lift) => {
     const { u, v } = screenToIso(island.frame, x, y, lift)
-    return (
-      u >= -padding &&
-      v >= -padding &&
-      u <= island.map.cols + padding &&
-      v <= island.map.rows + padding
+    return rectangles.some(
+      ({ left, top, right, bottom }) =>
+        u >= left - padding && v >= top - padding && u <= right + padding && v <= bottom + padding,
     )
   })
 }

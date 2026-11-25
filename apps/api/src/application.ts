@@ -29,6 +29,8 @@ import {
 import { SchedulingService } from "./scheduling.service.ts";
 import { DomainService } from "./domain.service.ts";
 import { GardenService } from "./garden.service.ts";
+import { HomebaseExpansionController } from "./homebase-expansion.controller.ts";
+import { HomebaseExpansionService } from "./homebase-expansion.service.ts";
 import { RewardsService } from "./rewards.service.ts";
 import { SwaggerAssetsController } from "./swagger-assets.controller.ts";
 import { openApiSchema, ref, schemas } from "./openapi.ts";
@@ -87,6 +89,7 @@ class ApiExceptionFilter implements ExceptionFilter {
     HealthController,
     AuthController,
     DomainController,
+    HomebaseExpansionController,
     SwaggerAssetsController,
   ],
   providers: [
@@ -94,6 +97,7 @@ class ApiExceptionFilter implements ExceptionFilter {
     DatabaseService,
     DomainService,
     GardenService,
+    HomebaseExpansionService,
     RewardsService,
     SchedulingService,
     AuthService,

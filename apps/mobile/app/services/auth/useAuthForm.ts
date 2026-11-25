@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 // eslint-disable-next-line no-restricted-imports
 import { Keyboard } from "react-native"
-import type { Session } from "@beside/api-client"
+import type { AuthSession } from "@beside/api-client"
 
 import { useAuth } from "@/context/AuthContext"
 
@@ -17,7 +17,7 @@ export function useAuthForm() {
   const inFlight = useRef(false)
   const { completeSignIn } = useAuth()
 
-  async function submit(validation: string, request: () => Promise<Session>) {
+  async function submit(validation: string, request: () => Promise<AuthSession>) {
     if (inFlight.current) return false
     setError(validation)
     if (validation) return false

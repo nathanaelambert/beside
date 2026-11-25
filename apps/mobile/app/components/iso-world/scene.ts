@@ -1,4 +1,5 @@
 import { cottageLevel, type cottageConstruction, type CottageSpriteLevel } from "@beside/api-client"
+import type { HomeCoastTile } from "@beside/api-client/homebase-expansion"
 import type { PixelArt } from "@beside/rewards"
 import { rewardItems } from "@beside/rewards"
 
@@ -9,6 +10,7 @@ import { cottageLayers } from "./cottageDepth"
 import { cottageStage, type CottageGrowthArt } from "./cottageGrowthArt"
 import { flowerFamilyArt } from "./flowerFamilyArt"
 import type { FoliageKind } from "./foliageWind"
+import { coastDrawables, homeCoastTerrain } from "./homeExpansion"
 import { meadowShrub } from "./meadowArt"
 import { isRaised, paintBlock } from "./paint"
 import { readingBenchTexture } from "./picnicArt"
@@ -205,8 +207,9 @@ export function avatarDrawable(
   avatar: Avatar,
   u: number,
   v: number,
+  surfaceLift?: number,
 ) {
-  const lift = liftAt(map, u, v)
+  const lift = surfaceLift ?? liftAt(map, u, v)
   const base = isoToScreen(frame, u, v, lift)
   const x = Math.round(base.x - AVATAR_WIDTH / 2)
   const y = Math.round(base.y - AVATAR_HEIGHT + 1)
@@ -407,6 +410,7 @@ export interface HomeSceneInput {
   items: HomeGardenItem[]
   activities?: HomeActivity[]
   assets?: { cottages: CottageGrowthArt }
+  coast?: readonly HomeCoastTile[]
 }
 
 // Same land cells/elevation and frame; opt into the bay's material treatment.
@@ -416,6 +420,17 @@ const detailedHomeMap: TileMap = {
   coast: "sandstone",
   coastFinish: "picnic-headland",
   surfaceFinish: "fine-grain",
+}
+const expandedHomeMaps = new WeakMap<readonly HomeCoastTile[], TileMap>()
+
+function homeMap(coast?: readonly HomeCoastTile[]) {
+  if (!coast?.length) return detailedHomeMap
+  let map = expandedHomeMaps.get(coast)
+  if (!map) {
+    map = homeCoastTerrain(detailedHomeMap, coast)
+    expandedHomeMaps.set(coast, map)
+  }
+  return map
 }
 
 export const homeFrame = (() => {
@@ -465,8 +480,9 @@ export function buildHomeScene({
   activities = [],
   variantSeed = 0,
   assets,
+  coast,
 }: HomeSceneInput) {
-  const map = detailedHomeMap
+  const map = homeMap(coast)
   const frame = homeFrame
   const houses = houseLots(activities)
   const reserved = new Set([...houses.map(({ col, row }) => `${col},${row}`)])
@@ -492,6 +508,7 @@ export function buildHomeScene({
   const facades = plans.map(({ cottage }) => cottage)
   const drawables: Drawable[] = [
     ...terrainDrawables(map, frame, reserved, variantSeed),
+    ...coastDrawables(map, frame),
     ...items.flatMap((item) => {
       const { u, v } = meadowToIso(item.x, item.y)
       return itemDrawable(frame, map, item.key, item.itemId, u, v, {}, item.stage) ?? []

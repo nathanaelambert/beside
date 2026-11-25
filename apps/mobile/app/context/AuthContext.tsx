@@ -8,20 +8,18 @@ import {
   useRef,
   useState,
 } from "react"
-import type { Session } from "@beside/api-client"
+import type { AuthSession, AuthUser } from "@beside/api-client"
 
 import { besideApi } from "@/services/api/beside"
 import { sessionToken } from "@/services/session/sessionToken"
 import { remove } from "@/utils/storage"
-
-type AuthUser = Session["user"]
 
 export type AuthContextType = {
   isAuthenticated: boolean
   isRestoring: boolean
   restoreError: string
   user: AuthUser | null
-  completeSignIn: (session: Session) => Promise<void>
+  completeSignIn: (session: AuthSession) => Promise<void>
   consumeAvatarOnboarding: () => boolean
   retryRestore: () => void
   logout: () => Promise<void>
@@ -75,7 +73,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
     }
   }, [restoreAttempt])
 
-  const completeSignIn = useCallback(async (session: Session) => {
+  const completeSignIn = useCallback(async (session: AuthSession) => {
     try {
       await sessionToken.set(session.token)
     } catch {
@@ -84,7 +82,7 @@ export const AuthProvider: FC<PropsWithChildren> = ({ children }) => {
       throw new Error("We couldn’t securely save your session. Please try again.")
     }
     besideApi.setToken(session.token)
-    avatarOnboarding.current = true
+    avatarOnboarding.current = session.user.isGuest !== true
     setUser(session.user)
   }, [])
 

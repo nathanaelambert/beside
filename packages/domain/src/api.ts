@@ -21,6 +21,10 @@ export const registerSchema = z.strictObject({
   inviteCode: z.string().trim().max(100).optional(),
 });
 export const loginSchema = z.strictObject({ email, password });
+export const joinAsGuestSchema = z.strictObject({
+  name,
+  inviteCode: z.string().trim().min(20).max(100),
+});
 export const createHomebaseSchema = z.strictObject({ name });
 export const plantStarterOakSchema = z.strictObject({
   x: z
@@ -115,17 +119,27 @@ export const shareLogSchema = z.strictObject({
 export const publicUserSchema = databaseSchema.shape.users.element.omit({
   email: true,
 });
+const accountUserSchema = publicUserSchema.extend({
+  email: z.email(),
+  isGuest: z.literal(false).optional(),
+});
+const guestUserSchema = publicUserSchema.extend({
+  email: z.null(),
+  isGuest: z.literal(true),
+});
+export const authUserSchema = z.union([accountUserSchema, guestUserSchema]);
 export const sessionSchema = z.object({
   token: z.string(),
   expiresAt: z.iso.datetime(),
-  user: databaseSchema.shape.users.element,
+  user: accountUserSchema,
 });
+export const guestSessionSchema = sessionSchema.extend({ user: guestUserSchema });
 export const mutationSchema = z.object({
   entityId: id,
   duplicate: z.boolean(),
 });
 export const homebaseSchema = databaseSchema.shape.connections.element.extend({
-  inviteCode: z.string(),
+  inviteCode: z.string().nullable().describe("Unavailable to guests."),
   memberIds: z.array(id),
 });
 export const stateSchema = databaseSchema.extend({
@@ -144,6 +158,9 @@ export const errorSchema = z.object({
 });
 export type ApiState = z.infer<typeof stateSchema>;
 export type Session = z.infer<typeof sessionSchema>;
+export type GuestSession = z.infer<typeof guestSessionSchema>;
+export type AuthSession = Session | GuestSession;
+export type AuthUser = z.infer<typeof authUserSchema>;
 export type MutationResult = z.infer<typeof mutationSchema>;
 export type ApiHomebase = z.infer<typeof homebaseSchema>;
 export type HomebaseGarden = z.infer<typeof homebaseGardenSchema>;
@@ -153,6 +170,7 @@ export type RewardPlacement = z.infer<typeof rewardPlacementSchema>;
 export type RewardAgreement = z.infer<typeof rewardAgreementSchema>;
 export type RegisterInput = z.input<typeof registerSchema>;
 export type LoginInput = z.input<typeof loginSchema>;
+export type JoinAsGuestInput = z.input<typeof joinAsGuestSchema>;
 export type CreateSubjectInput = z.input<typeof createSubjectSchema>;
 export type CreateActivityInput = z.input<typeof createActivitySchema>;
 export type CreateMilestoneInput = z.input<typeof createMilestoneSchema>;

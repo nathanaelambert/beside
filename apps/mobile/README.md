@@ -43,6 +43,15 @@ The first run generates the ignored native iOS project and installs CocoaPods;
 later runs reuse the native build cache. This simulator choice does not change
 the app's minimum supported iOS version.
 
+## Walking on the home base island
+
+In exploration mode, tap a free lawn or confirmed coastal tile and choose
+**Move here**. Only your avatar moves. It can cross paths and the picnic
+blanket. The limestone steps are the only route onto the raised coastal
+extension; water, unsaved coastal tiles, and occupied tiles remain blocked.
+Walking is local to the current island visit. Planting is a separate mode and
+the expanded shore does not add plantable ground.
+
 ## Skia pixel-world PoC
 
 On the `pixel-world-skia-poc` branch, a fresh launch opens **A little beside**.

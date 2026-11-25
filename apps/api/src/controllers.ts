@@ -22,11 +22,17 @@ import {
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
 import type { Request } from "express";
 import * as input from "@beside/domain/api";
 import { avatarAppearanceSchema } from "@beside/domain/avatar";
-import { AuthGuard, AuthService, type AuthenticatedRequest } from "./auth.ts";
+import {
+  AuthGuard,
+  AuthService,
+  GuestAccess,
+  type AuthenticatedRequest,
+} from "./auth.ts";
 import { DatabaseService } from "./db/database.service.ts";
 import { DomainService } from "./domain.service.ts";
 import { GardenService } from "./garden.service.ts";
@@ -72,6 +78,26 @@ export class AuthController {
     await this.auth.throttle(request.ip ?? "unknown");
     return this.auth.register(data);
   }
+  @Post("guest")
+  @ApiBody({ schema: ref("JoinAsGuest") })
+  @ApiCreatedResponse({ schema: ref("GuestSession") })
+  @ApiNotFoundResponse({
+    description: "Invitation code not found; no guest created",
+    schema: ref("Error"),
+  })
+  @ApiTooManyRequestsResponse({
+    description: "Guest join rate limit exceeded",
+    schema: ref("Error"),
+  })
+  @ApiOperation({
+    summary: "Visit an invited home base without credentials",
+    description:
+      "Requires a valid invite code. Creates a guest membership with a saved avatar and a 30-day bearer session. Guests can explore the island and edit only their own avatar; no new home base or activity enrollment is created.",
+  })
+  async joinAsGuest(@Body() body: unknown, @Req() request: Request) {
+    await this.auth.throttle(request.ip ?? "unknown", "guest");
+    return this.auth.joinAsGuest(input.joinAsGuestSchema.parse(body));
+  }
   @Post("login")
   @HttpCode(200)
   @ApiBody({ schema: ref("Login") })
@@ -82,6 +108,7 @@ export class AuthController {
     return this.auth.login(data);
   }
   @Get("me")
+  @GuestAccess()
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ schema: ref("User") })
@@ -89,6 +116,7 @@ export class AuthController {
     return request.actor;
   }
   @Post("logout")
+  @GuestAccess()
   @HttpCode(204)
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
@@ -109,14 +137,15 @@ export class DomainController {
     @Inject(RewardsService) private readonly rewardPlans: RewardsService,
   ) {}
   @Get("state")
+  @GuestAccess()
   @ApiOkResponse({ schema: ref("State") })
   @ApiOperation({
     summary: "Read the current user's visible model",
     description:
-      "An audience-filtered projection, not an importable database backup. Profiles omit email. Data belonging exclusively to unrelated users and home bases is excluded.",
+      "An audience-filtered projection, not an importable database backup. Profiles omit email. Guests additionally receive only visible island members and avatars, activity cottages, milestones and earned rewards; not subjects, participation, logs or events.",
   })
   state(@Req() request: AuthenticatedRequest) {
-    return this.domain.state(request.actor.id);
+    return this.domain.state(request.actor.id, request.actor.isGuest === true);
   }
   @Get("cottage-build-settings")
   @ApiOkResponse({ schema: ref("CottageBuildSettings") })
@@ -129,11 +158,13 @@ export class DomainController {
     return this.domain.cottageBuildDurations;
   }
   @Get("homebases")
+  @GuestAccess()
   @ApiOkResponse({ schema: list("Homebase") })
   homebases(@Req() request: AuthenticatedRequest) {
     return this.domain.homebases(request.actor.id);
   }
   @Put("homebases/:homebaseId/avatar")
+  @GuestAccess()
   @ApiParam({ name: "homebaseId", type: String })
   @ApiBody({ schema: ref("AvatarAppearance") })
   @ApiOkResponse({ schema: ref("AvatarAppearance") })
@@ -155,6 +186,7 @@ export class DomainController {
     );
   }
   @Get("homebases/:homebaseId/garden")
+  @GuestAccess()
   @ApiParam({ name: "homebaseId", type: String })
   @ApiOkResponse({ schema: ref("HomebaseGarden") })
   getGarden(

@@ -47,6 +47,21 @@ const pencil: PixelArt = {
   ],
 }
 
+const footsteps: PixelArt = {
+  format: "pixel-art",
+  palette: { o: world.outline, g: world.leaf, p: world.paper },
+  pixels: [
+    "....ooo.",
+    "...oggo.",
+    "...oggo.",
+    "oo..oo..",
+    "ogo.....",
+    "ogoo....",
+    ".ogo....",
+    "..oo....",
+  ],
+}
+
 /** Keep the arrow on the avatar when the card is forced away from a viewport edge. */
 export function avatarEditPopupPlacement(
   x: number,
@@ -76,19 +91,23 @@ export function avatarEditPopupPlacement(
   return { visible, left, y, above, arrowLeft }
 }
 
-export function AvatarEditPopup({
+export function IslandActionPopup({
   viewport,
   anchor,
   camera,
   ratio,
+  action,
   onPress,
 }: {
   viewport: { width: number; height: number }
   anchor: { x: number; top: number; bottom: number }
   camera: SharedValue<{ x: number; y: number; zoom: number }>
   ratio: number
+  action: "edit-avatar" | "walk"
   onPress: () => void
 }) {
+  const moving = action === "walk"
+  const label = moving ? "Move here" : "Edit avatar"
   const position = useDerivedValue(() => {
     const { x, y, zoom } = camera.value
     const originX = Math.round(x * ratio) / ratio
@@ -114,18 +133,18 @@ export function AvatarEditPopup({
   return (
     <Animated.View
       pointerEvents="box-none"
-      testID="avatar-edit-popup"
+      testID={moving ? "lawn-walk-popup" : "avatar-edit-popup"}
       style={[styles.root, cardStyle]}
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Edit avatar"
-        testID="homebase-edit-avatar"
+        accessibilityLabel={label}
+        testID={moving ? "homebase-walk-here" : "homebase-edit-avatar"}
         onPress={onPress}
         style={({ pressed }) => [styles.button, pressed && styles.pressed]}
       >
-        <PixelArtSprite art={pencil} scale={2} />
-        <Text text="Edit avatar" weight="semiBold" style={styles.label} />
+        <PixelArtSprite art={moving ? footsteps : pencil} scale={2} />
+        <Text text={label} weight="semiBold" style={styles.label} />
       </Pressable>
       <Animated.View pointerEvents="none" style={[styles.tail, tailStyle]}>
         <PixelArtSprite art={tail} scale={1} />

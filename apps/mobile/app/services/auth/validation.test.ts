@@ -1,4 +1,12 @@
-import { loginValidation, registerValidation } from "./validation"
+import { guestValidation, loginValidation, registerValidation } from "./validation"
+
+it("requires a display name and a full invitation code, but no credentials", () => {
+  const invite = "x".repeat(32)
+  expect(guestValidation("  ", invite)).toBe("Enter your name.")
+  expect(guestValidation("Juniper", "short")).toBe("Enter the full invite code from your host.")
+  expect(guestValidation("x".repeat(201), invite)).toBe("Your name is too long.")
+  expect(guestValidation(" Juniper ", ` ${invite} `)).toBe("")
+})
 
 it("requires a plausible email and a password without trimming the password", () => {
   expect(loginValidation("invalid", "example-password")).toBe("Enter a valid email address.")

@@ -2,17 +2,25 @@ import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   Inject,
   Injectable,
+  SetMetadata,
   UnauthorizedException,
   type CanActivate,
   type ExecutionContext,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import type { PoolClient } from "pg";
 import type { User } from "@beside/domain/types";
-import type { LoginInput, RegisterInput, Session } from "@beside/domain/api";
+import type {
+  AuthUser,
+  JoinAsGuestInput,
+  LoginInput,
+  RegisterInput,
+} from "@beside/domain/api";
 import { randomAvatarAppearance } from "@beside/domain/avatar-options";
 import { id } from "@beside/domain/model";
 import { DatabaseService } from "./db/database.service.ts";
@@ -22,9 +30,12 @@ const derive = promisify(scrypt);
 export const tokenHash = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 export type AuthenticatedRequest = Request & {
-  actor: User;
+  actor: AuthUser;
   sessionHash: string;
 };
+const guestAccess = Symbol("guestAccess");
+/** Guest sessions are denied unless the route explicitly opts in. */
+export const GuestAccess = () => SetMetadata(guestAccess, true);
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const key = (await derive(password, salt, 64)) as Buffer;
@@ -42,8 +53,10 @@ export class AuthService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
-  async throttle(ip: string) {
-    const key = tokenHash(`auth:${ip}`);
+  async throttle(ip: string, purpose: "credentials" | "guest" = "credentials") {
+    const key = tokenHash(
+      purpose === "guest" ? `auth:guest:${ip}` : `auth:${ip}`,
+    );
     const pool = this.database.getPool();
     await pool.query("DELETE FROM auth_rate_limit WHERE reset_at < now()");
     const result = await pool.query(
@@ -56,7 +69,7 @@ export class AuthService {
         429,
       );
   }
-  private async session(client: PoolClient, user: User): Promise<Session> {
+  private async session<T extends AuthUser>(client: PoolClient, user: T) {
     const token = randomBytes(32).toString("base64url");
     const expiresAt = new Date(
       Date.now() + 30 * 24 * 60 * 60 * 1000,
@@ -81,7 +94,7 @@ export class AuthService {
         throw new ConflictException(
           "An account with this email already exists.",
         );
-      const user: User = {
+      const user: AuthUser = {
         id: id("user"),
         name: input.name,
         email: input.email,
@@ -97,15 +110,37 @@ export class AuthService {
       );
       const inviteCode = input.inviteCode?.trim();
       if (inviteCode)
-        await joinHomebase(client, user.id, inviteCode, randomAvatarAppearance());
+        await joinHomebase(client, user.id, inviteCode, {
+          avatarAppearance: randomAvatarAppearance(),
+        });
       else await createHomebase(client, user.id, `${user.name}'s home base`);
+      return this.session(client, user);
+    });
+  }
+  async joinAsGuest(input: JoinAsGuestInput) {
+    return this.database.transaction(true, async (client) => {
+      const user: AuthUser = {
+        id: id("user"),
+        name: input.name,
+        email: null,
+        color: "blue",
+        isGuest: true,
+      };
+      await client.query(
+        "INSERT INTO app_user(id, name, email, color) VALUES ($1, $2, NULL, $3)",
+        [user.id, user.name, user.color],
+      );
+      await joinHomebase(client, user.id, input.inviteCode, {
+        avatarAppearance: randomAvatarAppearance(),
+        enrollInActivities: false,
+      });
       return this.session(client, user);
     });
   }
   async login(input: LoginInput) {
     const result = await this.database
       .getPool()
-      .query(
+      .query<User & { email: string; password_hash: string }>(
         "SELECT u.id, u.name, u.email, u.color, c.password_hash FROM app_user u JOIN auth_credential c ON c.user_id = u.id WHERE u.email = $1",
         [input.email],
       );
@@ -130,15 +165,20 @@ export class AuthService {
     const hash = tokenHash(token);
     const result = await this.database
       .getPool()
-      .query(
+      .query<User>(
         "SELECT u.id, u.name, u.email, u.color FROM auth_session s JOIN app_user u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.expires_at > now()",
         [hash],
       );
-    if (!result.rows[0])
+    const user = result.rows[0];
+    if (!user)
       throw new UnauthorizedException(
         "Session is invalid or expired. Sign in again.",
       );
-    return { user: result.rows[0] as User, hash };
+    const profile: AuthUser =
+      user.email === null
+        ? { ...user, email: null, isGuest: true }
+        : { ...user, email: user.email };
+    return { user: profile, hash };
   }
   async logout(hash: string) {
     await this.database
@@ -149,7 +189,10 @@ export class AuthService {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(Reflector) private readonly reflector: Reflector,
+  ) {}
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const match = /^Bearer ([A-Za-z0-9_-]{43})$/i.exec(
@@ -158,6 +201,11 @@ export class AuthGuard implements CanActivate {
     if (!match)
       throw new UnauthorizedException("A bearer session token is required.");
     const { user, hash } = await this.auth.authenticate(match[1]!);
+    if (
+      user.isGuest &&
+      !this.reflector.get<boolean>(guestAccess, context.getHandler())
+    )
+      throw new ForbiddenException("This action is not available to guests.");
     request.actor = user;
     request.sessionHash = hash;
     return true;

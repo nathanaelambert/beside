@@ -32,7 +32,13 @@ export async function joinHomebase(
   client: PoolClient,
   userId: string,
   inviteCode: string,
-  avatarAppearance?: AvatarAppearance,
+  {
+    avatarAppearance,
+    enrollInActivities = true,
+  }: {
+    avatarAppearance?: AvatarAppearance;
+    enrollInActivities?: boolean;
+  } = {},
 ) {
   const invite = await client.query(
     "SELECT homebase_id FROM homebase_invite WHERE code = $1",
@@ -43,6 +49,14 @@ export async function joinHomebase(
       "Invitation code was not found. Check the code and try again.",
     );
   const homebaseId = invite.rows[0].homebase_id as string;
+  if (!enrollInActivities) {
+    const member = await client.query(
+      `INSERT INTO homebase_member(id, connection_id, user_id, avatar_appearance)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (connection_id, user_id) DO NOTHING`,
+      [id("member"), homebaseId, userId, avatarAppearance],
+    );
+    return { entityId: homebaseId, duplicate: member.rowCount === 0 };
+  }
   const before = await loadDatabase(client);
   if (
     before.memberships.some(

@@ -28,3 +28,7 @@ Start with the [working concept brief](product/concept-brief.md) for the product
 - [Image notes](design/image-notes.md): image provenance, intended use, and known limitations. Generated visual details do not establish product requirements.
 
 The [showcase website](../apps/website/README.md) illustrates the concept through local demos. Its world illustration lives with the website's runtime assets.
+
+## Pilots
+
+- [Shared coastline expansion](experiments/shared-island-expansion.md): the bounded, persistent coastline editor in Home Base.

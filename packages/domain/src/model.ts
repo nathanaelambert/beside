@@ -113,7 +113,11 @@ function emit(
     createdAt: new Date().toISOString(),
   };
   db.events.push(event);
-  for (const recipientUserId of new Set(recipients))
+  for (const recipientUserId of new Set(recipients)) {
+    if (
+      db.users.some((user) => user.id === recipientUserId && user.email === null)
+    )
+      continue;
     db.deliveries.push({
       id: id("delivery"),
       eventId: event.id,
@@ -121,6 +125,7 @@ function emit(
       connectionId,
       kind,
     });
+  }
 }
 function shareLog(
   db: Database,
@@ -713,7 +718,13 @@ export function execute(
           activityId: entityId,
           subjectId,
         });
-      const participants = members(db, command.connectionId);
+      // Visitors are rendered on the island, but never join its activity/reward roster.
+      const guestIds = new Set(
+        db.users.filter((user) => user.email === null).map((user) => user.id),
+      );
+      const participants = members(db, command.connectionId).filter(
+        (userId) => !guestIds.has(userId),
+      );
       for (const userId of participants)
         db.participations.push({
           id: id("participation"),

@@ -52,7 +52,29 @@ can open an unsaved draft when there is no saved appearance; canceling leaves
 the original untouched. Saved appearances never reroll on login or session restore.
 On the island, members can tap their own avatar and select **Edit avatar**.
 
+### Visit as a guest
+
+On the signed-out app, choose **Join as a guest**. Enter a display name and a
+Home Base invitation code. `POST /api/v1/auth/guest` accepts only `name` and
+`inviteCode`; a valid code opens the invited island with a saved starter avatar.
+An invalid code creates no guest or membership. Migration 014 is required.
+
+Guests may explore that island and edit their own avatar. They cannot retrieve
+its invitation code, read check-in history, join activities or other home bases
+as that guest, or change shared records. They do not count towards activity or
+reward rosters. See the [guest pilot notes](../../docs/experiments/quick-guest-onboarding.md)
+for permissions and session lifetime. Registration and login are unchanged.
+
 ## Use the API
+
+### Shared coastline
+
+`GET /api/v1/homebases/:homebaseId/expansion` reads the saved coastline.
+`PUT` on the same path adds one eligible tile from its `{ col, row }` body
+and returns the updated list. A repeat is a successful no-op. A guest can
+read their island’s coastline but cannot expand it. Run migration 013 before
+using these routes. See the [shared coastline pilot](../../docs/experiments/shared-island-expansion.md)
+for eligibility and walking behavior.
 
 ### Shared starter oak
 
@@ -124,7 +146,7 @@ later through `joinHomebase`. Joining initializes
 participation in existing activities without changing previously saved reward
 rosters. To require both people for a reward, have both join before planning it.
 Invitation codes grant membership to anyone who has them; members can retrieve
-their space's code through `GET /homebases`.
+their space's code through `GET /homebases`. Guests receive `inviteCode: null`.
 
 Registration/login returns a 30-day opaque bearer token. Send
 `Authorization: Bearer <token>`; `logout()` revokes it. Tokens are stored hashed
@@ -145,7 +167,7 @@ your computer's LAN address instead of localhost.
 All data routes are under `/api/v1` and require a bearer session. See the served
 OpenAPI document for request fields, response schemas, and HTTP status codes.
 
-- Auth: register, login, current user, logout.
+- Auth: register, login, guest invitation, current user, logout.
 - Home bases: list, create, join with invitation code, rename, delete.
 - Read: state, templates, catalog, subjects, activities, milestones, logs,
   rewards, events.
@@ -159,9 +181,9 @@ OpenAPI document for request fields, response schemas, and HTTP status codes.
   [the design note](../../docs/experiments/rewards-equal-value.md). For a local demo, run
   `scripts/seed-equal-rewards-demo.ts` (it wipes the local database it is given).
 
-Every home-base member can edit and delete its records; there are no owner/admin
-roles in this first pass. The playground exposes inline Edit/Delete controls, with
-a separate confirmation describing the deletion scope.
+Every credentialed home-base member can edit and delete its records; there are no
+owner/admin roles in this first pass. The playground exposes inline Edit/Delete
+controls, with a separate confirmation describing the deletion scope.
 
 Home-base edits change the name and keep membership/invitation codes. Activity
 edits change name, description, and optionally the caller's personal target;

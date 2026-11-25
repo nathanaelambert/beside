@@ -16,7 +16,8 @@ export type ProgressMode = "position" | "sum" | "sessions";
 export interface User {
   id: string;
   name: string;
-  email: string;
+  /** Guests have no credentials or email address. */
+  email: string | null;
   color: "blue" | "rose" | "moss";
 }
 // Connection rows are home bases. Membership is identical for every base.

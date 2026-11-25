@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store"
-import type { Session } from "@beside/api-client"
+import type { GuestSession, Session } from "@beside/api-client"
 import { act, renderHook, waitFor } from "@testing-library/react-native"
 
 import { besideApi } from "@/services/api/beside"
@@ -71,11 +71,31 @@ it("saves the token in SecureStore and clears it when logging out offline", asyn
     keychainAccessible: "device-only",
   })
   expect(result.current.isAuthenticated).toBe(true)
+  expect(result.current.consumeAvatarOnboarding()).toBe(true)
   jest.mocked(besideApi.logout).mockRejectedValue(new Error("Offline"))
   await act(async () => result.current.logout())
   expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("beside.session-token")
   expect(besideApi.setToken).toHaveBeenLastCalledWith(null)
   expect(result.current.user).toBeNull()
+})
+
+it("keeps the guest profile when restoring and does not open avatar onboarding", async () => {
+  const guest: GuestSession = {
+    ...session,
+    user: { ...profile, email: null, isGuest: true },
+  }
+  const signedIn = renderHook(() => useAuth(), { wrapper: AuthProvider })
+  await waitFor(() => expect(signedIn.result.current.isRestoring).toBe(false))
+  await act(async () => signedIn.result.current.completeSignIn(guest))
+  expect(signedIn.result.current.user).toEqual(guest.user)
+  expect(signedIn.result.current.consumeAvatarOnboarding()).toBe(false)
+  signedIn.unmount()
+
+  jest.mocked(SecureStore.getItemAsync).mockResolvedValue(guest.token)
+  jest.mocked(besideApi.me).mockResolvedValue(guest.user)
+  const restored = renderHook(() => useAuth(), { wrapper: AuthProvider })
+  await waitFor(() => expect(restored.result.current.user).toEqual(guest.user))
+  expect(restored.result.current.consumeAvatarOnboarding()).toBe(false)
 })
 
 it("does not sign in when secure storage fails", async () => {

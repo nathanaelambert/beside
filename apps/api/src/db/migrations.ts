@@ -1,1 +1,1 @@
-export const latestMigration = "012_homebase_avatar.sql";
+export const latestMigration = "014_guest_accounts.sql";

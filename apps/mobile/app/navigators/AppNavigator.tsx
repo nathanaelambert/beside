@@ -21,6 +21,7 @@ import { ActivityDetailScreen } from "@/screens/ActivityDetailScreen"
 import { AvatarEditorScreen } from "@/screens/AvatarEditorScreen"
 import { BayWorkshopScreen } from "@/screens/BayWorkshopScreen"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
+import { GuestJoinScreen } from "@/screens/GuestJoinScreen"
 import { HomeBaseScreen } from "@/screens/HomeBaseScreen"
 import { LoginScreen } from "@/screens/LoginScreen"
 import { PixelWorldScreen } from "@/screens/PixelWorldScreen"
@@ -43,7 +44,7 @@ const exitRoutes = Config.exitRoutes
 const Stack = createNativeStackNavigator<AppStackParamList>()
 
 const AppStack = () => {
-  const { isAuthenticated, isRestoring, restoreError, retryRestore } = useAuth()
+  const { isAuthenticated, isRestoring, restoreError, retryRestore, user } = useAuth()
 
   const {
     theme: { colors },
@@ -86,19 +87,23 @@ const AppStack = () => {
       {isAuthenticated ? (
         <>
           <Stack.Screen name="HomeBase" component={HomeBaseScreen} />
-          <Stack.Screen name="Activities" component={ActivitiesScreen} />
-          <Stack.Screen name="ActivityCreate" component={ActivityCreateScreen} />
-          <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
-          <Stack.Screen name="BayWorkshop" component={BayWorkshopScreen} />
           <Stack.Screen name="AvatarEditor" component={AvatarEditorScreen} />
-          <Stack.Screen name="Welcome" component={WelcomeScreen} />
-
-          <Stack.Screen name="Demo" component={DemoNavigator} />
+          {!user?.isGuest && (
+            <>
+              <Stack.Screen name="Activities" component={ActivitiesScreen} />
+              <Stack.Screen name="ActivityCreate" component={ActivityCreateScreen} />
+              <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+              <Stack.Screen name="BayWorkshop" component={BayWorkshopScreen} />
+              <Stack.Screen name="Welcome" component={WelcomeScreen} />
+              <Stack.Screen name="Demo" component={DemoNavigator} />
+            </>
+          )}
         </>
       ) : (
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="GuestJoin" component={GuestJoinScreen} />
         </>
       )}
 

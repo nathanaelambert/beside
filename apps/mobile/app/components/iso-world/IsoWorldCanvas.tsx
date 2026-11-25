@@ -35,8 +35,9 @@ import {
   type SeaProp,
 } from "./archipelago"
 import { buoy, seaRock } from "./archipelagoProps"
-import { AvatarEditPopup } from "./AvatarEditPopup"
+import { IslandActionPopup } from "./AvatarEditPopup"
 import type { Bitmap } from "./bitmap"
+import { coastHeight } from "./coastAccess"
 import { FoliageSprite } from "./FoliageSprite"
 import { recolor } from "./islandPalettes"
 import { matureTreeAssets, treeFamilyAsset } from "./matureTreeAssets"
@@ -328,6 +329,8 @@ type SceneProps =
   | { islands: IslandLayer[]; map?: never; frame?: never; drawables?: never }
   | { islands?: never; map: TileMap; frame: MapFrame; drawables: Drawable[] }
 
+type GuideTile = { col: number; row: number; lift?: number }
+
 export type IsoWorldCanvasProps = SceneProps & {
   width: number
   height: number
@@ -338,11 +341,12 @@ export type IsoWorldCanvasProps = SceneProps & {
   resetCamera?: number
   selectedKey?: string
   editAvatarAction?: { memberId: string; onPress: () => void }
-  guideTiles?: { col: number; row: number }[]
+  walkAction?: GuideTile & { onPress: () => void }
+  guideTiles?: GuideTile[]
   coastGuides?: boolean
   /** Opt-in open-water artwork for the visual workshop. */
   detailedSea?: boolean
-  previewTile?: { col: number; row: number }
+  previewTile?: GuideTile
   interactive?: boolean
   accessibilityLabel?: string
   voyage?: CanvasVoyage
@@ -405,9 +409,9 @@ const IslandNodes = memo(function IslandNodes({
   island: IslandLayer
   tick: SharedValue<number>
   selectedKey?: string
-  guideTiles?: { col: number; row: number }[]
+  guideTiles?: GuideTile[]
   coastGuides?: boolean
-  previewTile?: { col: number; row: number }
+  previewTile?: GuideTile
   signs: SharedValue<number>
   signZoom: SharedValue<number>
   ratio: number
@@ -421,13 +425,26 @@ const IslandNodes = memo(function IslandNodes({
   const ground = groundFor(map, frame, island.palette)
   const finish = finishFor(map, frame, ground)
   const glints = useMemo(() => waterGlints(map, frame), [map, frame])
+  const coastGuideLift = coastGuides && map.coastTiles?.length ? coastHeight : 0
   const guidePath = useMemo(
-    () => (guideTiles ?? []).map(({ col, row }) => diamondPath(frame, col, row, 0, 0.18)).join(""),
-    [guideTiles, frame],
+    () =>
+      (guideTiles ?? [])
+        .map(({ col, row, lift }) => diamondPath(frame, col, row, lift ?? coastGuideLift, 0.18))
+        .join(""),
+    [guideTiles, frame, coastGuideLift],
   )
   const previewPath = previewTile
-    ? diamondPath(frame, previewTile.col, previewTile.row, 0, 0.06)
+    ? diamondPath(frame, previewTile.col, previewTile.row, previewTile.lift ?? 0, 0.06)
     : ""
+  // The live apron is just below a raised forest rim. Its open-water guides need
+  // to stay legible in front of those cliff sprites; Bay's local guides are unchanged.
+  const guidesAboveCliffs = coastGuides && !!map.coastTiles
+  const guides = (
+    <>
+      {!!guidePath && <Guide path={guidePath} tick={tick} border={coastGuides} />}
+      {!!previewPath && <Guide path={previewPath} tick={tick} strong border={coastGuides} />}
+    </>
+  )
   const selected = focused ? drawables.find((d) => d.key === selectedKey) : undefined
   return (
     <Group transform={[{ translateX: offset.x }, { translateY: offset.y }]}>
@@ -459,8 +476,7 @@ const IslandNodes = memo(function IslandNodes({
           color={map.surfaceFinish === "fine-grain" ? pondGlintColor : undefined}
         />
       ))}
-      {!!guidePath && <Guide path={guidePath} tick={tick} border={coastGuides} />}
-      {!!previewPath && <Guide path={previewPath} tick={tick} strong border={coastGuides} />}
+      {!guidesAboveCliffs && guides}
       {drawables.map((drawable) => (
         <DrawableNode
           key={drawable.key}
@@ -472,6 +488,7 @@ const IslandNodes = memo(function IslandNodes({
           }
         />
       ))}
+      {guidesAboveCliffs && guides}
       {selected && <Marker x={selected.baseX} top={selected.top} tick={tick} />}
       {sign && <IslandSign sign={sign} tick={tick} visible={signs} zoom={signZoom} ratio={ratio} />}
     </Group>
@@ -499,6 +516,7 @@ export function IsoWorldCanvas({
   resetCamera = 0,
   selectedKey,
   editAvatarAction,
+  walkAction,
   guideTiles,
   coastGuides,
   detailedSea = false,
@@ -644,6 +662,10 @@ export function IsoWorldCanvas({
     enabled && editAvatarAction && selectedKey === `avatar-${editAvatarAction.memberId}`
       ? focused.drawables.find((drawable) => drawable.key === selectedKey)
       : undefined
+  const walkAnchor =
+    enabled && walkAction
+      ? islandPoint(focused, walkAction.col + 0.5, walkAction.row + 0.5, walkAction.lift)
+      : null
   const pan = Gesture.Pan()
     .minDistance(8)
     .enabled(enabled)
@@ -728,7 +750,8 @@ export function IsoWorldCanvas({
         </Canvas>
       </GestureDetector>
       {editAvatarAction && avatarForEdit && (
-        <AvatarEditPopup
+        <IslandActionPopup
+          action="edit-avatar"
           viewport={{ width, height }}
           anchor={{
             x: focused.offset.x + avatarForEdit.baseX,
@@ -738,6 +761,16 @@ export function IsoWorldCanvas({
           camera={camera}
           ratio={ratio}
           onPress={editAvatarAction.onPress}
+        />
+      )}
+      {walkAction && walkAnchor && (
+        <IslandActionPopup
+          action="walk"
+          viewport={{ width, height }}
+          anchor={{ x: walkAnchor.x, top: walkAnchor.y, bottom: walkAnchor.y }}
+          camera={camera}
+          ratio={ratio}
+          onPress={walkAction.onPress}
         />
       )}
     </GestureHandlerRootView>

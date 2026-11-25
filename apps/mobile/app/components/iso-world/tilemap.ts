@@ -20,6 +20,8 @@ export interface TileMap {
   cols: number
   rows: number
   tiles: Tile[]
+  /** Sparse coastal apron outside the original grid; never changes its frame. */
+  coastTiles?: Tile[]
   coast?: CoastMaterial
   coastFinish?: "picnic-headland"
   /** Opt-in surface art; tile shape, elevations and placement are unchanged. */
@@ -29,10 +31,14 @@ export interface TileMap {
 }
 
 export function tileAt(map: TileMap, col: number, row: number): Tile | undefined {
-  if (col < 0 || row < 0 || col >= map.cols || row >= map.rows) return undefined
+  if (col < 0 || row < 0 || col >= map.cols || row >= map.rows)
+    return map.coastTiles?.find((tile) => tile.col === col && tile.row === row)
   const tile = map.tiles[row * map.cols + col]
   return tile?.kind === "void" ? undefined : tile
 }
+
+export const groundTiles = (map: TileMap) =>
+  map.coastTiles ? [...map.tiles, ...map.coastTiles] : map.tiles
 
 export const liftFor = (kind: TileKind) => (kind === "forest" ? LEVEL : kind === "water" ? -3 : 0)
 

@@ -1,6 +1,18 @@
 // Mirrors the API's registerSchema/loginSchema in packages/domain/src/api.ts.
 export const MIN_PASSWORD_LENGTH = 12
 const MAX_PASSWORD_LENGTH = 128
+export const MAX_GUEST_NAME_LENGTH = 200
+export const MIN_GUEST_INVITE_LENGTH = 20
+export const MAX_GUEST_INVITE_LENGTH = 100
+
+export function guestValidation(name: string, inviteCode: string): string {
+  const length = inviteCode.trim().length
+  if (!name.trim()) return "Enter your name."
+  if (name.trim().length > MAX_GUEST_NAME_LENGTH) return "Your name is too long."
+  if (length < MIN_GUEST_INVITE_LENGTH || length > MAX_GUEST_INVITE_LENGTH)
+    return "Enter the full invite code from your host."
+  return ""
+}
 
 function emailError(email: string): string {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? "" : "Enter a valid email address."
