@@ -39,6 +39,9 @@ it("puts the open window that closes first above upcoming windows", () => {
     startAt: stamp(start),
     endAt: stamp(end),
     rewardId: null,
+    upgradeRewardId: null,
+    upgradeRequiredUserIds: [],
+    upgradeCreditedAt: null,
     createdAt: stamp(-30),
     ...extras,
   })
@@ -50,10 +53,17 @@ it("puts the open window that closes first above upcoming windows", () => {
       make("open-earlier-close", 0, 3),
       make("another-activity", -1, 1, { activityId: "running" }),
       make("join", -1, 1, { kind: "join" }),
+      make("open-policy", 0, 0, { policy: "open", startAt: null, endAt: null }),
+      make("deadline-policy", 0, 5, { policy: "deadline", startAt: null }),
     ],
     "reading",
     now,
   )
-  expect(open.map(({ id }) => id)).toEqual(["open-earlier-close", "open-later-close"])
+  expect(open.map(({ id }) => id)).toEqual([
+    "open-earlier-close",
+    "deadline-policy",
+    "open-later-close",
+    "open-policy",
+  ])
   expect(upcoming.map(({ id }) => id)).toEqual(["future"])
 })

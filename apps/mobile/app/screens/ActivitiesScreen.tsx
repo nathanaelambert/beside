@@ -4,19 +4,18 @@ import type { ApiState } from "@beside/api-client"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { PixelArtSprite } from "@/components/BesideMark"
-import { cottageArt } from "@/components/iso-world/cottageArt"
-import { homeActivities } from "@/components/iso-world/homeWorld"
+import { RewardSprite } from "@/components/RewardSprite"
 import { Text } from "@/components/Text"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { activityScheduleSummary } from "@/services/api/activitySummary"
+import { attendanceMilestones } from "@/services/api/attendance"
 import { besideApi } from "@/services/api/beside"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 
 type ActivityRow = {
   activity: ApiState["activities"][number]
   summary: string
-  index: number
+  item?: ApiState["rewardItems"][number]
   open: boolean
 }
 
@@ -37,30 +36,31 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
         try {
           const state = await besideApi.state()
           const serverNow = Date.parse(state.serverTime ?? "")
-          // Same order as the cottages on the island, so each row shows its own roof.
-          const cottages = homeActivities(
-            state,
-            route.params.connectionId,
-            Number.isFinite(serverNow) ? serverNow : Date.now(),
-          )
+          const now = Number.isFinite(serverNow) ? serverNow : Date.now()
+          const activities = state.activities
+            .filter((activity) => activity.connectionId === route.params.connectionId)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+          const items = new Map(state.rewardItems.map((item) => [item.id, item]))
+          const rewards = new Map(state.rewards.map((reward) => [reward.id, reward]))
           const next = await Promise.all(
-            cottages.map(async ({ id, open }, index) => {
-              const activity = state.activities.find((candidate) => candidate.id === id)!
-              try {
-                const schedules = await besideApi.schedules(activity.id)
-                return {
-                  activity,
-                  index,
-                  open: !!open,
-                  summary: activityScheduleSummary(schedules),
-                }
-              } catch {
-                return {
-                  activity,
-                  index,
-                  open: !!open,
-                  summary: "Schedule unavailable. Open the activity to try again.",
-                }
+            activities.map(async (activity) => {
+              const { open, upcoming } = attendanceMilestones(state.milestones, activity.id, now)
+              const preferred = [
+                ...open,
+                ...upcoming,
+                ...state.milestones.filter((m) => m.activityId === activity.id),
+              ]
+                .map((m) => rewards.get(m.upgradeRewardId ?? m.rewardId ?? ""))
+                .find((reward) => reward && items.has(reward.itemId))
+              const summary = await besideApi
+                .schedules(activity.id)
+                .then(activityScheduleSummary)
+                .catch(() => "Schedule unavailable. Open the activity to try again.")
+              return {
+                activity,
+                item: preferred && items.get(preferred.itemId),
+                open: open.length > 0,
+                summary,
               }
             }),
           )
@@ -120,13 +120,10 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
         ) : !rows.length ? (
           <View style={styles.empty}>
             <Text text="No activities yet" weight="semiBold" style={styles.emptyTitle} />
-            <Text
-              text="Start something together, and its cottage appears on your island."
-              style={styles.body}
-            />
+            <Text text="Start an activity to plan milestones together." style={styles.body} />
           </View>
         ) : (
-          rows.map(({ activity, summary, index, open }) => (
+          rows.map(({ activity, summary, item, open }) => (
             <Pressable
               key={activity.id}
               testID={`activity-row-${activity.id}`}
@@ -135,12 +132,16 @@ export function ActivitiesScreen({ navigation, route }: AppStackScreenProps<"Act
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
               <View style={styles.calendar}>
-                <PixelArtSprite art={cottageArt(index, open)} scale={1} />
+                {item ? (
+                  <RewardSprite item={item} scale={1.5} />
+                ) : (
+                  <Text text="◇" style={styles.indicator} />
+                )}
               </View>
               <View style={styles.rowContent}>
                 <Text text={activity.name} weight="semiBold" style={styles.activityName} />
                 <Text text={summary} style={styles.summary} />
-                {open && <Text text="● Lights on: open now" style={styles.open} />}
+                {open && <Text text="● Open now" style={styles.open} />}
               </View>
               <Text text="›" style={styles.chevron} />
             </Pressable>
@@ -176,6 +177,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: world.ink, fontSize: 18, lineHeight: 24 },
   error: { color: world.error, fontSize: 14, lineHeight: 22 },
   header: { paddingBottom: 24, paddingHorizontal: 20 },
+  indicator: { color: world.forest, fontSize: 24, lineHeight: 28 },
   open: { color: world.leaf, fontSize: 12, lineHeight: 18 },
   pressed: { opacity: 0.75 },
   retry: {

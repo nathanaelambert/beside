@@ -177,7 +177,7 @@ export function quantityLabel(quantity: number, unit: string) {
 }
 
 export function isWindowOpen(start: string | null, end: string | null, now = Date.now()) {
-  return !!start && !!end && Date.parse(start) <= now && now <= Date.parse(end)
+  return (!start || Date.parse(start) <= now) && (!end || now <= Date.parse(end))
 }
 
 export function occurrenceLabels(start: string | null, end: string | null, timeZone: string) {

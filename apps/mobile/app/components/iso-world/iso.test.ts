@@ -1,4 +1,3 @@
-import type { ApiState } from "@beside/api-client"
 import {
   checkMeadowPlacement,
   checkStarterOakPlacement,
@@ -6,11 +5,11 @@ import {
 } from "@beside/api-client/garden"
 
 import { bitmapToPixelArt } from "./bitmap"
-import { homeActivities, plantableTiles, plantingTap, tileCentre } from "./homeWorld"
+import { plantableTiles, plantingTap, tileCentre } from "./homeWorld"
 import { paintGround } from "./paint"
 import { isoToScreen, mapFrame, screenToIso } from "./projection"
 import { house } from "./props"
-import { buildActivityScene, buildHomeScene, hitTest, homeFrame, HOUSE_LOTS } from "./scene"
+import { buildGatheringScene, buildHomeScene, hitTest, homeFrame } from "./scene"
 import { meadowTileMap, tileAt } from "./tilemap"
 import { avatarsForMembers } from "../pixel-world/avatars"
 
@@ -64,20 +63,6 @@ describe("meadow tile map", () => {
       expect(checkStarterOakPlacement(tileCentre(col, row))).toBeNull()
     }
   })
-
-  it("keeps cottage lots off land anyone could plant on", () => {
-    for (const [col, row] of HOUSE_LOTS)
-      expect(checkStarterOakPlacement(tileCentre(col, row))).not.toBeNull()
-  })
-
-  it("keeps cottages clear of the meadow's decorations", () => {
-    for (const [col, row] of HOUSE_LOTS.slice(0, 5))
-      for (const item of initialMeadowItems) {
-        const near =
-          Math.abs(item.x / 16 - (col + 0.5)) < 0.7 && Math.abs(item.y / 16 - (row + 0.5)) < 0.7
-        expect(near).toBe(false)
-      }
-  })
 })
 
 describe("painting", () => {
@@ -106,20 +91,16 @@ describe("home scene", () => {
   const scene = buildHomeScene({
     avatars,
     items: [...initialMeadowItems, { key: "reward-r1", itemId: "sunflower", x: 104, y: 104 }],
-    activities: [
-      { id: "a1", name: "Read together", open: true },
-      { id: "a2", name: "Walk" },
-    ],
   })
 
-  it("places one cottage per activity and draws back to front", () => {
-    expect(scene.houses.map((h) => h.activity.id)).toEqual(["a1", "a2"])
+  it("draws saved rewards back to front without activity buildings", () => {
+    expect(scene.drawables.some((d) => d.key.startsWith("house-"))).toBe(false)
     const depths = scene.drawables.map((d) => d.depth)
     expect(depths).toEqual([...depths].sort((a, b) => a - b))
     expect(scene.drawables.some((d) => d.key === "reward-r1")).toBe(true)
   })
 
-  it("hit-tests friends and cottages, front-most first", () => {
+  it("hit-tests friends and earned objects, front-most first", () => {
     for (const avatar of avatars) {
       const d = scene.drawables.find((x) => x.key === `avatar-${avatar.key}`)!
       expect(hitTest(scene.drawables, d.baseX, d.baseY - 8, 22)).toEqual({
@@ -127,22 +108,12 @@ describe("home scene", () => {
         id: avatar.key,
       })
     }
-    const cottage = scene.drawables.find((x) => x.key === "house-a1")!
-    expect(hitTest(scene.drawables, cottage.baseX, cottage.baseY - 20, 22)).toEqual({
-      type: "house",
-      id: "a1",
+    const reward = scene.drawables.find((x) => x.key === "reward-r1")!
+    expect(hitTest(scene.drawables, reward.baseX, reward.baseY - 3, 22)).toEqual({
+      type: "item",
+      id: "reward-r1",
+      itemId: "sunflower",
     })
-  })
-
-  it("never hides a friend behind a cottage", () => {
-    const friends = scene.drawables.filter((d) => d.source.type === "avatar")
-    const cottages = scene.drawables.filter((d) => d.key.startsWith("house-"))
-    for (const f of friends)
-      for (const c of cottages) {
-        const overlapX = f.x < c.x + c.width - 16 && f.x + f.width > c.x + 16
-        const overlapY = f.y < c.baseY && f.baseY > c.top
-        expect(overlapX && overlapY && c.depth > f.depth).toBe(false)
-      }
   })
 
   it("maps a planting tap to the centre of the tapped tile", () => {
@@ -156,41 +127,26 @@ describe("home scene", () => {
     expect(plantingTap(homeFrame, wet.x, wet.y).rejection).toBe("terrain")
   })
 
-  it("draws who checked in outside the activity's cottage", () => {
-    const plot = buildActivityScene({ roof: "clay", lit: true, attendees: avatars.slice(0, 2) })
+  it("shows friends checking in and keeps the decorative cottage in the auth scene", () => {
+    const plot = buildGatheringScene(avatars.slice(0, 2))
     expect(plot.drawables.filter((d) => d.source.type === "avatar")).toHaveLength(2)
-    expect(plot.drawables.some((d) => d.key === "house-plot")).toBe(true)
+    expect(plot.drawables.some((d) => d.key === "decorative-cottage")).toBe(false)
+    expect(
+      buildGatheringScene(avatars, true).drawables.some((d) => d.key === "decorative-cottage"),
+    ).toBe(true)
   })
-})
 
-describe("home data", () => {
-  const state = {
-    activities: [
-      { id: "b", connectionId: "h1", name: "Later", createdAt: "2026-11-02T00:00:00Z" },
-      { id: "a", connectionId: "h1", name: "Earlier", createdAt: "2026-11-01T00:00:00Z" },
-      { id: "x", connectionId: "h2", name: "Elsewhere", createdAt: "2026-10-01T00:00:00Z" },
-    ],
-    milestones: [
-      {
-        id: "m",
-        activityId: "b",
-        kind: "achievement",
-        startAt: "2026-11-13T10:00:00Z",
-        endAt: "2026-11-13T20:00:00Z",
-      },
-    ],
-    rewards: [
-      { id: "r2", homebaseId: "h1", itemId: "owl-statue", obtainedAt: "2026-11-05T00:00:00Z" },
-      { id: "r1", homebaseId: "h1", itemId: "sunflower", obtainedAt: "2026-11-04T00:00:00Z" },
-      { id: "r0", homebaseId: "h1", itemId: "star-statue", obtainedAt: null },
-    ],
-  } as unknown as ApiState
-
-  it("keeps cottages in creation order and lights the ones open now", () => {
-    expect(homeActivities(state, "h1", Date.parse("2026-11-13T12:00:00Z"))).toEqual([
-      { id: "a", name: "Earlier", open: false },
-      { id: "b", name: "Later", open: true },
-    ])
+  it("renders a placed cottage and changes its look at higher levels without moving its anchor", () => {
+    const item = { key: "reward-cottage", itemId: "cozy-cottage", x: 104, y: 104 }
+    const sceneAt = (upgradeCount: number) =>
+      buildHomeScene({ avatars: [], items: [{ ...item, upgradeCount }] }).drawables.find(
+        (d) => d.key === item.key,
+      )!
+    const base = sceneAt(0)
+    const upgraded = sceneAt(4)
+    expect(upgraded.source).not.toEqual(base.source)
+    expect(upgraded.source).not.toEqual(sceneAt(3).source)
+    expect(upgraded).toMatchObject({ baseX: base.baseX, baseY: base.baseY, hit: base.hit })
   })
 })
 

@@ -1,6 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, RefreshControl, View, ViewStyle } from "react-native"
-import type { ApiState, MilestoneSchedule, RewardAgreement } from "@beside/api-client"
+import {
+  rewardLevel,
+  type ApiState,
+  type MilestoneSchedule,
+  type RewardAgreement,
+  type UpdateMilestoneInput,
+} from "@beside/api-client"
 import type { RewardItem } from "@beside/rewards"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -11,13 +17,13 @@ import {
   WorldSchedulePanel,
 } from "@/components/ActivityWorld"
 import { PixelArtSprite } from "@/components/BesideMark"
-import { homeActivities } from "@/components/iso-world/homeWorld"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
-import { buildActivityScene, roofForIndex } from "@/components/iso-world/scene"
-import { MilestoneReward, RewardChip, RewardLanded } from "@/components/MilestoneReward"
+import { buildGatheringScene } from "@/components/iso-world/scene"
+import { MilestoneReward, RewardLanded } from "@/components/MilestoneReward"
 import { avatarsForMembers } from "@/components/pixel-world/avatars"
 import { catalogue } from "@/components/pixel-world/scene"
 import { RewardChangeSheet } from "@/components/RewardChangeSheet"
+import { RewardChip } from "@/components/RewardChip"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { useAuth } from "@/context/AuthContext"
@@ -35,6 +41,8 @@ import {
   cadenceFromSchedule,
   firstName,
   meadowCounts,
+  namesLabel,
+  rewardMemory,
   rewardStatus,
 } from "@/utils/rewardChoice"
 
@@ -140,6 +148,42 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   const cadence = cadenceFromSchedule(schedules[0]?.configuration)
   const itemFor = (itemId: string): RewardItem | undefined =>
     data?.rewardItems.find((item) => item.id === itemId) ?? catalogue.get(itemId)
+  const activeNames = members
+    .filter((member) =>
+      data?.participations.some(
+        (p) => p.activityId === activityId && p.userId === member.id && p.status === "active",
+      ),
+    )
+    .map((member) => firstName(member.name))
+  const upgradeOptions =
+    changing && data
+      ? data.rewards.flatMap((reward) => {
+          if (!reward.obtainedAt || reward.homebaseId !== activity?.connectionId) return []
+          const item = itemFor(reward.itemId)
+          if (!item) return []
+          const { milestone, activity: source } = rewardMemory(data, reward.id)
+          const date = new Date(reward.obtainedAt).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+          return [
+            {
+              id: reward.id,
+              item,
+              detail: [
+                `Level ${rewardLevel(reward.upgradeCount)}`,
+                source?.name,
+                milestone?.name,
+                date,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            },
+          ]
+        })
+      : []
   const changeable = (milestone: Milestone) =>
     !(data?.logs ?? []).some((log) => log.milestoneId === milestone.id) &&
     (!milestone.endAt || Date.parse(milestone.endAt) >= now)
@@ -155,9 +199,10 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     data?.milestones.filter(
       (m) =>
         m.activityId === activityId &&
-        m.rewardId &&
+        (m.rewardId || m.upgradeRewardId) &&
         !listed.has(m.id) &&
-        (data.rewards.find((r) => r.id === m.rewardId)?.obtainedAt ||
+        (m.upgradeCreditedAt ||
+          data.rewards.find((r) => r.id === m.rewardId)?.obtainedAt ||
           (m.endAt &&
             Date.parse(m.endAt) < now &&
             data.logs.some((log) => log.milestoneId === m.id))),
@@ -191,12 +236,12 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     }
   }
 
-  async function changeReward(itemId: string | null) {
+  async function changeReward(choice: Pick<UpdateMilestoneInput, "itemId" | "upgradeRewardId">) {
     if (!changing || changeSaving) return
     setChangeSaving(true)
     setChangeError("")
     try {
-      await besideApi.updateMilestone(changing.id, { itemId })
+      await besideApi.updateMilestone(changing.id, choice)
       setChanging(undefined)
       setRefresh((value) => value + 1)
     } catch (e) {
@@ -208,6 +253,44 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
 
   function renderReward(milestone: Milestone, open: boolean) {
     if (!data) return null
+    const target = data.rewards.find((reward) => reward.id === milestone.upgradeRewardId)
+    const upgradeItem = target && itemFor(target.itemId)
+    if (target && upgradeItem) {
+      const attendance = attendanceMembers(data.logs, milestone.id)
+      const roster = milestone.upgradeRequiredUserIds
+      const waiting = roster
+        .filter((id) => !attendance.has(id))
+        .map((id) => firstName(data.users.find((member) => member.id === id)?.name ?? "Member"))
+      const level = rewardLevel(target.upgradeCount)
+      const outcome = milestone.upgradeCreditedAt
+        ? "Upgrade earned"
+        : milestone.endAt && Date.parse(milestone.endAt) < now
+          ? "Upgrade window closed"
+          : `Upgrade planned · ${roster.length - waiting.length} of ${roster.length} checked in · Waiting on ${namesLabel(waiting)}`
+      const chip = <RewardChip item={upgradeItem} detail={`Level ${level} · ${outcome}`} />
+      if (changeable(milestone))
+        return (
+          <Pressable
+            accessibilityRole="button"
+            testID="reward-change-upgrade"
+            onPress={() => setChanging(milestone)}
+          >
+            {chip}
+          </Pressable>
+        )
+      if (milestone.upgradeCreditedAt)
+        return (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              placedIds.has(target.id) ? viewReward(target.id) : placeReward(target.id)
+            }
+          >
+            {chip}
+          </Pressable>
+        )
+      return chip
+    }
     const reward = data.rewards.find((r) => r.id === milestone.rewardId)
     if (!reward)
       return changeable(milestone) ? (
@@ -246,7 +329,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
               : status === "missed"
                 ? "Not earned"
                 : "Locked in"
-      const chip = <RewardChip item={item} detail={detail} />
+      const level = reward.obtainedAt ? `Level ${rewardLevel(reward.upgradeCount)} · ` : ""
+      const chip = <RewardChip item={item} detail={level + detail} />
       return changeable(milestone) ? (
         <Pressable
           accessibilityRole="button"
@@ -270,6 +354,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
       <MilestoneReward
         item={item}
         status={status}
+        level={reward.obtainedAt ? rewardLevel(reward.upgradeCount) : undefined}
         roster={roster}
         agreed={agreed}
         checkedIn={attendanceMembers(data.logs, milestone.id)}
@@ -285,25 +370,18 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   }
   const confirmedAttendee = currentOccurrence && confirmed[currentOccurrence.id]
   if (confirmedAttendee) currentAttendance.add(confirmedAttendee)
-  const roofIndex =
-    data && activity
-      ? homeActivities(data, activity.connectionId, now).findIndex((a) => a.id === activityId)
-      : 0
   const attendeeKey = memberAvatars
     .filter((avatar) => currentAttendance.has(avatar.key))
     .map((avatar) => avatar.key)
     .join(",")
-  const lit = !!currentOccurrence
   const plot = useMemo(
     () =>
-      buildActivityScene({
-        roof: roofForIndex(roofIndex),
-        lit,
-        attendees: memberAvatars.filter((avatar) => attendeeKey.split(",").includes(avatar.key)),
-      }),
+      buildGatheringScene(
+        memberAvatars.filter((avatar) => attendeeKey.split(",").includes(avatar.key)),
+      ),
     // memberAvatars is rebuilt every render; the attendee keys capture what is drawn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [roofIndex, lit, attendeeKey, data],
+    [attendeeKey, data],
   )
   const [plotWidth, setPlotWidth] = useState(0)
   const plotZoom = plotWidth >= plot.frame.width * 3 ? 3 : plotWidth >= plot.frame.width * 2 ? 2 : 1
@@ -450,7 +528,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                   zoom={plotZoom}
                   focus={{ u: 2.2, v: 1.6 }}
                   interactive={false}
-                  accessibilityLabel={`${activity.name} cottage. ${currentAttendance.size} of ${memberAvatars.length} friends here.`}
+                  accessibilityLabel={`${currentAttendance.size} of ${memberAvatars.length} friends checked in.`}
                 />
               )}
               <View pointerEvents="none" style={$plotLabel}>
@@ -458,8 +536,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
                   testID="activity-plot-caption"
                   text={
                     currentOccurrence
-                      ? `${currentAttendance.size} of ${memberAvatars.length} here · lights on`
-                      : "Lights off until the next session"
+                      ? `${currentAttendance.size} of ${memberAvatars.length} checked in`
+                      : "No session open"
                   }
                   style={$plotLabelText}
                 />
@@ -552,6 +630,14 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
           milestoneName={changing.name}
           items={data.rewardItems}
           initial={data.rewards.find((r) => r.id === changing.rewardId)?.itemId ?? null}
+          initialUpgradeId={changing.upgradeRewardId ?? null}
+          upgrades={upgradeOptions}
+          upgradeRosterNames={activeNames}
+          initialUpgradeRosterNames={
+            changing.upgradeRequiredUserIds?.map((id) =>
+              firstName(data.users.find((member) => member.id === id)?.name ?? "Member"),
+            ) ?? []
+          }
           cadence={cadence}
           counts={meadowCounts(data, activity?.connectionId)}
           rosterNames={members.map((member) => firstName(member.name))}
@@ -561,7 +647,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
             setChanging(undefined)
             setChangeError("")
           }}
-          onSave={(itemId) => void changeReward(itemId)}
+          onSave={(choice) => void changeReward(choice)}
         />
       )}
     </View>

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { PixelRatio, StyleSheet } from "react-native"
 import { Canvas, Group, Image, ImageShader, Path, Rect } from "@shopify/react-native-skia"
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler"
@@ -6,6 +6,7 @@ import {
   cancelAnimation,
   Easing,
   runOnJS,
+  useAnimatedReaction,
   useDerivedValue,
   useReducedMotion,
   useSharedValue,
@@ -28,9 +29,11 @@ import type { Bitmap } from "./bitmap"
 import { recolor } from "./islandPalettes"
 import { paintGround, SEA_TILE, seaTile, waterGlints } from "./paint"
 import { isoToScreen, type MapFrame } from "./projection"
+import { pocketWatchArt } from "./rewardClockArt"
 import { type Drawable, type HitTarget } from "./scene"
 import { artImage, bitmapImage, sampling } from "./skia"
 import type { TileMap } from "./tilemap"
+import { useRewardCountdown } from "./useRewardCountdown"
 import { voyagePoint, type VoyagePath } from "./voyage"
 import { Boat } from "./VoyageBoat"
 import type { Avatar } from "../pixel-world/avatars"
@@ -236,6 +239,7 @@ export type IsoWorldCanvasProps = SceneProps & {
   previewTile?: { col: number; row: number }
   interactive?: boolean
   accessibilityLabel?: string
+  showConstruction?: boolean
   voyage?: CanvasVoyage
   onArrival?: () => void
   onTap?: (result: { islandKey?: string; hit?: HitTarget; x: number; y: number }) => void
@@ -279,6 +283,54 @@ function IslandSign({
   )
 }
 
+type Viewport = SharedValue<{ left: number; top: number; right: number; bottom: number }>
+
+function BuildingReward({
+  drawable,
+  tick,
+  viewport,
+  offset,
+}: {
+  drawable: Drawable
+  tick: SharedValue<number>
+  viewport: Viewport
+  offset: IslandLayer["offset"]
+}) {
+  const [visible, setVisible] = useState(false)
+  const x = drawable.baseX - 6
+  const y = Math.min(drawable.top, drawable.baseY - 24)
+  const worldX = x + offset.x
+  const worldY = y + offset.y
+  useAnimatedReaction(
+    () => {
+      const { left, top, right, bottom } = viewport.value
+      return worldX < right && worldX + 13 > left && worldY < bottom && worldY + 14 > top
+    },
+    (next, previous) => {
+      if (next !== previous) runOnJS(setVisible)(next)
+    },
+  )
+  const seconds = useRewardCountdown(drawable.buildDeadline, visible)
+  return (
+    <>
+      <DrawableNode
+        drawable={seconds > 0 ? { ...drawable, opacity: 0.42 } : drawable}
+        tick={tick}
+      />
+      {seconds > 0 && (
+        <Image
+          image={artImage(pocketWatchArt(seconds))}
+          x={x}
+          y={y}
+          width={13}
+          height={14}
+          sampling={sampling}
+        />
+      )}
+    </>
+  )
+}
+
 const IslandNodes = memo(function IslandNodes({
   island,
   tick,
@@ -289,6 +341,7 @@ const IslandNodes = memo(function IslandNodes({
   signZoom,
   ratio,
   focused,
+  constructionViewport,
 }: {
   island: IslandLayer
   tick: SharedValue<number>
@@ -299,6 +352,7 @@ const IslandNodes = memo(function IslandNodes({
   signZoom: SharedValue<number>
   ratio: number
   focused: boolean
+  constructionViewport?: Viewport
 }) {
   const { map, frame, drawables, offset } = island
   // The island you're on shows its sign with the "you are here" pennant.
@@ -328,9 +382,21 @@ const IslandNodes = memo(function IslandNodes({
       ))}
       {!!guidePath && <Guide path={guidePath} tick={tick} />}
       {!!previewPath && <Guide path={previewPath} tick={tick} strong />}
-      {drawables.map((drawable) => (
-        <DrawableNode key={drawable.key} drawable={drawable} tick={tick} />
-      ))}
+      {drawables.map((drawable) =>
+        constructionViewport &&
+        drawable.buildDeadline !== undefined &&
+        drawable.buildDeadline > performance.now() ? (
+          <BuildingReward
+            key={drawable.key}
+            drawable={drawable}
+            tick={tick}
+            viewport={constructionViewport}
+            offset={offset}
+          />
+        ) : (
+          <DrawableNode key={drawable.key} drawable={drawable} tick={tick} />
+        ),
+      )}
       {selected && <Marker x={selected.baseX} top={selected.top} tick={tick} />}
       {sign && <IslandSign sign={sign} tick={tick} visible={signs} zoom={signZoom} ratio={ratio} />}
     </Group>
@@ -361,6 +427,7 @@ export function IsoWorldCanvas({
   previewTile,
   interactive = true,
   accessibilityLabel,
+  showConstruction,
   onTap,
   onPinch,
   voyage,
@@ -482,6 +549,15 @@ export function IsoWorldCanvas({
     { scale: camera.value.zoom },
   ])
   const signZoom = useDerivedValue(() => camera.value.zoom)
+  const viewport = useDerivedValue(() => {
+    const { x, y, zoom: scale } = camera.value
+    return {
+      left: -x / scale,
+      top: -y / scale,
+      right: (width - x) / scale,
+      bottom: (height - y) / scale,
+    }
+  })
   const signs = useDerivedValue<number>(() => (camera.value.zoom <= 1 ? 1 : 0))
   const enabled = interactive && !voyage
   const pan = Gesture.Pan()
@@ -551,6 +627,7 @@ export function IsoWorldCanvas({
                 signs={signs}
                 signZoom={signZoom}
                 ratio={ratio}
+                constructionViewport={showConstruction ? viewport : undefined}
               />
             ))}
             {voyage && <Boat path={voyage.path} progress={boatProgress} avatar={voyage.avatar} />}

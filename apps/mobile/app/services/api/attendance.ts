@@ -21,7 +21,8 @@ export function attendanceMilestones(milestones: Milestone[], activityId: string
   const byStart = (a: Milestone, b: Milestone) =>
     (a.startAt ? Date.parse(a.startAt) : Infinity) -
       (b.startAt ? Date.parse(b.startAt) : Infinity) || a.id.localeCompare(b.id)
-  open.sort((a, b) => Date.parse(a.endAt!) - Date.parse(b.endAt!) || byStart(a, b))
+  const byEnd = (milestone: Milestone) => (milestone.endAt ? Date.parse(milestone.endAt) : Infinity)
+  open.sort((a, b) => byEnd(a) - byEnd(b) || byStart(a, b))
   upcoming.sort(byStart)
   return { open, upcoming }
 }

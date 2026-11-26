@@ -9,16 +9,24 @@ import { loadString, saveString } from "@/utils/storage"
 
 import { archipelagoLayout, type IslandLayer } from "./archipelago"
 import { islandSign, islandVariantSeed, JETTY, jetty } from "./archipelagoProps"
-import { homeActivities, rewardKey } from "./homeWorld"
+import { rewardKey } from "./homeWorld"
 import { assignIslandPalettes, recolorTerrain } from "./islandPalettes"
-import { buildHomeScene, catalogue, sortDrawables, spriteDrawable } from "./scene"
+import {
+  buildHomeScene,
+  catalogue,
+  sortDrawables,
+  spriteDrawable,
+  type HomeSceneInput,
+} from "./scene"
 import { avatarsForMembers } from "../pixel-world/avatars"
 import { oakAt } from "../pixel-world/starterOak"
+
+type GardenSnapshot = { garden: HomebaseGarden; receivedAt: number }
 
 type ArchipelagoData = {
   bases: ApiHomebase[]
   state: ApiState
-  gardens: Record<string, HomebaseGarden | undefined>
+  gardens: Record<string, GardenSnapshot | undefined>
   /** Membership order: islands keep fixed places on the map, wherever you open. */
   order: string[]
 }
@@ -69,7 +77,8 @@ export function useHomeArchipelago(
           const gardens = await Promise.all(
             bases.map(async (base) => {
               try {
-                return [base.id, await besideApi.homebaseGarden(base.id)] as const
+                const garden = await besideApi.homebaseGarden(base.id)
+                return [base.id, { garden, receivedAt: performance.now() }] as const
               } catch (e) {
                 if (e instanceof ApiError && e.status === 404) missing.add(base.id)
                 if (active)
@@ -128,9 +137,10 @@ export function useHomeArchipelago(
     return (garden: HomebaseGarden | undefined) => {
       if (gardenRequests.current.get(id) !== request) return false
       gardenRevisions.current.set(id, (gardenRevisions.current.get(id) ?? 0) + 1)
+      const snapshot = garden && { garden, receivedAt: performance.now() }
       setData((current) =>
         gardenRequests.current.get(id) === request && current?.bases.some((base) => base.id === id)
-          ? { ...current, gardens: { ...current.gardens, [id]: garden } }
+          ? { ...current, gardens: { ...current.gardens, [id]: snapshot } }
           : current,
       )
       return true
@@ -142,8 +152,6 @@ export function useHomeArchipelago(
     const multiple = data.bases.length > 1
     // Your oldest island keeps the original colours; the others get their own.
     const palettes = multiple ? assignIslandPalettes(data.bases.map((base) => base.id)) : {}
-    const serverNow = Date.parse(data.state.serverTime ?? "")
-    const now = Number.isFinite(serverNow) ? serverNow : Date.now()
     return data.order.flatMap((id) => {
       const homebase = data.bases.find((base) => base.id === id)
       if (!homebase) return []
@@ -152,9 +160,10 @@ export function useHomeArchipelago(
           data.state.users.find((u) => u.id === memberId) ?? { id: memberId, name: "Member" },
       )
       const avatars = avatarsForMembers(members)
-      const garden = data.gardens[id]
-      const activities = homeActivities(data.state, id, now)
-      const items = [
+      const snapshot = data.gardens[id]
+      const garden = snapshot?.garden
+      const serverTime = Date.parse(garden?.serverTime ?? "")
+      const items: HomeSceneInput["items"] = [
         ...initialMeadowItems.filter((item) => catalogue.get(item.itemId)?.category === "Trees"),
         ...(garden?.oak ? [oakAt(garden.oak)] : []),
         ...(garden?.rewards ?? []).map((p) => ({
@@ -162,11 +171,15 @@ export function useHomeArchipelago(
           itemId: p.itemId,
           x: p.x,
           y: p.y,
+          upgradeCount: p.upgradeCount,
+          buildDeadline:
+            p.buildReadyAt && snapshot && Number.isFinite(serverTime)
+              ? snapshot.receivedAt + Date.parse(p.buildReadyAt) - serverTime
+              : undefined,
         })),
       ]
       const scene = buildHomeScene({
         avatars,
-        activities,
         items,
         variantSeed: multiple ? islandVariantSeed(id) : 0,
       })
@@ -192,7 +205,7 @@ export function useHomeArchipelago(
           ? spriteDrawable(scene.frame, "sign-here", islandSign(homebase.name, true), signAt)
           : undefined,
       }
-      return [{ homebase, members, avatars, activities, garden, items, scene, layer }]
+      return [{ homebase, members, avatars, garden, items, scene, layer }]
     })
   }, [data])
   const focused = islands.find((island) => island.homebase.id === focusedId) ?? islands[0]

@@ -1,25 +1,9 @@
-import type { ApiState } from "@beside/api-client"
 import { checkMeadowPlacement, meadowPlacements, type MeadowPoint } from "@beside/api-client/garden"
 
-import { attendanceMilestones } from "@/services/api/attendance"
-
 import { CELL, screenToIso, type MapFrame } from "./projection"
-import type { HomeActivity } from "./scene"
 
-/** The picnic blanket and the cottages beside it. */
+/** The picnic blanket where friends gather. */
 export const homeFocus = { u: 8.6, v: 9.3 }
-
-/** Activities of one home base, oldest first, so each keeps its cottage as new ones arrive. */
-export function homeActivities(state: ApiState, homebaseId: string, now: number): HomeActivity[] {
-  return state.activities
-    .filter((activity) => activity.connectionId === homebaseId)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
-    .map((activity) => ({
-      id: activity.id,
-      name: activity.name,
-      open: attendanceMilestones(state.milestones, activity.id, now).open.length > 0,
-    }))
-}
 
 /**
  * In the iso view an oak or reward goes in the middle of a tile. Tile centres are on PR #14's 8-pixel

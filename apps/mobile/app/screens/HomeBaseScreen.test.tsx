@@ -1,8 +1,8 @@
 import type { EffectCallback } from "react"
-import { useReducedMotion } from "react-native-reanimated"
 import { ApiError, type ApiHomebase, type ApiState } from "@beside/api-client"
 import { checkMeadowPlacement } from "@beside/api-client/garden"
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native"
+import { useReducedMotion } from "react-native-reanimated"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 
 import { plantableTiles, tileCentre } from "@/components/iso-world/homeWorld"
@@ -276,6 +276,9 @@ const earnedState: ApiState = {
       startAt: null,
       endAt: null,
       rewardId: "earned",
+      upgradeRewardId: null,
+      upgradeRequiredUserIds: [],
+      upgradeCreditedAt: null,
       createdAt: "2026-11-01T00:00:00Z",
     },
   ],
@@ -286,6 +289,8 @@ const earnedState: ApiState = {
       itemId: "sunflower",
       obtainedAt: "2026-11-18T12:00:00Z",
       requiredUserIds: ["alice", "bob"],
+      upgradeCount: 4,
+      buildReadyAt: null,
     },
   ],
 }
@@ -328,6 +333,7 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   expect(besideApi.placeReward).toHaveBeenCalledWith(base.id, "earned", firstPoint)
   expect(screen.getByTestId("homebase-reward-memory")).toBeTruthy()
   expect(screen.getByText("Earned for “Finish Dune” · Book club")).toBeTruthy()
+  expect(screen.getByText("Level 5 · 4 upgrades")).toBeTruthy()
   expect(screen.getByText(/with Alice and Bob/)).toBeTruthy()
   expect(screen.queryByTestId("homebase-reward-waiting")).toBeNull()
   expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(true)
@@ -370,7 +376,7 @@ it("uses saved reward occupancy when offering oak tiles", async () => {
   expect(canvasProps().previewTile).toBeUndefined()
 })
 
-it("follows the activity landing link into island placement and opens a cottage", async () => {
+it("follows the reward placement link and keeps activities in the Activities list", async () => {
   jest.mocked(besideApi.state).mockResolvedValue(earnedState)
   const screen = openScreen(390, { rewardId: "earned", place: true })
   await screen.findByTestId("place-reward-panel")
@@ -380,9 +386,9 @@ it("follows the activity landing link into island placement and opens a cottage"
   })
   expect(canvasProps().previewTile).toBeDefined()
   fireEvent.press(screen.getByRole("button", { name: "Cancel" }))
-  act(() => canvasProps().onTap!({ x: 0, y: 0, hit: { type: "house", id: "read" } }))
-  fireEvent.press(screen.getByTestId("homebase-open-activity"))
-  expect(screen.navigation.navigate).toHaveBeenCalledWith("ActivityDetail", { activityId: "read" })
+  expect(canvasProps().drawables!.some((d) => d.key.startsWith("house-"))).toBe(false)
+  fireEvent.press(screen.getByTestId("homebase-activities"))
+  expect(screen.navigation.navigate).toHaveBeenCalledWith("Activities", { connectionId: base.id })
 })
 
 it("refreshes shared occupancy after a placement race without closing the reward editor", async () => {
