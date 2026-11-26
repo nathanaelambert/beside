@@ -761,3 +761,55 @@ test("automatic milestone zero covers single-member and multi-member activities,
     assert.ok(parseDatabase(milestone.db));
   }
 });
+
+test("v3 reward and milestone rows acquire legacy-safe upgrade and build defaults", () => {
+  const db = createSeed();
+  const legacy = JSON.parse(JSON.stringify(db));
+  for (const reward of legacy.rewards) {
+    delete reward.upgradeCount;
+    delete reward.buildReadyAt;
+  }
+  for (const milestone of legacy.milestones) {
+    delete milestone.upgradeRewardId;
+    delete milestone.upgradeRequiredUserIds;
+    delete milestone.upgradeCreditedAt;
+  }
+  assert.deepEqual(parseDatabase(legacy), db);
+});
+
+test("leaving after an upgrade is planned cannot shrink its required roster", () => {
+  const earned = plan(createSeed(), { itemId: "oak-tree" });
+  const first = record(earned.db, { milestoneId: earned.entityId });
+  const second = record(first.db, {
+    milestoneId: earned.entityId,
+    authorUserId: "nathaniel",
+  });
+  const rewardId = second.db.milestones.find(
+    (row) => row.id === earned.entityId,
+  )!.rewardId!;
+  const upgrade = plan(second.db, { upgradeRewardId: rewardId });
+  const join = upgrade.db.milestones.find(
+    (m) => m.activityId === book(upgrade.db).id && m.kind === "join",
+  )!;
+  const left = record(upgrade.db, {
+    milestoneId: join.id,
+    authorUserId: "nathaniel",
+    isSuccess: false,
+  });
+  const checkedIn = record(left.db, { milestoneId: upgrade.entityId });
+  const milestone = checkedIn.db.milestones.find(
+    (m) => m.id === upgrade.entityId,
+  )!;
+  assert.deepEqual(milestone.upgradeRequiredUserIds, ["mosaab", "nathaniel"]);
+  assert.equal(milestone.upgradeCreditedAt, null);
+  assert.equal(
+    checkedIn.db.rewards.find((reward) => reward.id === rewardId)!.upgradeCount,
+    0,
+  );
+  assert.deepEqual(parseDatabase(checkedIn.db), checkedIn.db);
+  const tampered = structuredClone(checkedIn.db);
+  tampered.milestones.find(
+    (m) => m.id === upgrade.entityId,
+  )!.upgradeCreditedAt = now;
+  assert.throws(() => parseDatabase(tampered), /required completions/);
+});

@@ -40,6 +40,8 @@ export const rewardPlacementSchema = plantStarterOakSchema.extend({
   itemId: id,
   placedByUserId: id.nullable(),
   placedAt: z.iso.datetime(),
+  upgradeCount: z.number().int().nonnegative().optional(),
+  buildReadyAt: z.iso.datetime().nullable().optional(),
 });
 export const homebaseGardenSchema = z.strictObject({
   oak: plantStarterOakSchema
@@ -48,6 +50,10 @@ export const homebaseGardenSchema = z.strictObject({
   rewards: z
     .array(rewardPlacementSchema)
     .describe("Earned rewards standing in the meadow, oldest first."),
+  serverTime: z.iso
+    .datetime()
+    .optional()
+    .describe("Server time for this garden snapshot."),
 });
 export const rewardAgreementSchema = z.object({
   rewardId: id,

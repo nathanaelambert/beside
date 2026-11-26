@@ -119,6 +119,9 @@ export function migrateMilestones(input: unknown): unknown {
       startAt: null,
       endAt: null,
       rewardId: null,
+      upgradeRewardId: null,
+      upgradeRequiredUserIds: [],
+      upgradeCreditedAt: null,
       createdAt: activity.createdAt,
     });
     for (const person of old.participations.filter(

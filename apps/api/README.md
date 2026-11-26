@@ -150,7 +150,9 @@ Milestone zero is managed automatically and cannot be edited/deleted separately.
 
 Deletion is permanent and transactional. Deleting a milestone also deletes its
 descendants, milestone logs, progress contributions, attached rewards (including
-earned ones), and related events/deliveries. Activity deletion includes all its
+earned ones), and related events/deliveries. Deleting an upgrade milestone
+preserves the level already earned on the target reward. Removing the original
+reward also clears any surviving milestones' links to it. Activity deletion includes all its
 milestones, participation and subject links. Home-base deletion includes all its
 activities, memberships, invitation code and audience links. Accounts, subjects,
 other bases and their activity history remain. Standalone legacy logs retain
@@ -184,6 +186,33 @@ Milestone submission uses server time. Log retry keys are scoped to author and
 origin. Logs, progress, rewards, events, and recipient deliveries commit together.
 Database records are the event trail; push/email delivery workers are not
 implemented yet. Non-log creation requests are not idempotent.
+
+## Island rewards and upgrades
+
+A milestone can earn one catalog item after everyone on its saved
+`requiredUserIds` roster successfully checks in. Members can place the earned
+item using `PUT /api/v1/homebases/:homebaseId/garden/rewards/:rewardId`. The
+catalog includes the Cozy cottage in Buildings. Activities themselves add no
+island objects.
+
+To plan an upgrade through `POST /api/v1/milestones` or
+`PATCH /api/v1/milestones/:milestoneId`, send `itemId: null` and set
+`upgradeRewardId` to an earned reward in the same home base. The upgrade
+snapshots the milestone activity's active participants into
+`upgradeRequiredUserIds`. The choice locks at the first log. The final required
+success sets `upgradeCreditedAt`, increments the reward's `upgradeCount`, and emits
+one `reward.upgraded` event in the same transaction. Level starts at one and
+equals one plus the upgrade count. Any earned item can be upgraded, even before
+it is placed.
+
+Migration 009 adds these fields and the cottage catalog item. It also adds
+`buildReadyAt` to rewards. First placement and each earned upgrade set this
+timestamp from server time. The garden endpoint returns it with `upgradeCount`
+and a `serverTime` for the client clock. Moving or retrying placement preserves
+the deadline. Existing placements have a null deadline and render fully built.
+Set `REWARD_BUILD_SECONDS` to a whole number from 0 to 86400. It defaults to 10
+seconds, and 0 disables the effect. When the deadline passes, the client
+displays the finished object without another server write.
 
 ## Recurring milestones and missed deadlines
 
@@ -222,7 +251,10 @@ each occurrence, with the active roster saved when that occurrence is generated.
 Schedule creation requires active participation and a start date today or later
 in the chosen timezone. Each occurrence becomes an ordinary `paced` milestone
 with independent UTC timestamps, logs, progress, and reward. Creation generates
-through 35 days ahead; cron extends the horizon. A future schedule starts
+through 35 days ahead. A generated occurrence can be switched to an upgrade
+through its milestone before the first check-in. The recurring schedule still
+plans its regular item for later occurrences.
+Cron extends the horizon. A future schedule starts
 generating when it enters that horizon. Timezone conversion keeps wall times
 stable across DST. Months missing the requested day and nonexistent spring DST
 times are skipped; autumn overlaps use the earlier instant. Count limits actual
@@ -305,6 +337,7 @@ Connect Neon through Vercel Marketplace. Set:
 - `CORS_ORIGINS`: comma-separated exact browser origins permitted to call the
   API, including the deployed playground.
 - `API_PUBLIC_URL`: canonical HTTPS API origin for OpenAPI's server URL.
+- `REWARD_BUILD_SECONDS`: optional visual build duration for island rewards.
 
 The database pool is reused per warm instance, capped at five connections, and
 attached to Vercel's lifecycle with `attachDatabasePool`. No durable state lives

@@ -35,6 +35,9 @@ export interface Milestone {
   startAt: string | null;
   endAt: string | null;
   rewardId: string | null;
+  upgradeRewardId: string | null;
+  upgradeRequiredUserIds: string[];
+  upgradeCreditedAt: string | null;
   createdAt: string;
 }
 export interface Reward {
@@ -44,6 +47,8 @@ export interface Reward {
   obtainedAt: string | null;
   // Snapshot the people whose cooperation this reward requires.
   requiredUserIds: string[];
+  upgradeCount: number;
+  buildReadyAt: string | null;
 }
 export interface Membership {
   id: string;
@@ -186,7 +191,11 @@ export type ActivityUpdate = Partial<Pick<Activity, "name" | "description">> & {
 };
 export type MilestoneUpdate = Partial<
   Pick<Milestone, "name" | "quantity" | "policy" | "startAt" | "endAt">
-> & { parentId?: string | null; itemId?: string | null };
+> & {
+  parentId?: string | null;
+  itemId?: string | null;
+  upgradeRewardId?: string | null;
+};
 
 export type Command =
   | { type: "createHomebase"; actorId: string; name: string }
@@ -251,6 +260,7 @@ export type Command =
       startAt: string | null;
       endAt: string | null;
       itemId: string | null;
+      upgradeRewardId?: string | null;
     }
   | {
       type: "recordLog";

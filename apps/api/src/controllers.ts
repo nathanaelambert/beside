@@ -315,7 +315,7 @@ export class DomainController {
   @ApiOperation({
     summary: "Edit a milestone",
     description:
-      "Any home-base member can update a milestone. Quantity, schedule, parent and reward item can change before the first log; afterward only the name can change. Saved reward rosters stay fixed. Milestone zero is managed automatically.",
+      "Any home-base member can update a milestone. Quantity, schedule, parent and reward choice can change before the first log; afterward only the name can change. Set itemId to null when switching to an upgradeRewardId, or clear upgradeRewardId when switching back. The upgrade snapshots all active activity participants. Milestone zero is managed automatically.",
   })
   updateMilestone(
     @Req() request: AuthenticatedRequest,
@@ -335,7 +335,7 @@ export class DomainController {
   @ApiOperation({
     summary: "Delete a milestone",
     description:
-      "Any home-base member can delete. Removes this milestone and all descendants, their logs, progress, rewards and related events. Milestone zero cannot be deleted separately.",
+      "Any home-base member can delete. Removes this milestone and its descendants, their logs, progress, newly awarded rewards and related events. Earned upgrades remain on surviving rewards. Milestone zero cannot be deleted separately.",
   })
   deleteMilestone(
     @Req() request: AuthenticatedRequest,
@@ -444,6 +444,11 @@ export class DomainController {
     });
   }
   @Post("milestones")
+  @ApiOperation({
+    summary: "Plan a milestone with an optional reward or upgrade",
+    description:
+      "Use itemId to plan a new item. To upgrade an earned reward in the same home base, set itemId to null and supply upgradeRewardId. All active participants at planning time must complete the milestone for the upgrade to count.",
+  })
   @ApiBody({ schema: ref("CreateMilestone") })
   @ApiCreatedResponse({ schema: ref("Mutation") })
   createMilestone(@Req() request: AuthenticatedRequest, @Body() body: unknown) {

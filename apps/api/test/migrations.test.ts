@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { createSeed } from "@beside/domain/seed";
+import { execute } from "@beside/domain/model";
 import { parseDatabase } from "@beside/domain/validation";
 import { createPool, loadDatabase } from "../src/db/storage.ts";
 import { sqlName, tables } from "../src/db/tables.ts";
@@ -90,7 +91,7 @@ it(
 );
 
 it(
-  "upgrades populated v2 PostgreSQL data without losing progress, rewards or existing invitation codes",
+  "migrates legacy PostgreSQL data through reward upgrades, preserving progress, placements and invites",
   { skip: !process.env.TEST_DATABASE_URL },
   async () => {
     const pool = createPool(process.env.TEST_DATABASE_URL!);
@@ -106,12 +107,54 @@ it(
           "utf8",
         ),
       );
-      const seed = createSeed();
+      let seed = createSeed();
+      const now = "2026-11-26T12:00:00.000Z";
+      const activityId = seed.activities.find(
+        (activity) => activity.connectionId === "mn",
+      )!.id;
+      const planned = execute(
+        seed,
+        {
+          type: "createMilestone",
+          actorId: "mosaab",
+          activityId,
+          parentId: null,
+          name: "Legacy garden reward",
+          quantity: 1,
+          policy: "open",
+          startAt: null,
+          endAt: null,
+          itemId: "sunflower",
+        },
+        now,
+      );
+      seed = planned.db;
+      for (const actorId of ["mosaab", "nathaniel"])
+        seed = execute(
+          seed,
+          {
+            type: "recordLog",
+            actorId,
+            input: {
+              milestoneId: planned.entityId,
+              authorUserId: actorId,
+              isSuccess: true,
+              origin: "manual",
+              title: "Done",
+              durationMinutes: 0,
+            },
+          },
+          now,
+        ).db;
       for (const [key, table, currentColumns] of tables) {
-        const columns: string[] = [...currentColumns];
+        const columns: string[] = currentColumns.filter(
+          (column) =>
+            !column.startsWith("upgrade") && column !== "buildReadyAt",
+        );
         if (key === "connections" || key === "activities")
           columns.push("personalOwnerId");
         for (const row of seed[key]) {
+          if (key === "rewardItems" && row.id === "cozy-cottage") continue;
           const record = { ...row } as unknown as Record<string, unknown>;
           if (key === "connections")
             record.personalOwnerId = record
@@ -155,6 +198,36 @@ it(
           "utf8",
         ),
       );
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/008_reward_agreements_and_placements.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      const placed = seed.rewards.find((reward) => reward.obtainedAt)!;
+      await client.query(
+        "INSERT INTO reward_placement (reward_id, x, y) VALUES ($1, 104, 104)",
+        [placed.id],
+      );
+      await client.query("SET CONSTRAINTS ALL IMMEDIATE");
+      await client.query(
+        await readFile(
+          new URL(
+            "../src/db/migrations/009_reward_upgrades.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      const placement = await client.query(
+        "SELECT placement.x, placement.y, reward.upgrade_count, reward.build_ready_at FROM reward_placement placement JOIN reward ON reward.id = placement.reward_id",
+      );
+      assert.deepEqual(placement.rows, [
+        { x: 104, y: 104, upgrade_count: 0, build_ready_at: null },
+      ]);
       const upgraded = parseDatabase(await loadDatabase(client));
       for (const key of Object.keys(seed) as (keyof typeof seed)[]) {
         if (key !== "logShares")

@@ -27,6 +27,9 @@ import type {
 import type { User } from "@beside/domain/types";
 export type * from "@beside/domain/api";
 
+/** A newly earned reward starts at level one. Legacy responses may omit the count. */
+export const rewardLevel = (upgradeCount = 0) => upgradeCount + 1;
+
 export class ApiError extends Error {
   readonly status: number;
   readonly issues?: { path: string; message: string }[];

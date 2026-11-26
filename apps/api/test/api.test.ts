@@ -7,8 +7,13 @@ import { DatabaseService } from "../src/db/database.service.ts";
 import { loadDatabase } from "../src/db/storage.ts";
 import { parseDatabase } from "@beside/domain/validation";
 import { schemas } from "../src/openapi.ts";
-import type { Session, ApiState } from "@beside/domain/api";
+import type { Session, ApiState, HomebaseGarden } from "@beside/domain/api";
 import { checkMeadowPlacement, meadowPlacements } from "@beside/domain/garden";
+
+const gardenContents = ({ serverTime, ...contents }: HomebaseGarden) => {
+  assert.ok(Number.isFinite(Date.parse(serverTime ?? "")));
+  return contents;
+};
 
 describe("public API contract without a database", () => {
   let app: Awaited<ReturnType<typeof createApp>>;
@@ -46,6 +51,21 @@ describe("public API contract without a database", () => {
     );
     assert.equal(
       body.components.schemas.State.properties.serverTime.format,
+      "date-time",
+    );
+    assert.ok(
+      body.components.schemas.CreateMilestone.properties.upgradeRewardId,
+    );
+    assert.ok(
+      body.components.schemas.UpdateMilestone.properties.upgradeRewardId,
+    );
+    assert.ok(body.components.schemas.Milestone.properties.upgradeCreditedAt);
+    assert.equal(
+      body.components.schemas.Reward.properties.upgradeCount.minimum,
+      0,
+    );
+    assert.equal(
+      body.components.schemas.Reward.properties.buildReadyAt.format,
       "date-time",
     );
     assert.equal(
@@ -637,7 +657,10 @@ describe(
       await request(server).get(path).expect(401);
       await get(stranger).expect(404);
       await plant(stranger, 104, 104).expect(404);
-      await get(alice).expect(200, { oak: null, rewards: [] });
+      assert.deepEqual(gardenContents((await get(alice).expect(200)).body), {
+        oak: null,
+        rewards: [],
+      });
       await plant(alice, 224, 144).expect(400);
       await plant(alice, 144, 104).expect(400);
       await plant(alice, 104, 105).expect(400);
@@ -654,8 +677,16 @@ describe(
       assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);
       const garden = results.find(({ status }) => status === 200)!.body;
       assert.equal(garden.oak.itemId, "oak-tree");
-      await get(bob).expect(200, garden);
-      await plant(alice, garden.oak.x, garden.oak.y).expect(200, garden);
+      assert.deepEqual(
+        gardenContents((await get(bob).expect(200)).body),
+        gardenContents(garden),
+      );
+      assert.deepEqual(
+        gardenContents(
+          (await plant(alice, garden.oak.x, garden.oak.y).expect(200)).body,
+        ),
+        gardenContents(garden),
+      );
       await get(stranger).expect(404);
       await request(server)
         .delete(`/api/v1/homebases/${base.id}`)
@@ -772,8 +803,15 @@ describe(
         ),
         [[rewardId, "sunflower", spot!.x, spot!.y, alice.user.id]],
       );
-      await place(alice, spot!.x, spot!.y).expect(200, placed); // Safe retry.
-      await garden(bob).expect(200, placed);
+      // Safe retries preserve the placement and its build deadline.
+      assert.deepEqual(
+        gardenContents((await place(alice, spot.x, spot.y).expect(200)).body),
+        gardenContents(placed),
+      );
+      assert.deepEqual(
+        gardenContents((await garden(bob).expect(200)).body),
+        gardenContents(placed),
+      );
 
       // The starter oak cannot be planted on top of it, and vice versa.
       await request(server)
@@ -782,6 +820,10 @@ describe(
         .send(spot)
         .expect(400);
       const moved = (await place(bob, other!.x, other!.y).expect(200)).body;
+      assert.equal(
+        moved.rewards[0].buildReadyAt,
+        placed.rewards[0].buildReadyAt,
+      );
       assert.deepEqual(
         [
           moved.rewards[0].x,
@@ -807,6 +849,156 @@ describe(
         .expect(200);
       assert.deepEqual((await garden(alice).expect(200)).body.rewards, []);
       assert.deepEqual((await agreements(alice).expect(200)).body, []);
+    });
+    it("credits upgrades once per shared milestone and preserves them after deletion", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", {
+        name: "Shared upgrades",
+      });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const activityIn = (connectionId: string, name: string) =>
+        create(alice, "activities", {
+          templateId: "read-book",
+          name,
+          connectionId,
+          target: 1,
+        });
+      const source = await activityIn(base.id, "Read together");
+      const sequel = await activityIn(base.id, "Read the sequel");
+      const outsider = await activityIn(aliceBaseId, "Personal read");
+      const earned = await create(
+        alice,
+        "milestones",
+        milestoneBody(source.entityId, "cozy-cottage"),
+      );
+      const rewardId = (await state(alice)).milestones.find(
+        (m) => m.id === earned.entityId,
+      )!.rewardId!;
+      const upgradeBody = {
+        ...milestoneBody(sequel.entityId),
+        upgradeRewardId: rewardId,
+      };
+      await create(alice, "milestones", upgradeBody, 400);
+      const log = (session: Session, milestoneId: string) =>
+        create(
+          session,
+          "logs",
+          logBody(milestoneId, `${nonce}:${session.user.id}:${milestoneId}`),
+          200,
+        );
+      await log(alice, earned.entityId);
+      await log(bob, earned.entityId);
+      await create(
+        alice,
+        "milestones",
+        { ...upgradeBody, activityId: outsider.entityId },
+        400,
+      );
+      await create(
+        alice,
+        "milestones",
+        { ...upgradeBody, itemId: "sunflower" },
+        400,
+      );
+      const gardenPath = `/api/v1/homebases/${base.id}/garden`;
+      const spot = meadowPlacements([])[0]!;
+      const placed: HomebaseGarden = (
+        await request(server)
+          .put(`${gardenPath}/rewards/${rewardId}`)
+          .set(auth(bob))
+          .send(spot)
+          .expect(200)
+      ).body;
+      const initial = placed.rewards[0]!;
+      assert.equal(initial.upgradeCount, 0);
+      assert.ok(
+        Date.parse(initial.buildReadyAt!) > Date.parse(initial.placedAt),
+      );
+
+      const milestones: string[] = [];
+      for (let count = 1; count <= 4; count++) {
+        const planned = await create(
+          alice,
+          "milestones",
+          count === 1
+            ? milestoneBody(sequel.entityId, "sunflower")
+            : upgradeBody,
+        );
+        const path = `/api/v1/milestones/${planned.entityId}`;
+        if (count === 1)
+          await request(server)
+            .patch(path)
+            .set(auth(alice))
+            .send({ itemId: null, upgradeRewardId: rewardId })
+            .expect(200);
+        milestones.push(planned.entityId);
+        await log(alice, planned.entityId);
+        const partial = await state(alice);
+        const plan = partial.milestones.find((m) => m.id === planned.entityId)!;
+        assert.deepEqual(
+          new Set(plan.upgradeRequiredUserIds),
+          new Set([alice.user.id, bob.user.id]),
+        );
+        assert.equal(plan.rewardId, null);
+        assert.equal(plan.upgradeCreditedAt, null);
+        assert.equal(
+          partial.rewards.find((r) => r.id === rewardId)!.upgradeCount,
+          count - 1,
+        );
+        await request(server)
+          .patch(path)
+          .set(auth(alice))
+          .send({ upgradeRewardId: null })
+          .expect(400);
+        const results = await Promise.all([
+          log(bob, planned.entityId),
+          log(bob, planned.entityId),
+        ]);
+        assert.deepEqual(results.map((result) => result.duplicate).sort(), [
+          false,
+          true,
+        ]);
+        const completed = await state(bob);
+        const credited = completed.milestones.find(
+          (m) => m.id === planned.entityId,
+        )!;
+        const reward = completed.rewards.find((r) => r.id === rewardId)!;
+        assert.equal(reward.upgradeCount, count);
+        assert.equal(
+          Date.parse(reward.buildReadyAt!) -
+            Date.parse(credited.upgradeCreditedAt!),
+          10_000,
+        );
+      }
+      await request(server)
+        .delete(`/api/v1/milestones/${milestones[0]}`)
+        .set(auth(alice))
+        .expect(200);
+      const kept = await state(alice);
+      assert.equal(
+        kept.rewards.find((r) => r.id === rewardId)!.upgradeCount,
+        4,
+      );
+      assert.equal(
+        kept.events.filter(
+          (e) => e.type === "reward.upgraded" && e.entityId === rewardId,
+        ).length,
+        4,
+      );
+      const garden: HomebaseGarden = (
+        await request(server).get(gardenPath).set(auth(bob)).expect(200)
+      ).body;
+      assert.equal(garden.rewards[0]!.upgradeCount, 4);
+      assert.equal(garden.rewards[0]!.itemId, "cozy-cottage");
+      await request(server)
+        .delete(`/api/v1/milestones/${earned.entityId}`)
+        .set(auth(alice))
+        .expect(200);
+      const removed = await state(alice);
+      assert.ok(!removed.rewards.some((r) => r.id === rewardId));
+      assert.ok(
+        !removed.milestones.some((m) => m.upgradeRewardId === rewardId),
+      );
     });
     it("proposes a recurring schedule's reward on behalf of its creator", async () => {
       const server = app.getHttpServer();

@@ -168,3 +168,42 @@ it("sends typed CRUD changes with encoded identifiers and bearer authorization",
     ),
   );
 });
+
+it("plans a reward upgrade through the milestone API", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const client = new BesideClient("https://api.example.test", (async (
+    url,
+    init,
+  ) => {
+    requests.push({ url: String(url), init });
+    return Response.json({ entityId: "milestone/1", duplicate: false });
+  }) as typeof fetch);
+  const choice = { itemId: null, upgradeRewardId: "reward/1" };
+  const plan = {
+    activityId: "activity/1",
+    parentId: null,
+    name: "Read the sequel",
+    quantity: 1,
+    policy: "open" as const,
+    startAt: null,
+    endAt: null,
+    ...choice,
+  };
+  await client.createMilestone(plan);
+  await client.updateMilestone("milestone/1", choice);
+  assert.deepEqual(
+    requests.map(({ url, init }) => [
+      url,
+      init?.method,
+      JSON.parse(String(init?.body)),
+    ]),
+    [
+      ["https://api.example.test/api/v1/milestones", "POST", plan],
+      [
+        "https://api.example.test/api/v1/milestones/milestone%2F1",
+        "PATCH",
+        choice,
+      ],
+    ],
+  );
+});
