@@ -29,7 +29,13 @@ import type { Bitmap } from "./bitmap"
 import { recolor } from "./islandPalettes"
 import { paintGround, SEA_TILE, seaTile, waterGlints } from "./paint"
 import { isoToScreen, type MapFrame } from "./projection"
-import { pocketWatchArt } from "./rewardClockArt"
+import {
+  isConstructionVisible,
+  pocketWatchArt,
+  watchHeight,
+  watchWidth,
+  type BuildViewport,
+} from "./rewardClockArt"
 import { type Drawable, type HitTarget } from "./scene"
 import { artImage, bitmapImage, sampling } from "./skia"
 import type { TileMap } from "./tilemap"
@@ -283,7 +289,7 @@ function IslandSign({
   )
 }
 
-type Viewport = SharedValue<{ left: number; top: number; right: number; bottom: number }>
+type Viewport = SharedValue<BuildViewport>
 
 function BuildingReward({
   drawable,
@@ -299,13 +305,15 @@ function BuildingReward({
   const [visible, setVisible] = useState(false)
   const x = drawable.baseX - 6
   const y = Math.min(drawable.top, drawable.baseY - 24)
-  const worldX = x + offset.x
-  const worldY = y + offset.y
+  const reward = {
+    x: drawable.x + offset.x,
+    y: drawable.y + offset.y,
+    width: drawable.width,
+    height: drawable.height,
+  }
+  const watch = { x: x + offset.x, y: y + offset.y, width: watchWidth, height: watchHeight }
   useAnimatedReaction(
-    () => {
-      const { left, top, right, bottom } = viewport.value
-      return worldX < right && worldX + 13 > left && worldY < bottom && worldY + 14 > top
-    },
+    () => isConstructionVisible(viewport.value, reward, watch),
     (next, previous) => {
       if (next !== previous) runOnJS(setVisible)(next)
     },
@@ -322,8 +330,8 @@ function BuildingReward({
           image={artImage(pocketWatchArt(seconds))}
           x={x}
           y={y}
-          width={13}
-          height={14}
+          width={watchWidth}
+          height={watchHeight}
           sampling={sampling}
         />
       )}

@@ -5,7 +5,6 @@ import {
   type ApiState,
   type MilestoneSchedule,
   type RewardAgreement,
-  type UpdateMilestoneInput,
 } from "@beside/api-client"
 import type { RewardItem } from "@beside/rewards"
 import { useFocusEffect } from "@react-navigation/native"
@@ -22,7 +21,11 @@ import { buildGatheringScene } from "@/components/iso-world/scene"
 import { MilestoneReward, RewardLanded } from "@/components/MilestoneReward"
 import { avatarsForMembers } from "@/components/pixel-world/avatars"
 import { catalogue } from "@/components/pixel-world/scene"
-import { RewardChangeSheet } from "@/components/RewardChangeSheet"
+import {
+  RewardChangeSheet,
+  type MilestoneDraft,
+  type MilestoneRewardChoice,
+} from "@/components/RewardChangeSheet"
 import { RewardChip } from "@/components/RewardChip"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
@@ -65,8 +68,10 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   const [placedIds, setPlacedIds] = useState<Set<string>>(new Set())
   const [rewardBusy, setRewardBusy] = useState<string>()
   const [rewardError, setRewardError] = useState<{ rewardId: string; message: string }>()
-  const [changing, setChanging] = useState<Milestone>()
+  const [editor, setEditor] = useState<"plan" | Milestone>()
+  const changing = editor === "plan" ? undefined : editor
   const [changeSaving, setChangeSaving] = useState(false)
+  const savingMilestone = useRef(false)
   const [changeError, setChangeError] = useState("")
   const [landed, setLanded] = useState<string>()
   // Rewards already earned when we last looked, to celebrate only fresh landings.
@@ -145,18 +150,18 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     upcoming,
   } = attendanceMilestones(data?.milestones ?? [], activityId, now)
   const currentAttendance = attendanceMembers(data?.logs ?? [], currentOccurrence?.id)
-  const cadence = cadenceFromSchedule(schedules[0]?.configuration)
   const itemFor = (itemId: string): RewardItem | undefined =>
     data?.rewardItems.find((item) => item.id === itemId) ?? catalogue.get(itemId)
+  const activeIds = new Set(
+    data?.participations
+      .filter((p) => p.activityId === activityId && p.status === "active")
+      .map((p) => p.userId),
+  )
   const activeNames = members
-    .filter((member) =>
-      data?.participations.some(
-        (p) => p.activityId === activityId && p.userId === member.id && p.status === "active",
-      ),
-    )
+    .filter((member) => activeIds.has(member.id))
     .map((member) => firstName(member.name))
   const upgradeOptions =
-    changing && data
+    editor && data
       ? data.rewards.flatMap((reward) => {
           if (!reward.obtainedAt || reward.homebaseId !== activity?.connectionId) return []
           const item = itemFor(reward.itemId)
@@ -236,17 +241,30 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     }
   }
 
-  async function changeReward(choice: Pick<UpdateMilestoneInput, "itemId" | "upgradeRewardId">) {
-    if (!changing || changeSaving) return
+  async function saveMilestone(choice: MilestoneDraft | MilestoneRewardChoice) {
+    if (!editor || savingMilestone.current) return
+    savingMilestone.current = true
     setChangeSaving(true)
     setChangeError("")
     try {
-      await besideApi.updateMilestone(changing.id, choice)
-      setChanging(undefined)
+      if ("name" in choice) {
+        await besideApi.createMilestone({
+          ...choice,
+          activityId,
+          parentId: null,
+          policy: "open",
+          startAt: null,
+          endAt: null,
+        })
+      } else if (changing) {
+        await besideApi.updateMilestone(changing.id, choice)
+      }
+      setEditor(undefined)
       setRefresh((value) => value + 1)
     } catch (e) {
-      setChangeError(e instanceof Error ? e.message : "Could not change the reward.")
+      setChangeError(e instanceof Error ? e.message : "Could not save the milestone.")
     } finally {
+      savingMilestone.current = false
       setChangeSaving(false)
     }
   }
@@ -273,7 +291,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
           <Pressable
             accessibilityRole="button"
             testID="reward-change-upgrade"
-            onPress={() => setChanging(milestone)}
+            onPress={() => setEditor(milestone)}
           >
             {chip}
           </Pressable>
@@ -297,7 +315,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
         <Pressable
           accessibilityRole="button"
           testID="reward-add"
-          onPress={() => setChanging(milestone)}
+          onPress={() => setEditor(milestone)}
           style={$addReward}
         >
           <Text text="＋ Add a reward" style={activityWorldStyles.body} />
@@ -335,7 +353,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Reward ${item.name}. ${detail}`}
-          onPress={() => setChanging(milestone)}
+          onPress={() => setEditor(milestone)}
         >
           {chip}
         </Pressable>
@@ -362,7 +380,7 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
         busy={rewardBusy === reward.id}
         error={rewardError?.rewardId === reward.id ? rewardError.message : undefined}
         onAgree={() => void agree(reward.id)}
-        onChange={changeable(milestone) ? () => setChanging(milestone) : undefined}
+        onChange={changeable(milestone) ? () => setEditor(milestone) : undefined}
         onPlace={() => placeReward(reward.id)}
         onView={() => viewReward(reward.id)}
       />
@@ -592,6 +610,13 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
               </View>
             </View>
             <View style={$milestoneList}>
+              {user && activeIds.has(user.id) && (
+                <Button
+                  text="Plan milestone"
+                  testID="activity-plan-milestone"
+                  onPress={() => setEditor("plan")}
+                />
+              )}
               <Text text="UPCOMING MILESTONES" style={worldEyebrow} />
               {upcoming.map((milestone) => renderMilestone(milestone))}
               {!upcoming.length && (
@@ -624,30 +649,32 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
           <Text text="Activity not found." style={activityWorldStyles.body} />
         ) : null}
       </Screen>
-      {data && changing && (
+      {data && editor && (
         <RewardChangeSheet
+          {...(editor === "plan" ? { plan: true as const } : {})}
           visible
-          milestoneName={changing.name}
+          milestoneName={changing?.name}
           items={data.rewardItems}
-          initial={data.rewards.find((r) => r.id === changing.rewardId)?.itemId ?? null}
-          initialUpgradeId={changing.upgradeRewardId ?? null}
+          initial={data.rewards.find((r) => r.id === changing?.rewardId)?.itemId ?? null}
+          initialUpgradeId={changing?.upgradeRewardId ?? null}
           upgrades={upgradeOptions}
           upgradeRosterNames={activeNames}
           initialUpgradeRosterNames={
-            changing.upgradeRequiredUserIds?.map((id) =>
+            changing?.upgradeRequiredUserIds?.map((id) =>
               firstName(data.users.find((member) => member.id === id)?.name ?? "Member"),
             ) ?? []
           }
-          cadence={cadence}
+          cadence={cadenceFromSchedule(editor === "plan" ? undefined : schedules[0]?.configuration)}
           counts={meadowCounts(data, activity?.connectionId)}
-          rosterNames={members.map((member) => firstName(member.name))}
+          rosterNames={activeNames}
           saving={changeSaving}
           error={changeError}
           onCancel={() => {
-            setChanging(undefined)
+            if (savingMilestone.current) return
+            setEditor(undefined)
             setChangeError("")
           }}
-          onSave={(choice) => void changeReward(choice)}
+          onSave={(choice: MilestoneDraft | MilestoneRewardChoice) => void saveMilestone(choice)}
         />
       )}
     </View>

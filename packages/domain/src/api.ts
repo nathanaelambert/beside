@@ -2,9 +2,11 @@ import { z } from "zod";
 import { meadowGridSize, starterOakItemId } from "./garden.ts";
 import { WORLD_HEIGHT, WORLD_WIDTH } from "./meadow-terrain.ts";
 import {
+  checkMilestoneRewardChoice,
   databaseSchema,
   logInputSchema,
   milestoneInputSchema,
+  milestoneRewardConflict,
 } from "./validation.ts";
 
 const id = z.string().min(1).max(200);
@@ -78,7 +80,9 @@ export const updateMilestoneSchema = z
   .strictObject({ ...milestoneInputSchema.shape })
   .omit({ activityId: true })
   .partial()
-  .refine(hasChanges, "Provide at least one field to update.");
+  .refine(hasChanges, "Provide at least one field to update.")
+  .superRefine(checkMilestoneRewardChoice)
+  .meta({ not: milestoneRewardConflict });
 export const joinHomebaseSchema = z.strictObject({
   inviteCode: z.string().min(20).max(100),
 });
@@ -100,7 +104,9 @@ export const participationSchema = z.strictObject({
   target: z.number().positive().finite(),
 });
 // Keep schedule refinements from the shared domain validator.
-export const createMilestoneSchema = milestoneInputSchema.strict();
+export const createMilestoneSchema = milestoneInputSchema
+  .strict()
+  .meta({ not: milestoneRewardConflict });
 export const createLogSchema = logInputSchema
   .omit({ authorUserId: true })
   .extend({

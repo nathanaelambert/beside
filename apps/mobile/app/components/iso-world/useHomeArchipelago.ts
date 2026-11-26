@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AppState } from "react-native"
 import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
 import { initialMeadowItems } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
@@ -22,6 +23,11 @@ import { avatarsForMembers } from "../pixel-world/avatars"
 import { oakAt } from "../pixel-world/starterOak"
 
 type GardenSnapshot = { garden: HomebaseGarden; receivedAt: number }
+
+async function loadGardenSnapshot(id: string): Promise<GardenSnapshot> {
+  const garden = await besideApi.homebaseGarden(id)
+  return { garden, receivedAt: performance.now() }
+}
 
 type ArchipelagoData = {
   bases: ApiHomebase[]
@@ -67,6 +73,41 @@ export function useHomeArchipelago(
     useCallback(() => {
       void attempt
       let active = true
+      let loading = true
+      let refreshAfterLoad = false
+      let latestRefresh = 0
+      let appState = AppState.currentState
+      async function refreshFocused() {
+        const id = currentFocus.current
+        if (!id) return
+        const request = ++latestRefresh
+        const revision = gardenRevisions.current.get(id)
+        try {
+          const [state, garden] = await Promise.all([besideApi.state(), loadGardenSnapshot(id)])
+          if (!active || request !== latestRefresh) return
+          setData((current) =>
+            current?.bases.some((base) => base.id === id)
+              ? {
+                  ...current,
+                  state,
+                  gardens:
+                    gardenRevisions.current.get(id) === revision
+                      ? { ...current.gardens, [id]: garden }
+                      : current.gardens,
+                }
+              : current,
+          )
+        } catch {
+          // Keep the current island usable if the silent refresh fails.
+        }
+      }
+      const subscription = AppState.addEventListener("change", (next) => {
+        const resumed = (appState === "background" || appState === "inactive") && next === "active"
+        appState = next
+        if (!resumed) return
+        if (loading) refreshAfterLoad = true
+        else void refreshFocused()
+      })
       setBusy(true)
       setError("")
       Promise.all([besideApi.homebases(), besideApi.state()])
@@ -77,8 +118,7 @@ export function useHomeArchipelago(
           const gardens = await Promise.all(
             bases.map(async (base) => {
               try {
-                const garden = await besideApi.homebaseGarden(base.id)
-                return [base.id, { garden, receivedAt: performance.now() }] as const
+                return [base.id, await loadGardenSnapshot(base.id)] as const
               } catch (e) {
                 if (e instanceof ApiError && e.status === 404) missing.add(base.id)
                 if (active)
@@ -120,10 +160,14 @@ export function useHomeArchipelago(
           }
         })
         .finally(() => {
-          if (active) setBusy(false)
+          if (!active) return
+          loading = false
+          setBusy(false)
+          if (refreshAfterLoad && appState === "active") void refreshFocused()
         })
       return () => {
         active = false
+        subscription.remove()
       }
     }, [attempt, storageKey, focusIsland]),
   )

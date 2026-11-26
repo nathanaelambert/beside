@@ -9,9 +9,19 @@ import { plantableTiles, plantingTap, tileCentre } from "./homeWorld"
 import { paintGround } from "./paint"
 import { isoToScreen, mapFrame, screenToIso } from "./projection"
 import { house } from "./props"
+import { isConstructionVisible } from "./rewardClockArt"
 import { buildGatheringScene, buildHomeScene, hitTest, homeFrame } from "./scene"
 import { meadowTileMap, tileAt } from "./tilemap"
 import { avatarsForMembers } from "../pixel-world/avatars"
+
+it("keeps construction visible when the reward or its watch intersects the viewport", () => {
+  const reward = { x: 100, y: 100, width: 32, height: 32 }
+  const watch = { x: 110, y: 90, width: 13, height: 14 }
+  const view = { left: 90, top: 110, right: 140, bottom: 145 }
+  expect(isConstructionVisible(view, reward, watch)).toBe(true)
+  expect(isConstructionVisible({ ...view, top: 80, bottom: 95 }, reward, watch)).toBe(true)
+  expect(isConstructionVisible({ ...view, top: 132, bottom: 145 }, reward, watch)).toBe(false)
+})
 
 const members = [
   { id: "m1", name: "Mosaab" },

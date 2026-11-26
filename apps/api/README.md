@@ -199,11 +199,17 @@ To plan an upgrade through `POST /api/v1/milestones` or
 `PATCH /api/v1/milestones/:milestoneId`, send `itemId: null` and set
 `upgradeRewardId` to an earned reward in the same home base. The upgrade
 snapshots the milestone activity's active participants into
-`upgradeRequiredUserIds`. The choice locks at the first log. The final required
+`upgradeRequiredUserIds`. For a jointly earned reward, this roster must include
+at least two active participants and every co-earner who still belongs to the
+home base. The choice locks at the first log. The final required
 success sets `upgradeCreditedAt`, increments the reward's `upgradeCount`, and emits
 one `reward.upgraded` event in the same transaction. Level starts at one and
 equals one plus the upgrade count. Any earned item can be upgraded, even before
 it is placed.
+
+In mobile, **Plan milestone** on Activity Detail creates a milestone that members
+can check in to any time. Members can choose a new reward, upgrade an earned
+reward, or leave the milestone without a reward.
 
 Migration 009 adds these fields and the cottage catalog item. It also adds
 `buildReadyAt` to rewards. First placement and each earned upgrade set this

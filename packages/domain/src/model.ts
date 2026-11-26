@@ -10,7 +10,11 @@ import type {
   Participation,
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
-import { logInputSchema, milestoneInputSchema } from "./validation.ts";
+import {
+  hasCooperativeUpgradeRoster,
+  logInputSchema,
+  milestoneInputSchema,
+} from "./validation.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const requireValue = <T>(value: T | undefined | null, message: string): T => {
@@ -225,18 +229,22 @@ function planUpgrade(
   rewardId: string | null,
 ) {
   if (!rewardId) return noUpgrade;
-  if (
-    !db.rewards.some(
-      (reward) =>
-        reward.id === rewardId &&
-        reward.homebaseId === activity.connectionId &&
-        reward.obtainedAt,
-    )
-  )
+  const target = db.rewards.find((reward) => reward.id === rewardId);
+  if (!target?.obtainedAt || target.homebaseId !== activity.connectionId)
     throw new Error("Choose an earned reward in this home base to upgrade.");
   const roster = activeParticipantIds(db, activity.id);
   if (!roster.length)
     throw new Error("An upgrade needs at least one active participant.");
+  if (
+    !hasCooperativeUpgradeRoster(
+      target.requiredUserIds,
+      members(db, target.homebaseId),
+      roster,
+    )
+  )
+    throw new Error(
+      "Upgrading a jointly earned reward needs at least two active participants and all co-earners who still belong to this home base.",
+    );
   return {
     upgradeRewardId: rewardId,
     upgradeRequiredUserIds: roster,
@@ -256,6 +264,11 @@ function awardReward(
     upgrade?.obtainedAt &&
     !milestone.upgradeCreditedAt &&
     milestone.upgradeRequiredUserIds.length > 0 &&
+    hasCooperativeUpgradeRoster(
+      upgrade.requiredUserIds,
+      members(db, upgrade.homebaseId),
+      milestone.upgradeRequiredUserIds,
+    ) &&
     milestone.upgradeRequiredUserIds.every((userId) =>
       completedMilestone(db, milestone.id, userId),
     )

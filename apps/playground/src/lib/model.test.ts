@@ -813,3 +813,111 @@ test("leaving after an upgrade is planned cannot shrink its required roster", ()
   )!.upgradeCreditedAt = now;
   assert.throws(() => parseDatabase(tampered), /required completions/);
 });
+
+test("a co-earner leaving another activity blocks creating or converting a solo upgrade", () => {
+  const earned = plan(createSeed(), { itemId: "cozy-cottage" });
+  const alice = record(earned.db, { milestoneId: earned.entityId });
+  const both = record(alice.db, {
+    milestoneId: earned.entityId,
+    authorUserId: "nathaniel",
+  });
+  const rewardId = both.db.milestones.find(
+    (m) => m.id === earned.entityId,
+  )!.rewardId!;
+  const activity = both.db.activities.find(
+    (a) => a.connectionId === "mn" && a.id !== book(both.db).id,
+  )!;
+  const root = both.db.milestones.find(
+    (m) => m.activityId === activity.id && m.kind === "join",
+  )!;
+  const solo = record(both.db, {
+    milestoneId: root.id,
+    authorUserId: "nathaniel",
+    isSuccess: false,
+  });
+  const error =
+    /jointly earned reward needs at least two active participants and all co-earners/;
+  assert.throws(
+    () => plan(solo.db, { activityId: activity.id, upgradeRewardId: rewardId }),
+    error,
+  );
+  const editable = plan(solo.db, {
+    activityId: activity.id,
+    itemId: "sunflower",
+  });
+  assert.throws(
+    () =>
+      execute(
+        editable.db,
+        {
+          type: "updateMilestone",
+          actorId: "mosaab",
+          milestoneId: editable.entityId,
+          changes: { itemId: null, upgradeRewardId: rewardId },
+        },
+        now,
+      ),
+    error,
+  );
+
+  // A solo plan saved by an earlier build cannot credit a joint reward either.
+  const legacy = editable.db.milestones.find(
+    (m) => m.id === editable.entityId,
+  )!;
+  editable.db.rewards = editable.db.rewards.filter(
+    (reward) => reward.id !== legacy.rewardId,
+  );
+  Object.assign(legacy, {
+    rewardId: null,
+    upgradeRewardId: rewardId,
+    upgradeRequiredUserIds: ["mosaab"],
+  });
+  const checkedIn = record(editable.db, { milestoneId: editable.entityId });
+  assert.equal(
+    checkedIn.db.rewards.find((reward) => reward.id === rewardId)!.upgradeCount,
+    0,
+  );
+  assert.equal(
+    checkedIn.db.milestones.find((m) => m.id === legacy.id)!.upgradeCreditedAt,
+    null,
+  );
+  assert.deepEqual(parseDatabase(checkedIn.db), checkedIn.db);
+});
+
+test("another active member cannot replace a co-earner who still belongs to the home base", () => {
+  const seed = createSeed();
+  const [source, sequel] = seed.activities.filter(
+    (activity) => activity.connectionId === "circle",
+  );
+  const leave = (db: Database, activityId: string, authorUserId: string) =>
+    record(db, {
+      milestoneId: db.milestones.find(
+        (m) => m.activityId === activityId && m.kind === "join",
+      )!.id,
+      authorUserId,
+      isSuccess: false,
+    }).db;
+  const earned = plan(leave(seed, source!.id, "rishik"), {
+    activityId: source!.id,
+    itemId: "sunflower",
+  });
+  const first = record(earned.db, { milestoneId: earned.entityId });
+  const second = record(first.db, {
+    milestoneId: earned.entityId,
+    authorUserId: "nathaniel",
+  });
+  const rewardId = second.db.milestones.find(
+    (m) => m.id === earned.entityId,
+  )!.rewardId!;
+  const db = leave(second.db, sequel!.id, "nathaniel");
+  assert.deepEqual(
+    db.participations
+      .filter((p) => p.activityId === sequel!.id && p.status === "active")
+      .map((p) => p.userId),
+    ["mosaab", "rishik"],
+  );
+  assert.throws(
+    () => plan(db, { activityId: sequel!.id, upgradeRewardId: rewardId }),
+    /all co-earners/,
+  );
+});

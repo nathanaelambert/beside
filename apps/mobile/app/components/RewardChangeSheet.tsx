@@ -1,38 +1,23 @@
 import { useEffect, useState } from "react"
 import { Modal, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native"
-import type { UpdateMilestoneInput } from "@beside/api-client"
 import type { RewardItem } from "@beside/rewards"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { namesLabel, type Cadence } from "@/utils/rewardChoice"
 
-import { activityWorldStyles, WorldButton } from "./ActivityWorld"
+import { activityWorldStyles, WorldButton, WorldTextField } from "./ActivityWorld"
 import { FormChoice } from "./MilestoneScheduleFields"
 import { RewardChip } from "./RewardChip"
 import { RewardPicker } from "./RewardPicker"
 import { Text } from "./Text"
 
-/** Suggest a different reward for a milestone that nobody has checked in to yet. */
-export function RewardChangeSheet({
-  visible,
-  milestoneName,
-  items,
-  initial,
-  initialUpgradeId,
-  upgrades,
-  upgradeRosterNames,
-  initialUpgradeRosterNames,
-  cadence,
-  counts,
-  rosterNames,
-  saving,
-  error,
-  onCancel,
-  onSave,
-}: {
+export type MilestoneRewardChoice = { itemId: string | null; upgradeRewardId: string | null }
+export type MilestoneDraft = MilestoneRewardChoice & { name: string; quantity: number }
+
+type Props = {
   visible: boolean
-  milestoneName: string
+  milestoneName?: string
   items: RewardItem[]
   initial: string | null
   initialUpgradeId: string | null
@@ -45,8 +30,31 @@ export function RewardChangeSheet({
   saving: boolean
   error?: string
   onCancel: () => void
-  onSave: (choice: Pick<UpdateMilestoneInput, "itemId" | "upgradeRewardId">) => void
-}) {
+} & (
+  | { plan: true; onSave: (draft: MilestoneDraft) => void }
+  | { plan?: false; onSave: (choice: MilestoneRewardChoice) => void }
+)
+
+/** Choose a reward when planning a milestone or editing a milestone before its first check-in. */
+export function RewardChangeSheet(props: Props) {
+  const {
+    visible,
+    milestoneName,
+    items,
+    initial,
+    initialUpgradeId,
+    upgrades,
+    upgradeRosterNames,
+    initialUpgradeRosterNames,
+    cadence,
+    counts,
+    rosterNames,
+    saving,
+    error,
+    onCancel,
+  } = props
+  const [name, setName] = useState("")
+  const [quantity, setQuantity] = useState("1")
   const [value, setValue] = useState(initial)
   const [upgradeId, setUpgradeId] = useState(initialUpgradeId)
   const [mode, setMode] = useState<"item" | "upgrade">(initialUpgradeId ? "upgrade" : "item")
@@ -61,6 +69,16 @@ export function RewardChangeSheet({
   const unchanged = itemId === initial && upgradeRewardId === initialUpgradeId
   const upgradeRoster =
     upgradeId && upgradeId === initialUpgradeId ? initialUpgradeRosterNames : upgradeRosterNames
+  const amount = Number(quantity)
+  const invalidDraft = props.plan && (!name.trim() || !Number.isFinite(amount) || amount <= 0)
+
+  function save() {
+    const choice = { itemId, upgradeRewardId }
+    if (props.plan) props.onSave({ ...choice, name: name.trim(), quantity: amount })
+    else if (unchanged) onCancel()
+    else props.onSave(choice)
+  }
+
   return (
     <Modal
       visible={visible}
@@ -73,11 +91,40 @@ export function RewardChangeSheet({
           <Pressable accessibilityRole="button" onPress={onCancel} style={$barButton}>
             <Text text="Cancel" style={activityWorldStyles.body} />
           </Pressable>
-          <Text text="Suggest a reward" weight="semiBold" style={$barTitle} />
+          <Text
+            text={props.plan ? "Plan milestone" : "Suggest a reward"}
+            weight="semiBold"
+            style={$barTitle}
+          />
           <View style={$barButton} />
         </View>
-        <ScrollView contentContainerStyle={$content}>
-          <Text text={milestoneName.toUpperCase()} style={worldEyebrow} />
+        <ScrollView contentContainerStyle={$content} keyboardShouldPersistTaps="handled">
+          {props.plan ? (
+            <>
+              <WorldTextField
+                label="Milestone name"
+                testID="plan-milestone-name"
+                value={name}
+                onChangeText={setName}
+                maxLength={200}
+                editable={!saving}
+              />
+              <WorldTextField
+                label="Quantity"
+                testID="plan-milestone-quantity"
+                value={quantity}
+                onChangeText={setQuantity}
+                keyboardType="decimal-pad"
+                editable={!saving}
+              />
+              <Text
+                text="Members can check in any time after you save."
+                style={activityWorldStyles.muted}
+              />
+            </>
+          ) : (
+            <Text text={milestoneName?.toUpperCase()} style={worldEyebrow} />
+          )}
           {!!upgrades.length && (
             <FormChoice
               label="Milestone reward"
@@ -135,11 +182,19 @@ export function RewardChangeSheet({
         </ScrollView>
         <View style={$footer}>
           <WorldButton
-            text={saving ? "Saving…" : unchanged ? "Keep this reward" : "Save reward choice"}
-            testID="reward-change-save"
+            text={
+              saving
+                ? "Saving…"
+                : props.plan
+                  ? "Save milestone"
+                  : unchanged
+                    ? "Keep this reward"
+                    : "Save reward choice"
+            }
+            testID={props.plan ? "plan-milestone-save" : "reward-change-save"}
             preset="filled"
-            disabled={saving || (mode === "upgrade" && !upgradeRewardId)}
-            onPress={() => (unchanged ? onCancel() : onSave({ itemId, upgradeRewardId }))}
+            disabled={saving || invalidDraft || (mode === "upgrade" && !upgradeRewardId)}
+            onPress={save}
           />
         </View>
       </SafeAreaView>

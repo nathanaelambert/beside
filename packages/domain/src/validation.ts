@@ -60,6 +60,43 @@ const pixelArt = z
       });
   });
 export const policySchema = z.enum(["open", "paced", "deadline"]);
+
+// OpenAPI can represent this constraint even though it cannot infer refinements.
+export const milestoneRewardConflict = {
+  type: "object",
+  required: ["itemId", "upgradeRewardId"],
+  properties: {
+    itemId: { type: "string" },
+    upgradeRewardId: { type: "string" },
+  },
+};
+
+export function checkMilestoneRewardChoice(
+  choice: { itemId?: string | null; upgradeRewardId?: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (choice.itemId && choice.upgradeRewardId)
+    ctx.addIssue({
+      code: "custom",
+      path: ["upgradeRewardId"],
+      message: "Choose either a new reward item or an upgrade.",
+    });
+}
+
+export function hasCooperativeUpgradeRoster(
+  coEarners: readonly string[],
+  homebaseMembers: readonly string[],
+  roster: readonly string[],
+) {
+  return (
+    coEarners.length <= 1 ||
+    (roster.length >= 2 &&
+      coEarners.every(
+        (id) => !homebaseMembers.includes(id) || roster.includes(id),
+      ))
+  );
+}
+
 export const milestoneInputSchema = z
   .object({
     activityId: key,
@@ -78,12 +115,7 @@ export const milestoneInputSchema = z
       ),
   })
   .superRefine((m, ctx) => {
-    if (m.itemId && m.upgradeRewardId)
-      ctx.addIssue({
-        code: "custom",
-        path: ["upgradeRewardId"],
-        message: "Choose either a new reward item or an upgrade.",
-      });
+    checkMilestoneRewardChoice(m, ctx);
     if (m.policy === "paced" && (!m.startAt || !m.endAt))
       ctx.addIssue({
         code: "custom",
@@ -416,7 +448,16 @@ export function parseDatabase(input: unknown): Database {
           l.isSuccess,
       );
     });
-    if (Boolean(upgradeCreditedAt) !== completed.every(Boolean))
+    const cooperative = hasCooperativeUpgradeRoster(
+      target.requiredUserIds,
+      db.memberships
+        .filter((m) => m.connectionId === target.homebaseId)
+        .map((m) => m.userId),
+      upgradeRequiredUserIds,
+    );
+    if (
+      Boolean(upgradeCreditedAt) !== (cooperative && completed.every(Boolean))
+    )
       throw new Error("Upgrade credit differs from its required completions.");
     if (
       upgradeCreditedAt &&

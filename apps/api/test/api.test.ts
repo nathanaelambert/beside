@@ -116,6 +116,29 @@ describe("public API contract without a database", () => {
       body.issues.some((issue: { path: string }) => issue.path === "email"),
     );
   });
+  it("publishes the exclusive reward choice for milestone create and patch requests", async () => {
+    const { body } = await request(app.getHttpServer())
+      .get("/openapi.json")
+      .expect(200);
+    const conflict = {
+      type: "object",
+      required: ["itemId", "upgradeRewardId"],
+      properties: {
+        itemId: { type: "string" },
+        upgradeRewardId: { type: "string" },
+      },
+    };
+    const { CreateMilestone, UpdateMilestone } = body.components.schemas;
+    assert.deepEqual(CreateMilestone.not, conflict);
+    assert.deepEqual(UpdateMilestone.not, conflict);
+    assert.ok(CreateMilestone.required.includes("itemId"));
+    for (const schema of [CreateMilestone, UpdateMilestone]) {
+      assert.equal(schema.properties.itemId.nullable, true);
+      assert.equal(schema.properties.upgradeRewardId.nullable, true);
+      assert.ok(!schema.required?.includes("upgradeRewardId"));
+    }
+    assert.ok(!UpdateMilestone.required?.includes("itemId"));
+  });
   it("rejects unauthenticated cron requests before touching the database", async () => {
     await request(app.getHttpServer()).get("/api/cron/milestones").expect(401);
     await request(app.getHttpServer())
@@ -925,12 +948,28 @@ describe(
             : upgradeBody,
         );
         const path = `/api/v1/milestones/${planned.entityId}`;
-        if (count === 1)
+        if (count === 1) {
+          const patch = (changes: object) =>
+            request(server).patch(path).set(auth(alice)).send(changes);
+          // The request validator rejects an explicit conflict, and the command
+          // also checks omitted fields against the existing reward choice.
+          const conflict = await patch({
+            itemId: "sunflower",
+            upgradeRewardId: rewardId,
+          }).expect(400);
+          assert.ok(
+            conflict.body.issues.some(
+              (issue: { path: string }) => issue.path === "upgradeRewardId",
+            ),
+          );
+          await patch({ upgradeRewardId: rewardId }).expect(400);
           await request(server)
             .patch(path)
             .set(auth(alice))
             .send({ itemId: null, upgradeRewardId: rewardId })
             .expect(200);
+          await patch({ itemId: "sunflower" }).expect(400);
+        }
         milestones.push(planned.entityId);
         await log(alice, planned.entityId);
         const partial = await state(alice);
@@ -998,6 +1037,98 @@ describe(
       assert.ok(!removed.rewards.some((r) => r.id === rewardId));
       assert.ok(
         !removed.milestones.some((m) => m.upgradeRewardId === rewardId),
+      );
+    });
+    it("rejects solo upgrades after a co-earner leaves a different activity, including scheduled occurrences", async () => {
+      const server = app.getHttpServer();
+      const base = await create(alice, "homebases", { name: "Joint cottage" });
+      await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
+      const start = (name: string) =>
+        create(alice, "activities", {
+          templateId: "read-book",
+          name,
+          connectionId: base.id,
+          target: 1,
+        });
+      const source = await start("First book");
+      const sequel = await start("Second book");
+      const original = await create(
+        alice,
+        "milestones",
+        milestoneBody(source.entityId, "cozy-cottage"),
+      );
+      await create(
+        alice,
+        "logs",
+        logBody(original.entityId, `solo-source-a-${nonce}`),
+        200,
+      );
+      await create(
+        bob,
+        "logs",
+        logBody(original.entityId, `solo-source-b-${nonce}`),
+        200,
+      );
+      const before = await state(bob);
+      const rewardId = before.milestones.find(
+        (m) => m.id === original.entityId,
+      )!.rewardId!;
+      const root = before.milestones.find(
+        (m) => m.activityId === sequel.entityId && m.kind === "join",
+      )!;
+      await create(
+        bob,
+        "logs",
+        { ...logBody(root.id, `solo-leave-${nonce}`), isSuccess: false },
+        200,
+      );
+
+      const rejected = await create(
+        alice,
+        "milestones",
+        {
+          ...milestoneBody(sequel.entityId),
+          upgradeRewardId: rewardId,
+        },
+        400,
+      );
+      assert.match(rejected.message, /all co-earners/);
+      const schedulePath = `activities/${sequel.entityId}/schedules`;
+      const schedule = {
+        name: "Read chapter 2",
+        quantity: 1,
+        itemId: "sunflower",
+        timeZone: "UTC",
+        startDate: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+        startTime: "09:00",
+        endTime: "10:00",
+        recurrence: { frequency: "daily" },
+        count: 1,
+      };
+      await create(
+        alice,
+        schedulePath,
+        { ...schedule, itemId: null, upgradeRewardId: rewardId },
+        400,
+      );
+      await create(alice, schedulePath, schedule);
+      const occurrence = (await state(alice)).milestones.find(
+        (m) => m.activityId === sequel.entityId && m.name === schedule.name,
+      )!;
+      const response = await request(server)
+        .patch(`/api/v1/milestones/${occurrence.id}`)
+        .set(auth(alice))
+        .send({ itemId: null, upgradeRewardId: rewardId })
+        .expect(400);
+      assert.match(response.body.message, /all co-earners/);
+      const after = await state(alice);
+      assert.deepEqual(
+        after.milestones.find((m) => m.id === occurrence.id),
+        occurrence,
+      );
+      assert.equal(
+        after.rewards.find((reward) => reward.id === rewardId)!.upgradeCount,
+        0,
       );
     });
     it("proposes a recurring schedule's reward on behalf of its creator", async () => {

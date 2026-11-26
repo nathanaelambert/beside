@@ -1,5 +1,30 @@
 import type { PixelArt } from "@beside/rewards"
 
+export type BuildViewport = { left: number; top: number; right: number; bottom: number }
+type SpriteBounds = { x: number; y: number; width: number; height: number }
+
+function overlaps(viewport: BuildViewport, sprite: SpriteBounds) {
+  "worklet"
+  return (
+    sprite.x < viewport.right &&
+    sprite.x + sprite.width > viewport.left &&
+    sprite.y < viewport.bottom &&
+    sprite.y + sprite.height > viewport.top
+  )
+}
+
+export function isConstructionVisible(
+  viewport: BuildViewport,
+  reward: SpriteBounds,
+  watch: SpriteBounds,
+) {
+  "worklet"
+  return overlaps(viewport, reward) || overlaps(viewport, watch)
+}
+
+export const watchWidth = 13
+export const watchHeight = 14
+
 const watchFace = [
   ".....ddd.....",
   ".....dld.....",
