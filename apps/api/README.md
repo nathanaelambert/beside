@@ -201,7 +201,9 @@ To plan an upgrade through `POST /api/v1/milestones` or
 snapshots the milestone activity's active participants into
 `upgradeRequiredUserIds`. For a jointly earned reward, this roster must include
 at least two active participants and every co-earner who still belongs to the
-home base. The choice locks at the first log. The final required
+home base. This requirement applies when changing the milestone rules and when
+crediting the upgrade. A co-earner who checks in and then leaves before credit
+prevents the upgrade. The choice locks at the first log. The final required
 success sets `upgradeCreditedAt`, increments the reward's `upgradeCount`, and emits
 one `reward.upgraded` event in the same transaction. Level starts at one and
 equals one plus the upgrade count. Any earned item can be upgraded, even before

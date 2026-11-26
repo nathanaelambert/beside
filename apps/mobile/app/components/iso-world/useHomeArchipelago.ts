@@ -29,6 +29,18 @@ async function loadGardenSnapshot(id: string): Promise<GardenSnapshot> {
   return { garden, receivedAt: performance.now() }
 }
 
+function advanceGardenRevision(revisions: Map<string, number>, id: string) {
+  const revision = (revisions.get(id) ?? 0) + 1
+  revisions.set(id, revision)
+  return revision
+}
+
+function acceptGardenRefresh(revisions: Map<string, number>, id: string, expected?: number) {
+  if (revisions.get(id) !== expected) return false
+  advanceGardenRevision(revisions, id)
+  return true
+}
+
 type ArchipelagoData = {
   bases: ApiHomebase[]
   state: ApiState
@@ -85,15 +97,13 @@ export function useHomeArchipelago(
         try {
           const [state, garden] = await Promise.all([besideApi.state(), loadGardenSnapshot(id)])
           if (!active || request !== latestRefresh) return
+          const freshGarden = acceptGardenRefresh(gardenRevisions.current, id, revision)
           setData((current) =>
             current?.bases.some((base) => base.id === id)
               ? {
                   ...current,
                   state,
-                  gardens:
-                    gardenRevisions.current.get(id) === revision
-                      ? { ...current.gardens, [id]: garden }
-                      : current.gardens,
+                  gardens: freshGarden ? { ...current.gardens, [id]: garden } : current.gardens,
                 }
               : current,
           )
@@ -139,16 +149,16 @@ export function useHomeArchipelago(
             requested.current ?? currentFocus.current ?? loadString(storageKey) ?? undefined
           const base = selectHomebase(available, state.users, preferred)
           if (base) focusIsland(base.id)
+          const fresh = new Map(
+            gardens.filter(([id]) =>
+              acceptGardenRefresh(gardenRevisions.current, id, revisions.get(id)),
+            ),
+          )
           setData((current) => ({
             bases: available,
             state,
             gardens: Object.fromEntries(
-              gardens.map(([id, garden]) => [
-                id,
-                gardenRevisions.current.get(id) === revisions.get(id)
-                  ? garden
-                  : current?.gardens[id],
-              ]),
+              available.map(({ id }) => [id, fresh.has(id) ? fresh.get(id) : current?.gardens[id]]),
             ),
             order: available.map((b) => b.id),
           }))
@@ -177,16 +187,33 @@ export function useHomeArchipelago(
   const beginGardenUpdate = useCallback((id: string) => {
     const request = (gardenRequests.current.get(id) ?? 0) + 1
     gardenRequests.current.set(id, request)
-    gardenRevisions.current.set(id, (gardenRevisions.current.get(id) ?? 0) + 1)
-    return (garden: HomebaseGarden | undefined) => {
-      if (gardenRequests.current.get(id) !== request) return false
-      gardenRevisions.current.set(id, (gardenRevisions.current.get(id) ?? 0) + 1)
-      const snapshot = garden && { garden, receivedAt: performance.now() }
+    let revision = advanceGardenRevision(gardenRevisions.current, id)
+    function publish(snapshot?: GardenSnapshot) {
       setData((current) =>
         gardenRequests.current.get(id) === request && current?.bases.some((base) => base.id === id)
           ? { ...current, gardens: { ...current.gardens, [id]: snapshot } }
           : current,
       )
+    }
+    return (garden: HomebaseGarden | undefined) => {
+      if (gardenRequests.current.get(id) !== request) return false
+      const refreshedDuringWrite = gardenRevisions.current.get(id) !== revision
+      revision = advanceGardenRevision(gardenRevisions.current, id)
+      if (!refreshedDuringWrite) {
+        publish(garden && { garden, receivedAt: performance.now() })
+      } else if (garden) {
+        // The write succeeded, but its response may predate a teammate's changes.
+        // Keep the refreshed garden until a read started after the write returns.
+        const afterWrite = revision
+        void loadGardenSnapshot(id)
+          .then((snapshot) => {
+            if (gardenRequests.current.get(id) !== request) return
+            if (acceptGardenRefresh(gardenRevisions.current, id, afterWrite)) publish(snapshot)
+          })
+          .catch(() => {
+            // Keep the refreshed garden available if reconciliation fails.
+          })
+      }
       return true
     }
   }, [])

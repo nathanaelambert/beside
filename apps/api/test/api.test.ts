@@ -1039,7 +1039,7 @@ describe(
         !removed.milestones.some((m) => m.upgradeRewardId === rewardId),
       );
     });
-    it("rejects solo upgrades after a co-earner leaves a different activity, including scheduled occurrences", async () => {
+    it("rejects solo upgrade planning, rule changes and credit after a co-earner leaves another activity", async () => {
       const server = app.getHttpServer();
       const base = await create(alice, "homebases", { name: "Joint cottage" });
       await create(bob, "homebases/join", { inviteCode: base.inviteCode }, 200);
@@ -1076,10 +1076,37 @@ describe(
       const root = before.milestones.find(
         (m) => m.activityId === sequel.entityId && m.kind === "join",
       )!;
+      const upgrade = {
+        ...milestoneBody(sequel.entityId),
+        upgradeRewardId: rewardId,
+      };
+      const editable = await create(alice, "milestones", upgrade);
+      const checkedIn = await create(alice, "milestones", upgrade);
+      await create(
+        bob,
+        "logs",
+        logBody(checkedIn.entityId, `before-leave-${nonce}`),
+        200,
+      );
       await create(
         bob,
         "logs",
         { ...logBody(root.id, `solo-leave-${nonce}`), isSuccess: false },
+        200,
+      );
+      const scheduleUpdate = await request(server)
+        .patch(`/api/v1/milestones/${editable.entityId}`)
+        .set(auth(alice))
+        .send({
+          policy: "deadline",
+          endAt: new Date(Date.now() + 3_600_000).toISOString(),
+        })
+        .expect(400);
+      assert.match(scheduleUpdate.body.message, /all co-earners/);
+      await create(
+        alice,
+        "logs",
+        logBody(checkedIn.entityId, `after-leave-${nonce}`),
         200,
       );
 
@@ -1122,6 +1149,22 @@ describe(
         .expect(400);
       assert.match(response.body.message, /all co-earners/);
       const after = await state(alice);
+      assert.equal(
+        after.milestones.find((m) => m.id === editable.entityId)!.policy,
+        "open",
+      );
+      assert.equal(
+        after.milestones.find((m) => m.id === checkedIn.entityId)!
+          .upgradeCreditedAt,
+        null,
+      );
+      assert.equal(
+        after.events.some(
+          (event) =>
+            event.type === "reward.upgraded" && event.entityId === rewardId,
+        ),
+        false,
+      );
       assert.deepEqual(
         after.milestones.find((m) => m.id === occurrence.id),
         occurrence,

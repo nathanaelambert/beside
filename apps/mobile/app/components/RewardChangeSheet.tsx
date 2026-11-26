@@ -67,6 +67,7 @@ export function RewardChangeSheet(props: Props) {
   const itemId = mode === "item" ? value : null
   const upgradeRewardId = mode === "upgrade" ? upgradeId : null
   const unchanged = itemId === initial && upgradeRewardId === initialUpgradeId
+  const selectedUpgrade = upgrades.find((upgrade) => upgrade.id === upgradeRewardId)
   const upgradeRoster =
     upgradeId && upgradeId === initialUpgradeId ? initialUpgradeRosterNames : upgradeRosterNames
   const amount = Number(quantity)
@@ -103,6 +104,7 @@ export function RewardChangeSheet(props: Props) {
             <>
               <WorldTextField
                 label="Milestone name"
+                accessibilityLabel="Milestone name"
                 testID="plan-milestone-name"
                 value={name}
                 onChangeText={setName}
@@ -111,6 +113,7 @@ export function RewardChangeSheet(props: Props) {
               />
               <WorldTextField
                 label="Quantity"
+                accessibilityLabel="Quantity"
                 testID="plan-milestone-quantity"
                 value={quantity}
                 onChangeText={setQuantity}
@@ -125,7 +128,7 @@ export function RewardChangeSheet(props: Props) {
           ) : (
             <Text text={milestoneName?.toUpperCase()} style={worldEyebrow} />
           )}
-          {!!upgrades.length && (
+          {(upgrades.length > 0 || !!initialUpgradeId) && (
             <FormChoice
               label="Milestone reward"
               value={mode}
@@ -155,9 +158,11 @@ export function RewardChangeSheet(props: Props) {
             <>
               <Text
                 text={
-                  upgradeRoster.length
-                    ? `${namesLabel(upgradeRoster)} must all check in to add one level.`
-                    : "Everyone on the milestone roster must check in to add one level."
+                  upgradeRewardId && !selectedUpgrade
+                    ? "This activity needs its co-earners active to plan this upgrade."
+                    : upgradeRoster.length
+                      ? `${namesLabel(upgradeRoster)} must all check in to add one level.`
+                      : "Everyone on the milestone roster must check in to add one level."
                 }
                 style={activityWorldStyles.body}
               />
@@ -193,7 +198,7 @@ export function RewardChangeSheet(props: Props) {
             }
             testID={props.plan ? "plan-milestone-save" : "reward-change-save"}
             preset="filled"
-            disabled={saving || invalidDraft || (mode === "upgrade" && !upgradeRewardId)}
+            disabled={saving || invalidDraft || (mode === "upgrade" && !selectedUpgrade)}
             onPress={save}
           />
         </View>

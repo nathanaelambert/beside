@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./garden": "./src/garden.ts"
+    "./garden": "./src/garden.ts",
+    "./reward-upgrades": "./src/reward-upgrades.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",

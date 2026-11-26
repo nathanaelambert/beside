@@ -6,6 +6,7 @@ import {
   type MilestoneSchedule,
   type RewardAgreement,
 } from "@beside/api-client"
+import { hasCooperativeUpgradeRoster } from "@beside/api-client/reward-upgrades"
 import type { RewardItem } from "@beside/rewards"
 import { useFocusEffect } from "@react-navigation/native"
 
@@ -134,11 +135,13 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     }, []),
   )
   const activity = data?.activities.find((a) => a.id === activityId)
-  const members =
+  const homebaseMemberIds =
     data?.memberships
       .filter((membership) => membership.connectionId === activity?.connectionId)
-      .map((membership) => data.users.find((user) => user.id === membership.userId))
-      .filter((member) => member !== undefined) ?? []
+      .map((membership) => membership.userId) ?? []
+  const members = homebaseMemberIds
+    .map((id) => data?.users.find((user) => user.id === id))
+    .filter((member) => member !== undefined)
   const memberAvatars = avatarsForMembers(members)
   const timeZone = schedules[0]?.configuration.timeZone ?? "America/Toronto"
   const snapshotTime = Date.parse(data?.serverTime ?? "")
@@ -152,11 +155,11 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
   const currentAttendance = attendanceMembers(data?.logs ?? [], currentOccurrence?.id)
   const itemFor = (itemId: string): RewardItem | undefined =>
     data?.rewardItems.find((item) => item.id === itemId) ?? catalogue.get(itemId)
-  const activeIds = new Set(
+  const activeRoster =
     data?.participations
       .filter((p) => p.activityId === activityId && p.status === "active")
-      .map((p) => p.userId),
-  )
+      .map((p) => p.userId) ?? []
+  const activeIds = new Set(activeRoster)
   const activeNames = members
     .filter((member) => activeIds.has(member.id))
     .map((member) => firstName(member.name))
@@ -164,6 +167,8 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
     editor && data
       ? data.rewards.flatMap((reward) => {
           if (!reward.obtainedAt || reward.homebaseId !== activity?.connectionId) return []
+          if (!hasCooperativeUpgradeRoster(reward.requiredUserIds, homebaseMemberIds, activeRoster))
+            return []
           const item = itemFor(reward.itemId)
           if (!item) return []
           const { milestone, activity: source } = rewardMemory(data, reward.id)
@@ -280,11 +285,18 @@ export function ActivityDetailScreen({ navigation, route }: AppStackScreenProps<
         .filter((id) => !attendance.has(id))
         .map((id) => firstName(data.users.find((member) => member.id === id)?.name ?? "Member"))
       const level = rewardLevel(target.upgradeCount)
+      const canEarn = hasCooperativeUpgradeRoster(
+        target.requiredUserIds,
+        homebaseMemberIds,
+        roster.filter((id) => activeIds.has(id)),
+      )
       const outcome = milestone.upgradeCreditedAt
         ? "Upgrade earned"
         : milestone.endAt && Date.parse(milestone.endAt) < now
           ? "Upgrade window closed"
-          : `Upgrade planned · ${roster.length - waiting.length} of ${roster.length} checked in · Waiting on ${namesLabel(waiting)}`
+          : canEarn
+            ? `Upgrade planned · ${roster.length - waiting.length} of ${roster.length} checked in · Waiting on ${namesLabel(waiting)}`
+            : "Upgrade needs its co-earners active in this activity"
       const chip = <RewardChip item={upgradeItem} detail={`Level ${level} · ${outcome}`} />
       if (changeable(milestone))
         return (

@@ -40,7 +40,7 @@ Obtaining a reward and recording the final successful log are one transaction wi
 
 A milestone can instead target an earned reward in the same home base through `upgradeRewardId`. It snapshots the current activity's active participants in `upgradeRequiredUserIds`. When the entire roster has successfully checked in, the final log sets `upgradeCreditedAt` and increments the reward's persisted `upgradeCount` once. Level is one plus this count, and deleting an upgrade milestone preserves the level. Any catalog item can be the target.
 
-Upgrading a jointly earned reward requires at least two active participants, including all co-earners who still belong to the home base. This also applies when a member converts an existing milestone into an upgrade.
+Upgrading a jointly earned reward requires at least two active participants from the upgrade roster, including all co-earners who still belong to the home base. This applies when planning, editing milestone rules, and crediting the upgrade. Leaving before credit can block an upgrade even after a check-in. Leaving after credit preserves the level.
 
 Activities are accessible from the island's Activities list. The island displays earned items after members place them, alongside the starter oak and wild trees. A cottage is a catalog choice. The API stamps `buildReadyAt` on first placement and after an earned upgrade for a short visual countdown. Older placements with a null timestamp display as finished. The countdown requires no settlement.
 

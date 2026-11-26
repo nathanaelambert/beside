@@ -115,16 +115,12 @@ beforeEach(() => {
     .mockResolvedValue({ entityId: "second-read", duplicate: false })
 })
 
-it.each([
-  { itemId: null, upgradeRewardId: "cottage" },
-  { itemId: "sunflower", upgradeRewardId: null },
-  { itemId: null, upgradeRewardId: null },
-])("plans a new milestone on a finished activity with reward choice %j", async (choice) => {
+function openActivity() {
   const props = {
     route: { params: { activityId: "reading" } },
     navigation: { navigate: jest.fn(), goBack: jest.fn() },
   } as unknown as AppStackScreenProps<"ActivityDetail">
-  const screen = render(
+  return render(
     <SafeAreaProvider
       initialMetrics={{
         frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -136,10 +132,18 @@ it.each([
       </ThemeProvider>
     </SafeAreaProvider>,
   )
+}
+
+it.each([
+  { itemId: null, upgradeRewardId: "cottage" },
+  { itemId: "sunflower", upgradeRewardId: null },
+  { itemId: null, upgradeRewardId: null },
+])("plans a new milestone on a finished activity with reward choice %j", async (choice) => {
+  const screen = openActivity()
   fireEvent.press(await screen.findByTestId("activity-plan-milestone"))
   expect(screen.getByTestId("plan-milestone-save")).toBeDisabled()
-  fireEvent.changeText(screen.getByTestId("plan-milestone-name"), "Read the sequel")
-  fireEvent.changeText(screen.getByTestId("plan-milestone-quantity"), "2")
+  fireEvent.changeText(screen.getByLabelText("Milestone name"), "Read the sequel")
+  fireEvent.changeText(screen.getByLabelText("Quantity"), "2")
   if (choice.upgradeRewardId) {
     fireEvent.press(screen.getByTestId("reward-choice-mode"))
     fireEvent.press(screen.getByTestId("reward-choice-mode-upgrade"))
@@ -163,4 +167,50 @@ it.each([
     expect(screen.queryByTestId("plan-milestone-save")).toBeNull()
     expect(besideApi.state).toHaveBeenCalledTimes(2)
   })
+})
+
+it("keeps the accessible name, quantity and reward choice after a failed save", async () => {
+  jest
+    .mocked(besideApi.createMilestone)
+    .mockRejectedValueOnce(new Error("The garden is unavailable. Try again."))
+  const screen = openActivity()
+  fireEvent.press(await screen.findByTestId("activity-plan-milestone"))
+  fireEvent.changeText(screen.getByLabelText("Milestone name"), "Read the sequel")
+  fireEvent.changeText(screen.getByLabelText("Quantity"), "2")
+  fireEvent.press(screen.getByTestId("reward-choice-mode"))
+  fireEvent.press(screen.getByTestId("reward-choice-mode-upgrade"))
+  fireEvent.press(screen.getByTestId("reward-upgrade-option-cottage"))
+  fireEvent.press(screen.getByTestId("plan-milestone-save"))
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The garden is unavailable. Try again.",
+  )
+  expect(screen.getByLabelText("Milestone name")).toHaveDisplayValue("Read the sequel")
+  expect(screen.getByLabelText("Quantity")).toHaveDisplayValue("2")
+  expect(screen.getByTestId("reward-upgrade-option-cottage")).toBeChecked()
+  expect(screen.getByTestId("plan-milestone-save")).toBeEnabled()
+  expect(besideApi.state).toHaveBeenCalledTimes(1)
+})
+
+it("only lists eligible upgrade targets when a co-earner has left the activity", async () => {
+  const soloReward = {
+    ...snapshot.rewards[0]!,
+    id: "solo",
+    itemId: "sunflower",
+    requiredUserIds: ["alice"],
+  }
+  jest.mocked(besideApi.state).mockResolvedValue({
+    ...snapshot,
+    participations: snapshot.participations.map((person) =>
+      person.userId === "bob" ? { ...person, status: "left" } : person,
+    ),
+    rewards: [...snapshot.rewards, soloReward],
+  })
+  const screen = openActivity()
+  fireEvent.press(await screen.findByTestId("activity-plan-milestone"))
+  fireEvent.changeText(screen.getByLabelText("Milestone name"), "Read the sequel")
+  fireEvent.press(screen.getByTestId("reward-choice-mode"))
+  fireEvent.press(screen.getByTestId("reward-choice-mode-upgrade"))
+  expect(screen.getByTestId("reward-upgrade-option-solo")).toBeTruthy()
+  expect(screen.queryByTestId("reward-upgrade-option-cottage")).toBeNull()
+  expect(screen.getByTestId("plan-milestone-save")).toBeDisabled()
 })

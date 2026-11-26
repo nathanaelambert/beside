@@ -6,6 +6,7 @@ import {
   migrateHomebases,
 } from "./migrations.ts";
 import { rewardItems } from "@beside/rewards";
+import { hasCooperativeUpgradeRoster } from "./reward-upgrades.ts";
 
 const key = z.string().min(1).max(200);
 const text = z.string().max(2000);
@@ -81,20 +82,6 @@ export function checkMilestoneRewardChoice(
       path: ["upgradeRewardId"],
       message: "Choose either a new reward item or an upgrade.",
     });
-}
-
-export function hasCooperativeUpgradeRoster(
-  coEarners: readonly string[],
-  homebaseMembers: readonly string[],
-  roster: readonly string[],
-) {
-  return (
-    coEarners.length <= 1 ||
-    (roster.length >= 2 &&
-      coEarners.every(
-        (id) => !homebaseMembers.includes(id) || roster.includes(id),
-      ))
-  );
 }
 
 export const milestoneInputSchema = z
@@ -441,28 +428,47 @@ export function parseDatabase(input: unknown): Database {
         )
       )
         throw new Error("An upgrade requires someone outside the activity.");
-      return db.logs.find(
+      return db.logs.findIndex(
         (l) =>
           l.milestoneId === milestone.id &&
           l.authorUserId === userId &&
           l.isSuccess,
       );
     });
+    const allCompleted = completed.every((index) => index >= 0);
+    const finalCompletion = Math.max(...completed);
+    const root = db.milestones.find(
+      (row) => row.activityId === activity.id && row.kind === "join",
+    );
+    // Append order breaks ties between logs with the same server timestamp.
+    // A departure after credit must never invalidate an earned upgrade.
+    const activeAtCompletion = allCompleted
+      ? upgradeRequiredUserIds.filter(
+          (userId, memberIndex) =>
+            !db.logs.some(
+              (log, index) =>
+                index > completed[memberIndex]! &&
+                index <= finalCompletion &&
+                log.milestoneId === root?.id &&
+                log.authorUserId === userId &&
+                !log.isSuccess,
+            ),
+        )
+      : [];
     const cooperative = hasCooperativeUpgradeRoster(
       target.requiredUserIds,
       db.memberships
         .filter((m) => m.connectionId === target.homebaseId)
         .map((m) => m.userId),
-      upgradeRequiredUserIds,
+      activeAtCompletion,
     );
-    if (
-      Boolean(upgradeCreditedAt) !== (cooperative && completed.every(Boolean))
-    )
+    if (Boolean(upgradeCreditedAt) !== (cooperative && allCompleted))
       throw new Error("Upgrade credit differs from its required completions.");
     if (
       upgradeCreditedAt &&
       completed.some(
-        (log) => Date.parse(log!.createdAt) > Date.parse(upgradeCreditedAt),
+        (index) =>
+          Date.parse(db.logs[index]!.createdAt) > Date.parse(upgradeCreditedAt),
       )
     )
       throw new Error("Upgrade credit predates a required completion.");

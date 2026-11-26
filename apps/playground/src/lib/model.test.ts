@@ -777,7 +777,7 @@ test("v3 reward and milestone rows acquire legacy-safe upgrade and build default
   assert.deepEqual(parseDatabase(legacy), db);
 });
 
-test("leaving after an upgrade is planned cannot shrink its required roster", () => {
+function planJointUpgrade() {
   const earned = plan(createSeed(), { itemId: "oak-tree" });
   const first = record(earned.db, { milestoneId: earned.entityId });
   const second = record(first.db, {
@@ -791,11 +791,18 @@ test("leaving after an upgrade is planned cannot shrink its required roster", ()
   const join = upgrade.db.milestones.find(
     (m) => m.activityId === book(upgrade.db).id && m.kind === "join",
   )!;
-  const left = record(upgrade.db, {
-    milestoneId: join.id,
-    authorUserId: "nathaniel",
-    isSuccess: false,
-  });
+  const leave = (db: Database) =>
+    record(db, {
+      milestoneId: join.id,
+      authorUserId: "nathaniel",
+      isSuccess: false,
+    });
+  return { upgrade, rewardId, leave };
+}
+
+test("leaving after an upgrade is planned cannot shrink its required roster", () => {
+  const { upgrade, rewardId, leave } = planJointUpgrade();
+  const left = leave(upgrade.db);
   const checkedIn = record(left.db, { milestoneId: upgrade.entityId });
   const milestone = checkedIn.db.milestones.find(
     (m) => m.id === upgrade.entityId,
@@ -920,4 +927,53 @@ test("another active member cannot replace a co-earner who still belongs to the 
     () => plan(db, { activityId: sequel!.id, upgradeRewardId: rewardId }),
     /all co-earners/,
   );
+});
+
+test("schedule-only edits revalidate the saved upgrade roster before the first check-in", () => {
+  const { upgrade, leave } = planJointUpgrade();
+  const patch = (db: Database) =>
+    execute(
+      db,
+      {
+        type: "updateMilestone",
+        actorId: "mosaab",
+        milestoneId: upgrade.entityId,
+        changes: { policy: "deadline", endAt: "2026-10-22T18:00:00.000Z" },
+      },
+      now,
+    );
+  const edited = patch(upgrade.db);
+  assert.deepEqual(
+    edited.db.milestones.find((m) => m.id === upgrade.entityId)!
+      .upgradeRequiredUserIds,
+    ["mosaab", "nathaniel"],
+  );
+  assert.throws(() => patch(leave(upgrade.db).db), /all co-earners/);
+});
+
+test("a co-earner must still be active at credit time and may leave after the upgrade is earned", () => {
+  const { upgrade, rewardId, leave } = planJointUpgrade();
+  const milestoneId = upgrade.entityId;
+  const first = record(upgrade.db, { milestoneId, authorUserId: "nathaniel" });
+  // Both orderings deliberately have identical server timestamps.
+  const leftFirst = record(leave(first.db).db, { milestoneId }).db;
+  const earnedFirst = leave(record(first.db, { milestoneId }).db).db;
+  assert.equal(
+    leftFirst.rewards.find((r) => r.id === rewardId)!.upgradeCount,
+    0,
+  );
+  assert.equal(
+    leftFirst.milestones.find((m) => m.id === milestoneId)!.upgradeCreditedAt,
+    null,
+  );
+  assert.equal(
+    earnedFirst.rewards.find((r) => r.id === rewardId)!.upgradeCount,
+    1,
+  );
+  assert.equal(
+    earnedFirst.milestones.find((m) => m.id === milestoneId)!.upgradeCreditedAt,
+    now,
+  );
+  assert.deepEqual(parseDatabase(leftFirst), leftFirst);
+  assert.deepEqual(parseDatabase(earnedFirst), earnedFirst);
 });

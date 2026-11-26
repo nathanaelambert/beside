@@ -10,11 +10,8 @@ import type {
   Participation,
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
-import {
-  hasCooperativeUpgradeRoster,
-  logInputSchema,
-  milestoneInputSchema,
-} from "./validation.ts";
+import { hasCooperativeUpgradeRoster } from "./reward-upgrades.ts";
+import { logInputSchema, milestoneInputSchema } from "./validation.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const requireValue = <T>(value: T | undefined | null, message: string): T => {
@@ -227,14 +224,16 @@ function planUpgrade(
   db: Database,
   activity: Activity,
   rewardId: string | null,
+  savedRoster?: readonly string[],
 ) {
   if (!rewardId) return noUpgrade;
   const target = db.rewards.find((reward) => reward.id === rewardId);
   if (!target?.obtainedAt || target.homebaseId !== activity.connectionId)
     throw new Error("Choose an earned reward in this home base to upgrade.");
-  const roster = activeParticipantIds(db, activity.id);
-  if (!roster.length)
-    throw new Error("An upgrade needs at least one active participant.");
+  const active = activeParticipantIds(db, activity.id);
+  const roster = savedRoster
+    ? active.filter((id) => savedRoster.includes(id))
+    : active;
   if (
     !hasCooperativeUpgradeRoster(
       target.requiredUserIds,
@@ -245,6 +244,8 @@ function planUpgrade(
     throw new Error(
       "Upgrading a jointly earned reward needs at least two active participants and all co-earners who still belong to this home base.",
     );
+  if (!roster.length)
+    throw new Error("An upgrade needs at least one active participant.");
   return {
     upgradeRewardId: rewardId,
     upgradeRequiredUserIds: roster,
@@ -267,7 +268,10 @@ function awardReward(
     hasCooperativeUpgradeRoster(
       upgrade.requiredUserIds,
       members(db, upgrade.homebaseId),
-      milestone.upgradeRequiredUserIds,
+      milestone.upgradeRequiredUserIds.filter(
+        (userId) =>
+          participation(db, milestone.activityId, userId)?.status === "active",
+      ),
     ) &&
     milestone.upgradeRequiredUserIds.every((userId) =>
       completedMilestone(db, milestone.id, userId),
@@ -604,11 +608,15 @@ export function execute(
         throw new Error(
           "This milestone has logs. Only its name can change; recorded quantities, schedules and reward rules are fixed.",
         );
-      if (upgradeChanged)
-        Object.assign(
-          milestone,
-          planUpgrade(db, activity, input.upgradeRewardId ?? null),
+      if (rulesChanged && (upgradeChanged || input.upgradeRewardId)) {
+        const plan = planUpgrade(
+          db,
+          activity,
+          input.upgradeRewardId ?? null,
+          upgradeChanged ? undefined : milestone.upgradeRequiredUserIds,
         );
+        if (upgradeChanged) Object.assign(milestone, plan);
+      }
       if (input.itemId !== (reward?.itemId ?? null)) {
         if (input.itemId) {
           requireValue(
