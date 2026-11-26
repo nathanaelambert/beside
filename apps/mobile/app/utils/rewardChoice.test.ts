@@ -16,6 +16,8 @@ const reward = {
   itemId: "star-statue",
   obtainedAt: null as string | null,
   requiredUserIds: ["a", "b", "c"],
+  upgradeCount: 0,
+  buildReadyAt: null,
 }
 const milestone = {
   id: "m1",
@@ -28,6 +30,9 @@ const milestone = {
   startAt: "2026-11-13T22:00:00.000Z",
   endAt: "2026-11-14T05:00:00.000Z",
   rewardId: "r1",
+  upgradeRewardId: null,
+  upgradeRequiredUserIds: [],
+  upgradeCreditedAt: null,
   createdAt: "2026-11-01T00:00:00.000Z",
 }
 const during = Date.parse("2026-11-13T23:00:00.000Z")

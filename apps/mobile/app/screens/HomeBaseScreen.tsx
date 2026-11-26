@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ActivityIndicator, PixelRatio, Pressable, StatusBar, StyleSheet, View } from "react-native"
-import { ApiError, type ApiState, type HomebaseGarden } from "@beside/api-client"
+import {
+  ActivityIndicator,
+  AppState,
+  PixelRatio,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  View,
+} from "react-native"
+import { ApiError, rewardLevel, type ApiState, type HomebaseGarden } from "@beside/api-client"
 import type { MeadowPoint } from "@beside/api-client/garden"
 import { useFocusEffect } from "@react-navigation/native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { PixelArtSprite } from "@/components/BesideMark"
-import { cottageArt } from "@/components/iso-world/cottageArt"
+import {
+  focusedIslandLayers,
+  snapZoom,
+  stepZoom,
+  zoomStops,
+} from "@/components/iso-world/archipelago"
 import {
   homeFocus,
   nextSuggestion,
@@ -14,9 +26,14 @@ import {
   plantableTiles,
   plantingTap,
 } from "@/components/iso-world/homeWorld"
+import { IslandSwitcher } from "@/components/iso-world/IslandSwitcher"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
 import { meadowToIso } from "@/components/iso-world/projection"
+import { upgradedRewardArt } from "@/components/iso-world/rewardArt"
 import { catalogue, itemDrawable, type HitTarget } from "@/components/iso-world/scene"
+import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
+import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
+import { useRewardCountdown } from "@/components/iso-world/useRewardCountdown"
 import { firstNamesLabel } from "@/components/pixel-world/avatars"
 import { PlaceRewardPanel } from "@/components/pixel-world/PlaceRewardPanel"
 import { PlantOakPanel } from "@/components/pixel-world/PlantOakPanel"
@@ -29,16 +46,6 @@ import { besideApi } from "@/services/api/beside"
 import { world, worldEyebrow, worldShape } from "@/theme/world"
 import { firstName, namesLabel, rewardMemory, rewardsToPlace } from "@/utils/rewardChoice"
 
-import {
-  focusedIslandLayers,
-  snapZoom,
-  stepZoom,
-  zoomStops,
-} from "@/components/iso-world/archipelago"
-import { IslandSwitcher } from "@/components/iso-world/IslandSwitcher"
-import { useArchipelagoTravel } from "@/components/iso-world/useArchipelagoTravel"
-import { useHomeArchipelago } from "@/components/iso-world/useHomeArchipelago"
-
 type PlacementTarget = { kind: "oak" } | { kind: "reward"; rewardId: string; itemId: string }
 const friends = { x: homeFocus.u * 16, y: homeFocus.v * 16 }
 const placedRewards = (garden?: HomebaseGarden) => garden?.rewards ?? []
@@ -49,6 +56,11 @@ function placementMessage(rejection: string | null) {
     : rejection
       ? "Choose a clear patch of lawn."
       : ""
+}
+
+function RewardBuildStatus({ deadline, visible }: { deadline?: number; visible: boolean }) {
+  const seconds = useRewardCountdown(deadline, visible)
+  return seconds > 0 ? <Text text={`Building · ${seconds}s`} style={styles.description} /> : null
 }
 
 export function HomeBaseScreen(props: AppStackScreenProps<"HomeBase">) {
@@ -112,6 +124,16 @@ function HomeIslandScreen({
   const [gardenError, setGardenError] = useState("")
   const [savingOak, setSavingOak] = useState(false)
   const [focus, setFocus] = useState<MeadowPoint>()
+  const [screenFocused, setScreenFocused] = useState(false)
+  const [appActive, setAppActive] = useState(
+    () => AppState.currentState !== "inactive" && AppState.currentState !== "background",
+  )
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) =>
+      setAppActive(state === "active"),
+    )
+    return () => subscription.remove()
+  }, [])
   const plantingLock = useRef(false)
   const viewSession = useRef<object | undefined>(undefined)
   // Follow reward links after this island’s garden has loaded.
@@ -121,18 +143,19 @@ function HomeIslandScreen({
   useFocusEffect(
     useCallback(() => {
       viewSession.current = {}
+      setScreenFocused(true)
       setSavingOak(plantingLock.current)
       setPlanting(undefined)
       setGardenError("")
       return () => {
         viewSession.current = undefined
+        setScreenFocused(false)
       }
     }, []),
   )
 
   const members = focused?.members ?? []
   const avatars = focused?.avatars ?? []
-  const activities = focused?.activities ?? []
   const multipleIslands = islands.length > 1
   const stops = useMemo(() => zoomStops(PixelRatio.get(), multipleIslands), [multipleIslands])
   // One island keeps main's integer zoom; snapping to pixel-aligned stops is only for the sea.
@@ -178,6 +201,7 @@ function HomeIslandScreen({
   const editing =
     !!target && !!data?.garden && !busy && !voyage && (target.kind === "reward" || canPlant)
   const movingId = editing && target?.kind === "reward" ? target.rewardId : undefined
+  const movingLevel = placements.find((p) => p.rewardId === movingId)?.upgradeCount
   const position = editing ? planting?.position : undefined
   // Everything already standing except what is being placed, as the API sees it.
   const occupied = useMemo(
@@ -186,7 +210,7 @@ function HomeIslandScreen({
   )
   const guideTiles = useMemo(() => (editing ? plantableTiles(occupied) : []), [editing, occupied])
   const guide = guideTiles.map(({ col, row }) => ({ x: col * 16 + 8, y: row * 16 + 8 }))
-  const worldItems = focused?.items ?? []
+  const worldItems = useMemo(() => focused?.items ?? [], [focused?.items])
   const previewItemId = target?.kind === "reward" ? target.itemId : oakAt({ x: 0, y: 0 }).itemId
   const placingItem = target?.kind === "reward" ? catalogue.get(target.itemId) : undefined
 
@@ -204,19 +228,21 @@ function HomeIslandScreen({
       itemDrawable(built.frame, built.map, "placement-preview", previewItemId, point.u, point.v, {
         opacity: 0.72,
         hit: undefined,
+        upgradeCount: movingLevel,
       })
     return focusedIslandLayers(editedLayers, homebase?.id, userId, !!voyage, preview || undefined)
-  }, [baseLayers, homebase?.id, movingId, focused, position, previewItemId, userId, voyage])
+  }, [
+    baseLayers,
+    homebase?.id,
+    movingId,
+    movingLevel,
+    focused,
+    position,
+    previewItemId,
+    userId,
+    voyage,
+  ])
   const scene = focused?.scene
-  const selectedHouse = scene?.houses.find((h) => `house-${h.activity.id}` === selectedKey)
-  const houseArt = selectedHouse
-    ? cottageArt(scene!.houses.indexOf(selectedHouse), !!selectedHouse.activity.open)
-    : undefined
-
-  function openActivity(activityId: string) {
-    navigation.navigate("ActivityDetail", { activityId })
-  }
-
   function rewardStory(state: ApiState, rewardId: string) {
     const { milestone, activity } = rewardMemory(state, rewardId)
     return milestone
@@ -305,11 +331,7 @@ function HomeIslandScreen({
       return
     }
     if (!editing || !homebase || !target) {
-      if (hit?.type === "house" && selectedKey === `house-${hit.id}`) openActivity(hit.id)
-      else
-        setSelectedKey(
-          hit?.type === "avatar" ? hit.id : hit?.type === "house" ? `house-${hit.id}` : hit?.id,
-        )
+      setSelectedKey(hit?.id)
       return
     }
     const { point, rejection } = plantingTap(scene!.frame, x, y, occupied)
@@ -389,6 +411,8 @@ function HomeIslandScreen({
     selectedPlacement && data ? rewardMemory(data.state, selectedPlacement.rewardId) : undefined
   const selectedReward =
     selectedPlacement && data?.state.rewards.find((r) => r.id === selectedPlacement.rewardId)
+  const selectedUpgradeCount = selectedPlacement?.upgradeCount ?? selectedReward?.upgradeCount ?? 0
+  const showConstruction = screenFocused && appActive
   const earnedBy =
     selectedReward && data
       ? selectedReward.requiredUserIds
@@ -512,6 +536,7 @@ function HomeIslandScreen({
                     drawables: layers[0]!.drawables,
                   })}
               voyage={voyage}
+              showConstruction={showConstruction}
               onArrival={arrive}
               zoom={currentZoom}
               focus={
@@ -529,7 +554,7 @@ function HomeIslandScreen({
               }
               onTap={tapWorld}
               onPinch={changeZoom}
-              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${activities.length} activity cottages. ${multipleIslands ? "Use the island buttons or tap another island to sail there. " : ""}${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend, cottage or reward to learn about it."}`}
+              accessibilityLabel={`${homebase.name}, an island garden. ${members.length} members: ${members.map((member) => member.name).join(", ")}. ${multipleIslands ? "Use the island buttons or tap another island to sail there. " : ""}${editing ? `Tap a marked lawn tile to preview the ${placingItem?.name ?? "oak"}, or use Suggest spot.` : "Drag to explore, pinch to zoom. Tap a friend or reward to learn about it."}`}
             />
             <View
               pointerEvents="none"
@@ -650,7 +675,13 @@ function HomeIslandScreen({
         {selectedPlacement && memory && selectedArt ? (
           <View style={styles.detail} testID="homebase-reward-memory">
             <View style={styles.thumbnail}>
-              <RewardSprite item={selectedArt} scale={1.5} />
+              <RewardSprite
+                item={{
+                  ...selectedArt,
+                  artifact: upgradedRewardArt(selectedArt.artifact, selectedUpgradeCount),
+                }}
+                scale={1.5}
+              />
             </View>
             <View style={styles.detailText}>
               <Text
@@ -663,6 +694,15 @@ function HomeIslandScreen({
               <Text
                 text={data ? rewardStory(data.state, selectedPlacement.rewardId) : ""}
                 style={styles.description}
+              />
+              <Text
+                text={`Level ${rewardLevel(selectedUpgradeCount)} · ${selectedUpgradeCount} ${selectedUpgradeCount === 1 ? "upgrade" : "upgrades"}`}
+                style={styles.description}
+                testID="homebase-reward-level"
+              />
+              <RewardBuildStatus
+                deadline={selectedItem?.buildDeadline}
+                visible={showConstruction}
               />
               <Text
                 text={[
@@ -695,36 +735,6 @@ function HomeIslandScreen({
                 <Text text="Move" style={styles.smallText} />
               </Pressable>
             )}
-          </View>
-        ) : selectedHouse && houseArt ? (
-          <View style={styles.detail}>
-            <View style={styles.thumbnail}>
-              <PixelArtSprite art={houseArt} scale={1} />
-            </View>
-            <View style={styles.detailText}>
-              <Text
-                text={selectedHouse.activity.name}
-                weight="semiBold"
-                style={styles.sectionTitle}
-              />
-              <Text
-                text={
-                  selectedHouse.activity.open
-                    ? "Lights are on: a session is open now."
-                    : "An activity cottage. Open it to plan or check in."
-                }
-                style={styles.description}
-              />
-            </View>
-            <Pressable
-              testID="homebase-open-activity"
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${selectedHouse.activity.name}`}
-              style={styles.placeButton}
-              onPress={() => openActivity(selectedHouse.activity.id)}
-            >
-              <Text text="Open" weight="medium" style={styles.primaryText} />
-            </Pressable>
           </View>
         ) : selectedItem && selectedArt ? (
           <View style={styles.detail}>
@@ -803,9 +813,7 @@ function HomeIslandScreen({
               />
               <Text
                 text={
-                  selected
-                    ? "Part of your home base."
-                    : "Tap a friend, cottage or reward on the island."
+                  selected ? "Part of your home base." : "Tap a friend or reward on the island."
                 }
                 style={styles.description}
               />

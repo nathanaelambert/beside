@@ -38,6 +38,10 @@ export const categoryGuides: Record<string, CategoryGuide> = {
     role: "landmark",
     fit: "Landmarks for one big moment: a finish line, a last chapter.",
   },
+  Buildings: {
+    role: "landmark",
+    fit: "For a moment you want to give a permanent place on the island.",
+  },
 };
 
 const fallback: CategoryGuide = {

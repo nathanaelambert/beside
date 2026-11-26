@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, TextStyle, View, ViewStyle } from "react-native"
+import { ActivityIndicator, View } from "react-native"
 import type { ApiState } from "@beside/api-client"
 
 import {
@@ -9,16 +9,13 @@ import {
   WorldSchedulePanel,
   WorldTextField as TextField,
 } from "@/components/ActivityWorld"
-import { PixelArtSprite } from "@/components/BesideMark"
-import { cottageArt } from "@/components/iso-world/cottageArt"
-import { homeActivities } from "@/components/iso-world/homeWorld"
 import { FormChoice, MilestoneScheduleFields } from "@/components/MilestoneScheduleFields"
 import { RewardPicker } from "@/components/RewardPicker"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { besideApi } from "@/services/api/beside"
-import { world, worldEyebrow, worldShape } from "@/theme/world"
+import { world, worldEyebrow } from "@/theme/world"
 import {
   initialScheduleForm,
   scheduleFormToInput,
@@ -191,20 +188,6 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
               style={worldEyebrow}
             />
             <Text text="New activity" weight="semiBold" style={activityWorldStyles.title} />
-            <View style={$cottage} testID="activity-cottage-preview">
-              <View style={$cottageArt}>
-                <PixelArtSprite
-                  art={cottageArt(
-                    homeActivities(data, route.params.connectionId, Date.now()).length,
-                  )}
-                  scale={1}
-                />
-              </View>
-              <Text
-                text="Start something together, then plan when to show up. Its cottage will appear beside the picnic on your island."
-                style={[activityWorldStyles.body, $cottageText]}
-              />
-            </View>
             <TextField
               label="Activity name"
               testID="activity-name"
@@ -340,15 +323,3 @@ export function ActivityCreateScreen({ navigation, route }: AppStackScreenProps<
     </View>
   )
 }
-
-const $cottage: ViewStyle = { flexDirection: "row", alignItems: "center", gap: 14 }
-const $cottageArt: ViewStyle = {
-  width: 72,
-  height: 72,
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: world.meadow,
-  borderRadius: worldShape.radius,
-  overflow: "hidden",
-}
-const $cottageText: TextStyle = { flex: 1 }

@@ -11,16 +11,15 @@ import {
   screenToIso,
   type MapFrame,
 } from "./projection"
-import { bush, house, rock, roofColorOrder, type RoofColor, type Sprite } from "./props"
+import { house, type Sprite } from "./props"
+import { upgradedRewardArt } from "./rewardArt"
 import { meadowTileMap, tileAt, tileMapFromRows, type TileMap } from "./tilemap"
 import { AVATAR_HEIGHT, AVATAR_WIDTH, type Avatar } from "../pixel-world/avatars"
 
 export const catalogue = new Map(rewardItems.map((item) => [item.id, item]))
 
 export type HitTarget =
-  | { type: "avatar"; id: string }
-  | { type: "house"; id: string }
-  | { type: "item"; id: string; itemId: string }
+  { type: "avatar"; id: string } | { type: "item"; id: string; itemId: string }
 
 export type DrawableSource =
   | { type: "bitmap"; bitmap: Bitmap }
@@ -45,6 +44,8 @@ export interface Drawable {
   /** Topmost opaque row, for the selection pointer. */
   top: number
   opacity?: number
+  /** Monotonic client deadline, derived from the garden server snapshot. */
+  buildDeadline?: number
   hit?: HitTarget
 }
 
@@ -69,15 +70,6 @@ function blockFor(map: TileMap, frame: MapFrame, index: number) {
   if (!block) cache.set(index, (block = paintBlock(map, frame, map.tiles[index]!)))
   return block
 }
-const spriteCache = new Map<string, Sprite>()
-function cachedSprite(key: string, make: () => Sprite) {
-  let sprite = spriteCache.get(key)
-  if (!sprite) spriteCache.set(key, (sprite = make()))
-  return sprite
-}
-export const houseSprite = (roof: RoofColor, lit: boolean) =>
-  cachedSprite(`house-${roof}-${lit}`, () => house(roof, lit))
-
 // --- Building blocks -------------------------------------------------------------------------
 
 export function spriteDrawable(
@@ -131,17 +123,18 @@ export function itemDrawable(
   itemId: string,
   u: number,
   v: number,
-  extra: Partial<Drawable> = {},
+  { upgradeCount = 0, ...extra }: Partial<Drawable> & { upgradeCount?: number } = {},
 ): Drawable | undefined {
   const item = catalogue.get(itemId)
   if (!item) return undefined
+  const art = upgradedRewardArt(item.artifact, upgradeCount)
   const lift = liftAt(map, u, v)
   const base = isoToScreen(frame, u, v, lift)
   const x = Math.round(base.x - 16)
   const y = Math.round(base.y - 31)
   return {
     key,
-    source: { type: "art", art: item.artifact },
+    source: { type: "art", art },
     depth: depthOf(u, v),
     x,
     y,
@@ -150,7 +143,7 @@ export function itemDrawable(
     baseX: Math.round(base.x),
     baseY: Math.round(base.y),
     shadow: 18,
-    top: y + artTop(item.artifact),
+    top: y + artTop(art),
     hit: { type: "item", id: key, itemId },
     ...extra,
   }
@@ -183,32 +176,8 @@ export function avatarDrawable(
   } satisfies Drawable
 }
 
-export function houseDrawable(
-  frame: MapFrame,
-  map: TileMap,
-  key: string,
-  col: number,
-  row: number,
-  roof: RoofColor,
-  lit: boolean,
-) {
-  const tile = tileAt(map, col, row)
-  return spriteDrawable(
-    frame,
-    `house-${key}`,
-    houseSprite(roof, lit),
-    { u: col + 0.5, v: row + 0.5, lift: Math.max(0, tile?.lift ?? 0) },
-    { hit: { type: "house", id: key } },
-  )
-}
-
-/** Raised tiles, plus trees, bushes and rocks on the forest rim (skipping reserved lots). */
-export function terrainDrawables(
-  map: TileMap,
-  frame: MapFrame,
-  reserved: Set<string> = new Set(),
-  variantSeed = 0,
-): Drawable[] {
+/** Raised tiles and wild trees on the forest rim. */
+function terrainDrawables(map: TileMap, frame: MapFrame, variantSeed = 0): Drawable[] {
   const result: Drawable[] = []
   const salt = Math.floor(variantSeed * 1000000)
   map.tiles.forEach((tile, index) => {
@@ -227,36 +196,22 @@ export function terrainDrawables(
       baseY: block.y,
       top: block.y,
     })
-    if (tile.kind !== "forest" || reserved.has(`${tile.col},${tile.row}`)) return
     const front = tile.row === map.rows - 1 || tile.col === map.cols - 1
     const roll = variantSeed ? hash(tile.col, tile.row, salt) : tile.seed
+    if (tile.kind !== "forest" || front || roll >= 0.78) return
     const jitterU = (hash(tile.col, tile.row, 51 + salt) - 0.5) * 0.3
     const jitterV = (hash(tile.col, tile.row, 52 + salt) - 0.5) * 0.3
-    const at = { u: tile.col + 0.5 + jitterU, v: tile.row + 0.5 + jitterV, lift: tile.lift }
-    const key = `prop-${tile.col}-${tile.row}`
-    if (!front && roll < 0.78) {
-      const itemId = hash(tile.col, tile.row, 53 + salt) > 0.45 ? "pine-tree" : "oak-tree"
-      const tree = itemDrawable(frame, map, key, itemId, at.u, at.v, { hit: undefined })
-      if (tree) result.push(tree)
-    } else if (roll < 0.86 || (front && roll < 0.5)) {
-      result.push(
-        spriteDrawable(
-          frame,
-          key,
-          cachedSprite(`bush-${roll > 0.7}`, () => bush(roll > 0.7 ? 0.8 : 0.2)),
-          at,
-        ),
-      )
-    } else if (front ? roll < 0.75 : true) {
-      result.push(
-        spriteDrawable(
-          frame,
-          key,
-          cachedSprite(`rock-${roll > 0.9}`, () => rock(roll > 0.9 ? 0.8 : 0.1)),
-          at,
-        ),
-      )
-    }
+    const itemId = hash(tile.col, tile.row, 53 + salt) > 0.45 ? "pine-tree" : "oak-tree"
+    const tree = itemDrawable(
+      frame,
+      map,
+      `prop-${tile.col}-${tile.row}`,
+      itemId,
+      tile.col + 0.5 + jitterU,
+      tile.row + 0.5 + jitterV,
+      { hit: undefined },
+    )
+    if (tree) result.push(tree)
   })
   return result
 }
@@ -278,7 +233,7 @@ export function opaqueAt(d: Drawable, x: number, y: number) {
 
 /**
  * Front-most hit target under a map-frame point. A tap on visible pixels always wins, so a
- * cottage's transparent corners never steal a friend standing beside it. Otherwise small
+ * reward's transparent corners never steal a friend standing beside it. Otherwise small
  * sprites get padded boxes so every target is at least `minSize` art pixels (44pt).
  */
 export function hitTest(drawables: Drawable[], x: number, y: number, minSize: number) {
@@ -297,34 +252,18 @@ export function hitTest(drawables: Drawable[], x: number, y: number, minSize: nu
 
 // --- The home base island --------------------------------------------------------------------
 
-/**
- * Lawn lots inside the protected picnic area (the shared oak rule never allows planting
- * there), chosen so no cottage hides a friend or a decoration. Then the back rim.
- */
-export const HOUSE_LOTS: [number, number][] = [
-  [7, 10],
-  [10, 12],
-  [6, 11],
-  [9, 13],
-  [8, 10],
-  [6, 1],
-  [8, 1],
-  [11, 1],
-  [4, 1],
-]
-export interface HomeActivity {
-  id: string
-  name: string
-  /** A milestone window is open right now. */
-  open?: boolean
-}
-
 export interface HomeSceneInput {
   variantSeed?: number
   avatars: Avatar[]
   /** Decorations in meadow pixels (bottom-centre anchors). */
-  items: { key: string; itemId: string; x: number; y: number }[]
-  activities?: HomeActivity[]
+  items: {
+    key: string
+    itemId: string
+    x: number
+    y: number
+    upgradeCount?: number
+    buildDeadline?: number
+  }[]
 }
 
 export const homeFrame = (() => {
@@ -332,46 +271,29 @@ export const homeFrame = (() => {
   return mapFrame(map.cols, map.rows)
 })()
 
-export function houseLots(activities: HomeActivity[]) {
-  return activities.slice(0, HOUSE_LOTS.length).map((activity, index) => ({
-    activity,
-    col: HOUSE_LOTS[index]![0],
-    row: HOUSE_LOTS[index]![1],
-    roof: roofColorOrder[index % roofColorOrder.length]!,
-  }))
-}
-
-/**
- * Friends stand along the back of the blanket in the iso view, so cottages in front of the
- * picnic never hide them. Extra rows (more than four members) step forward.
- */
+/** Friends gather along the back of the blanket. */
 export const homeAvatarY = (y: number) => 135 + (y - 147) / 2
 
-export function buildHomeScene({
-  avatars,
-  items,
-  activities = [],
-  variantSeed = 0,
-}: HomeSceneInput) {
+export function buildHomeScene({ avatars, items, variantSeed = 0 }: HomeSceneInput) {
   const map = meadowTileMap()
   const frame = homeFrame
-  const houses = houseLots(activities)
-  const reserved = new Set([...houses.map(({ col, row }) => `${col},${row}`)])
   const drawables: Drawable[] = [
-    ...terrainDrawables(map, frame, reserved, variantSeed),
+    ...terrainDrawables(map, frame, variantSeed),
     ...items.flatMap((item) => {
       const { u, v } = meadowToIso(item.x, item.y)
-      return itemDrawable(frame, map, item.key, item.itemId, u, v) ?? []
+      return (
+        itemDrawable(frame, map, item.key, item.itemId, u, v, {
+          buildDeadline: item.buildDeadline,
+          upgradeCount: item.upgradeCount,
+        }) ?? []
+      )
     }),
     ...avatars.map((avatar) => {
       const { u, v } = meadowToIso(avatar.x, homeAvatarY(avatar.y))
       return avatarDrawable(frame, map, avatar, u, v)
     }),
-    ...houses.map(({ activity, col, row, roof }) =>
-      houseDrawable(frame, map, activity.id, col, row, roof, !!activity.open),
-    ),
   ]
-  return { map, frame, drawables: sortDrawables(drawables), houses }
+  return { map, frame, drawables: sortDrawables(drawables) }
 }
 
 /** Map-frame pixel to meadow pixel, on the ground plane. */
@@ -380,11 +302,11 @@ export function frameToMeadow(frame: MapFrame, x: number, y: number) {
   return { x: u * 16, y: v * 16 }
 }
 
-// --- An activity's own plot (activity screen header) -----------------------------------------
+// --- Small decorative scenes -----------------------------------------
 
 const plotMap = tileMapFromRows(["ffggf", "fgggg", "ggpgg", "ggpgg"])
-const plotFrame = mapFrame(plotMap.cols, plotMap.rows, { top: 64, side: 8, bottom: 22 })
-/** Where friends who checked in gather: in front of the door, then along the path. */
+const authCottage = house("clay", true)
+/** Where friends gather along the path. */
 const PLOT_SPOTS: [number, number][] = [
   [2.35, 2.25],
   [1.55, 2.6],
@@ -396,27 +318,23 @@ const PLOT_SPOTS: [number, number][] = [
   [4.2, 2.6],
 ]
 
-export function buildActivityScene({
-  roof,
-  lit,
-  attendees,
-}: {
-  roof: RoofColor
-  lit: boolean
-  attendees: Avatar[]
-}) {
+export function buildGatheringScene(attendees: Avatar[], decorativeCottage = false) {
+  const frame = mapFrame(plotMap.cols, plotMap.rows, {
+    top: decorativeCottage ? 64 : 26,
+    side: 8,
+    bottom: 22,
+  })
   const drawables: Drawable[] = [
-    ...terrainDrawables(plotMap, plotFrame, new Set(["1,1"])),
-    houseDrawable(plotFrame, plotMap, "plot", 1, 1, roof, lit),
+    ...terrainDrawables(plotMap, frame),
     ...attendees.slice(0, PLOT_SPOTS.length).map((avatar, index) => {
       const [u, v] = PLOT_SPOTS[index]!
-      return avatarDrawable(plotFrame, plotMap, avatar, u, v)
+      return avatarDrawable(frame, plotMap, avatar, u, v)
     }),
   ]
-  return { map: plotMap, frame: plotFrame, drawables: sortDrawables(drawables) }
-}
-
-/** Each activity keeps the roof colour of its cottage on the home island. */
-export function roofForIndex(index: number): RoofColor {
-  return roofColorOrder[Math.max(0, index) % roofColorOrder.length]!
+  if (decorativeCottage) {
+    drawables.push(
+      spriteDrawable(frame, "decorative-cottage", authCottage, { u: 1.5, v: 1.5, lift: 0 }),
+    )
+  }
+  return { map: plotMap, frame, drawables: sortDrawables(drawables) }
 }

@@ -46,7 +46,15 @@ export const tables = [
   [
     "rewards",
     "reward",
-    ["id", "homebaseId", "itemId", "obtainedAt", "requiredUserIds"],
+    [
+      "id",
+      "homebaseId",
+      "itemId",
+      "obtainedAt",
+      "requiredUserIds",
+      "upgradeCount",
+      "buildReadyAt",
+    ],
   ],
   [
     "milestones",
@@ -62,6 +70,9 @@ export const tables = [
       "startAt",
       "endAt",
       "rewardId",
+      "upgradeRewardId",
+      "upgradeRequiredUserIds",
+      "upgradeCreditedAt",
       "createdAt",
     ],
   ],

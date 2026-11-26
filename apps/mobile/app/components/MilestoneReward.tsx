@@ -65,6 +65,7 @@ export function rewardStatusLine({
 export function MilestoneReward({
   item,
   status,
+  level,
   roster,
   agreed,
   checkedIn,
@@ -78,6 +79,7 @@ export function MilestoneReward({
 }: {
   item: RewardItem
   status: RewardStatus
+  level?: number
   roster: Avatar[]
   agreed: string[]
   checkedIn: Set<string>
@@ -107,7 +109,7 @@ export function MilestoneReward({
         <View style={$flex}>
           <Text text={eyebrow[status]} style={worldEyebrow} testID="milestone-reward-status" />
           <Text
-            text={item.name}
+            text={level ? `${item.name} · Level ${level}` : item.name}
             weight="semiBold"
             style={activityWorldStyles.sectionTitle}
             testID="milestone-reward-name"
@@ -193,21 +195,6 @@ export function MilestoneReward({
       {status === "placed" && onView && (
         <WorldButton text="See it in the meadow" testID="reward-view" onPress={onView} />
       )}
-    </View>
-  )
-}
-
-/** A compact reward line for upcoming milestones. */
-export function RewardChip({ item, detail }: { item: RewardItem; detail: string }) {
-  return (
-    <View style={$chip} testID="milestone-reward-chip">
-      <View style={$chipArt}>
-        <PixelArtSprite art={item.artifact} scale={1} />
-      </View>
-      <View style={$flex}>
-        <Text text={item.name} weight="medium" style={$chipName} />
-        <Text text={detail} style={activityWorldStyles.muted} />
-      </View>
     </View>
   )
 }
@@ -336,16 +323,6 @@ const $faded: ViewStyle = { opacity: 0.4 }
 const $memberLabel: TextStyle = { color: world.muted, fontSize: 11, lineHeight: 15 }
 const $done: TextStyle = { color: world.forest }
 const $actions: ViewStyle = { flexDirection: "row", gap: 10 }
-const $chip: ViewStyle = { flexDirection: "row", alignItems: "center", gap: 10 }
-const $chipArt: ViewStyle = {
-  width: 40,
-  height: 40,
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: world.meadow,
-  borderRadius: worldShape.smallRadius,
-}
-const $chipName: TextStyle = { color: world.ink, fontSize: 13, lineHeight: 18 }
 const $landed: ViewStyle = {
   backgroundColor: world.panel,
   borderColor: world.leaf,

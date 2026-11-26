@@ -10,6 +10,7 @@ import type {
   Participation,
 } from "./types.ts";
 import { updateActivitySchema, updateMilestoneSchema } from "./api.ts";
+import { hasCooperativeUpgradeRoster } from "./reward-upgrades.ts";
 import { logInputSchema, milestoneInputSchema } from "./validation.ts";
 
 export const id = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
@@ -207,6 +208,51 @@ export function logRejection(
     return "You have already completed this milestone.";
   return scheduleStatus(milestone, now, isSuccess);
 }
+function activeParticipantIds(db: Database, activityId: string) {
+  return db.participations
+    .filter((p) => p.activityId === activityId && p.status === "active")
+    .map((p) => p.userId);
+}
+
+const noUpgrade = {
+  upgradeRewardId: null,
+  upgradeRequiredUserIds: [],
+  upgradeCreditedAt: null,
+};
+
+function planUpgrade(
+  db: Database,
+  activity: Activity,
+  rewardId: string | null,
+  savedRoster?: readonly string[],
+) {
+  if (!rewardId) return noUpgrade;
+  const target = db.rewards.find((reward) => reward.id === rewardId);
+  if (!target?.obtainedAt || target.homebaseId !== activity.connectionId)
+    throw new Error("Choose an earned reward in this home base to upgrade.");
+  const active = activeParticipantIds(db, activity.id);
+  const roster = savedRoster
+    ? active.filter((id) => savedRoster.includes(id))
+    : active;
+  if (
+    !hasCooperativeUpgradeRoster(
+      target.requiredUserIds,
+      members(db, target.homebaseId),
+      roster,
+    )
+  )
+    throw new Error(
+      "Upgrading a jointly earned reward needs at least two active participants and all co-earners who still belong to this home base.",
+    );
+  if (!roster.length)
+    throw new Error("An upgrade needs at least one active participant.");
+  return {
+    upgradeRewardId: rewardId,
+    upgradeRequiredUserIds: roster,
+    upgradeCreditedAt: null,
+  };
+}
+
 function awardReward(
   db: Database,
   milestone: Milestone,
@@ -214,6 +260,39 @@ function awardReward(
   now: string,
   origin: Origin,
 ) {
+  const upgrade = db.rewards.find((r) => r.id === milestone.upgradeRewardId);
+  if (
+    upgrade?.obtainedAt &&
+    !milestone.upgradeCreditedAt &&
+    milestone.upgradeRequiredUserIds.length > 0 &&
+    hasCooperativeUpgradeRoster(
+      upgrade.requiredUserIds,
+      members(db, upgrade.homebaseId),
+      milestone.upgradeRequiredUserIds.filter(
+        (userId) =>
+          participation(db, milestone.activityId, userId)?.status === "active",
+      ),
+    ) &&
+    milestone.upgradeRequiredUserIds.every((userId) =>
+      completedMilestone(db, milestone.id, userId),
+    )
+  ) {
+    milestone.upgradeCreditedAt = now;
+    upgrade.upgradeCount += 1;
+    emit(
+      db,
+      actorId,
+      "reward.upgraded",
+      "reward",
+      upgrade.id,
+      `${db.rewardItems.find((item) => item.id === upgrade.itemId)?.name} reached level ${upgrade.upgradeCount + 1} through “${milestone.name}”.`,
+      members(db, upgrade.homebaseId),
+      upgrade.homebaseId,
+      "progress",
+      origin,
+    );
+    return;
+  }
   const reward = db.rewards.find((r) => r.id === milestone.rewardId);
   if (
     !reward ||
@@ -313,6 +392,10 @@ function removeGraph(
   db.milestones = db.milestones.filter(
     (milestone) => !milestoneIds.has(milestone.id),
   );
+  for (const milestone of db.milestones) {
+    if (milestone.upgradeRewardId && rewardIds.has(milestone.upgradeRewardId))
+      Object.assign(milestone, noUpgrade);
+  }
   db.rewards = db.rewards.filter((reward) => !rewardIds.has(reward.id));
   db.participations = db.participations.filter(
     (person) => !people.has(person.id),
@@ -489,6 +572,8 @@ export function execute(
         itemId: reward?.itemId ?? null,
         ...changes,
       });
+      const upgradeChanged =
+        input.upgradeRewardId !== milestone.upgradeRewardId;
       const parent = requireValue(
         db.milestones.find(
           (row) =>
@@ -514,7 +599,8 @@ export function execute(
         input.startAt !== milestone.startAt ||
         input.endAt !== milestone.endAt ||
         parent.id !== milestone.parentId ||
-        input.itemId !== (reward?.itemId ?? null);
+        input.itemId !== (reward?.itemId ?? null) ||
+        upgradeChanged;
       if (
         rulesChanged &&
         db.logs.some((log) => log.milestoneId === milestone.id)
@@ -522,6 +608,15 @@ export function execute(
         throw new Error(
           "This milestone has logs. Only its name can change; recorded quantities, schedules and reward rules are fixed.",
         );
+      if (rulesChanged && (upgradeChanged || input.upgradeRewardId)) {
+        const plan = planUpgrade(
+          db,
+          activity,
+          input.upgradeRewardId ?? null,
+          upgradeChanged ? undefined : milestone.upgradeRequiredUserIds,
+        );
+        if (upgradeChanged) Object.assign(milestone, plan);
+      }
       if (input.itemId !== (reward?.itemId ?? null)) {
         if (input.itemId) {
           requireValue(
@@ -536,13 +631,9 @@ export function execute(
               homebaseId: activity.connectionId,
               itemId: input.itemId,
               obtainedAt: null,
-              requiredUserIds: db.participations
-                .filter(
-                  (person) =>
-                    person.activityId === activity.id &&
-                    person.status === "active",
-                )
-                .map((person) => person.userId),
+              requiredUserIds: activeParticipantIds(db, activity.id),
+              upgradeCount: 0,
+              buildReadyAt: null,
             });
             if (!db.rewards.at(-1)!.requiredUserIds.length)
               throw new Error(
@@ -721,6 +812,7 @@ export function execute(
         startAt: null,
         endAt: null,
         rewardId: null,
+        ...noUpgrade,
         createdAt: now,
       });
       // Milestone zero is the first log for every participant, in the same
@@ -861,6 +953,7 @@ export function execute(
         "Home base is missing.",
       );
       let rewardId: string | null = null;
+      const upgrade = planUpgrade(db, activity, input.upgradeRewardId ?? null);
       if (input.itemId) {
         requireValue(
           db.rewardItems.find((item) => item.id === input.itemId),
@@ -872,11 +965,9 @@ export function execute(
           homebaseId: homebase.id,
           itemId: input.itemId,
           obtainedAt: null,
-          requiredUserIds: db.participations
-            .filter(
-              (p) => p.activityId === activity.id && p.status === "active",
-            )
-            .map((p) => p.userId),
+          requiredUserIds: activeParticipantIds(db, activity.id),
+          upgradeCount: 0,
+          buildReadyAt: null,
         });
       }
       entityId = id("milestone");
@@ -891,6 +982,7 @@ export function execute(
         startAt: input.startAt,
         endAt: input.endAt,
         rewardId,
+        ...upgrade,
         createdAt: now,
       });
       emit(
@@ -899,7 +991,7 @@ export function execute(
         "milestone.created",
         "milestone",
         entityId,
-        `Planned “${input.name}” with ${input.policy} logging${rewardId ? " and a shared home-base reward" : ""}.`,
+        `Planned “${input.name}” with ${input.policy} logging${rewardId ? " and a shared home-base reward" : upgrade.upgradeRewardId ? " and a shared reward upgrade" : ""}.`,
         members(db, homebase.id),
         homebase.id,
         "activity",

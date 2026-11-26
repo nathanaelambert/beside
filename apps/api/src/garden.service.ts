@@ -19,6 +19,7 @@ import {
 } from "@beside/domain/garden";
 import type { PoolClient } from "pg";
 import { DatabaseService } from "./db/database.service.ts";
+import { rewardBuildReadyAt } from "./reward-construction.ts";
 
 function rejectPlacement(rejection: PlacementRejection | null) {
   if (rejection)
@@ -99,6 +100,11 @@ export class GardenService {
          SET x = EXCLUDED.x, y = EXCLUDED.y, placed_by = EXCLUDED.placed_by, placed_at = EXCLUDED.placed_at`,
         [rewardId, x, y, userId],
       );
+      if (!current)
+        await client.query(
+          "UPDATE reward SET build_ready_at = $1 WHERE id = $2",
+          [rewardBuildReadyAt(new Date().toISOString()), rewardId],
+        );
       return this.read(client, userId, homebaseId);
     });
   }
@@ -124,19 +130,24 @@ export class GardenService {
       y: number;
       placedByUserId: string | null;
       placedAt: Date;
+      upgradeCount: number;
+      buildReadyAt: Date | null;
     }>(
       `SELECT p.reward_id AS "rewardId", r.item_id AS "itemId", p.x, p.y,
-         p.placed_by AS "placedByUserId", p.placed_at AS "placedAt"
+         p.placed_by AS "placedByUserId", p.placed_at AS "placedAt",
+         r.upgrade_count AS "upgradeCount", r.build_ready_at AS "buildReadyAt"
        FROM reward_placement AS p JOIN reward AS r ON r.id = p.reward_id
        WHERE r.homebase_id = $1 AND r.obtained_at IS NOT NULL
        ORDER BY p.placed_at, p.reward_id`,
       [homebaseId],
     );
     return {
+      serverTime: new Date().toISOString(),
       oak: x === null || y === null ? null : { x, y, itemId: starterOakItemId },
       rewards: placed.rows.map((row): RewardPlacement => ({
         ...row,
         placedAt: row.placedAt.toISOString(),
+        buildReadyAt: row.buildReadyAt?.toISOString() ?? null,
       })),
     };
   }

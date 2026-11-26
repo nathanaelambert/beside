@@ -1,8 +1,9 @@
 import type { EffectCallback } from "react"
-import { useReducedMotion } from "react-native-reanimated"
-import { ApiError, type ApiHomebase, type ApiState } from "@beside/api-client"
+import { AppState, type AppStateStatus } from "react-native"
+import { ApiError, type ApiHomebase, type ApiState, type HomebaseGarden } from "@beside/api-client"
 import { checkMeadowPlacement } from "@beside/api-client/garden"
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native"
+import { useReducedMotion } from "react-native-reanimated"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 
 import { plantableTiles, tileCentre } from "@/components/iso-world/homeWorld"
@@ -276,6 +277,9 @@ const earnedState: ApiState = {
       startAt: null,
       endAt: null,
       rewardId: "earned",
+      upgradeRewardId: null,
+      upgradeRequiredUserIds: [],
+      upgradeCreditedAt: null,
       createdAt: "2026-11-01T00:00:00Z",
     },
   ],
@@ -286,6 +290,8 @@ const earnedState: ApiState = {
       itemId: "sunflower",
       obtainedAt: "2026-11-18T12:00:00Z",
       requiredUserIds: ["alice", "bob"],
+      upgradeCount: 4,
+      buildReadyAt: null,
     },
   ],
 }
@@ -295,6 +301,75 @@ const rewardPlacement = (position: { x: number; y: number }) => ({
   ...position,
   placedByUserId: "alice",
   placedAt: "2026-11-19T12:00:00Z",
+})
+
+function mockAppState() {
+  const listeners = new Set<(state: AppStateStatus) => void>()
+  const subscribe = jest.mocked(AppState.addEventListener)
+  const originalSubscribe = subscribe.getMockImplementation()!
+  subscribe.mockImplementation((_event, listener) => {
+    listeners.add(listener)
+    return {
+      remove: () => {
+        listeners.delete(listener)
+      },
+    }
+  })
+  const changeAppState = (state: AppStateStatus) =>
+    act(async () => {
+      listeners.forEach((listener) => listener(state))
+    })
+  return { changeAppState, restore: () => subscribe.mockImplementation(originalSubscribe) }
+}
+
+it("refreshes reward levels and construction on foreground without resetting selection or placement", async () => {
+  const { changeAppState, restore } = mockAppState()
+  const positions = plantableTiles()
+  const spot = tileCentre(positions[0]!.col, positions[0]!.row)
+  const saved = rewardPlacement(spot)
+  jest.mocked(besideApi.state).mockResolvedValue(earnedState)
+  jest.mocked(besideApi.homebaseGarden).mockResolvedValue({ oak: null, rewards: [saved] })
+  const screen = openScreen(390, { rewardId: "earned" })
+  try {
+    await screen.findByText("Level 5 · 4 upgrades")
+    fireEvent.press(screen.getByTestId("homebase-zoom-in"))
+    const camera = () => {
+      const { resetCamera, focus, zoom, selectedKey, previewTile } = canvasProps()
+      return { resetCamera, focus, zoom, selectedKey, previewTile }
+    }
+    const selection = camera()
+    await changeAppState("background")
+    const serverTime = "2026-12-01T10:00:00.000Z"
+    const buildReadyAt = "2026-12-01T10:00:30.000Z"
+    jest.mocked(besideApi.state).mockResolvedValue({
+      ...earnedState,
+      rewards: [{ ...earnedState.rewards[0]!, upgradeCount: 5, buildReadyAt }],
+    })
+    jest.mocked(besideApi.homebaseGarden).mockResolvedValue({
+      oak: null,
+      serverTime,
+      rewards: [{ ...saved, upgradeCount: 5, buildReadyAt }],
+    })
+    await changeAppState("active")
+    await screen.findByText("Level 6 · 5 upgrades")
+    expect(screen.getByText(/^Building · \d+s$/)).toBeTruthy()
+    expect(camera()).toEqual(selection)
+
+    fireEvent.press(screen.getByTestId("homebase-move-reward"))
+    const placement = camera()
+    expect(placement.previewTile).toBeDefined()
+    await changeAppState("background")
+    await changeAppState("active")
+    await waitFor(() => expect(besideApi.homebaseGarden).toHaveBeenCalledTimes(3))
+    expect(besideApi.homebaseGarden).toHaveBeenLastCalledWith(base.id)
+    expect(besideApi.state).toHaveBeenCalledTimes(3)
+    expect(besideApi.homebases).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId("place-reward-panel")).toBeTruthy()
+    expect(camera()).toEqual(placement)
+  } finally {
+    screen.unmount()
+    restore()
+  }
 })
 
 it("keeps earned rewards waiting, previews on valid island lawn, confirms, remembers and moves them", async () => {
@@ -328,6 +403,7 @@ it("keeps earned rewards waiting, previews on valid island lawn, confirms, remem
   expect(besideApi.placeReward).toHaveBeenCalledWith(base.id, "earned", firstPoint)
   expect(screen.getByTestId("homebase-reward-memory")).toBeTruthy()
   expect(screen.getByText("Earned for “Finish Dune” · Book club")).toBeTruthy()
+  expect(screen.getByText("Level 5 · 4 upgrades")).toBeTruthy()
   expect(screen.getByText(/with Alice and Bob/)).toBeTruthy()
   expect(screen.queryByTestId("homebase-reward-waiting")).toBeNull()
   expect(canvasProps().drawables!.some((d) => d.key === "reward-earned")).toBe(true)
@@ -370,7 +446,7 @@ it("uses saved reward occupancy when offering oak tiles", async () => {
   expect(canvasProps().previewTile).toBeUndefined()
 })
 
-it("follows the activity landing link into island placement and opens a cottage", async () => {
+it("follows the reward placement link and keeps activities in the Activities list", async () => {
   jest.mocked(besideApi.state).mockResolvedValue(earnedState)
   const screen = openScreen(390, { rewardId: "earned", place: true })
   await screen.findByTestId("place-reward-panel")
@@ -380,9 +456,9 @@ it("follows the activity landing link into island placement and opens a cottage"
   })
   expect(canvasProps().previewTile).toBeDefined()
   fireEvent.press(screen.getByRole("button", { name: "Cancel" }))
-  act(() => canvasProps().onTap!({ x: 0, y: 0, hit: { type: "house", id: "read" } }))
-  fireEvent.press(screen.getByTestId("homebase-open-activity"))
-  expect(screen.navigation.navigate).toHaveBeenCalledWith("ActivityDetail", { activityId: "read" })
+  expect(canvasProps().drawables!.some((d) => d.key.startsWith("house-"))).toBe(false)
+  fireEvent.press(screen.getByTestId("homebase-activities"))
+  expect(screen.navigation.navigate).toHaveBeenCalledWith("Activities", { connectionId: base.id })
 })
 
 it("refreshes shared occupancy after a placement race without closing the reward editor", async () => {
@@ -625,4 +701,73 @@ it("waits for the linked reward's island before consuming a new route's placemen
     "other-earned",
     expect.any(Object),
   )
+})
+
+it("retains a foreground upgrade when an older move response arrives and reconciles the move", async () => {
+  const { changeAppState, restore } = mockAppState()
+  const tile = plantableTiles()[0]!
+  const start = tileCentre(tile.col, tile.row)
+  const saved = { ...rewardPlacement(start), upgradeCount: 4, buildReadyAt: null }
+  jest.mocked(besideApi.state).mockResolvedValue(earnedState)
+  jest.mocked(besideApi.homebaseGarden).mockResolvedValue({ oak: null, rewards: [saved] })
+  let resolveMove!: (garden: HomebaseGarden) => void
+  let resolveRead!: (garden: HomebaseGarden) => void
+  jest.mocked(besideApi.placeReward).mockReturnValue(
+    new Promise((resolve) => {
+      resolveMove = resolve
+    }),
+  )
+  const screen = openScreen(390, { rewardId: "earned" })
+  try {
+    await screen.findByText("Level 5 · 4 upgrades")
+    fireEvent.press(screen.getByTestId("homebase-move-reward"))
+    fireEvent.press(screen.getByTestId("suggest-reward-spot"))
+    const preview = canvasProps().previewTile!
+    const destination = tileCentre(preview.col, preview.row)
+    expect(destination).not.toEqual(start)
+    fireEvent.press(screen.getByTestId("confirm-reward-placement"))
+    expect(besideApi.placeReward).toHaveBeenCalledWith(base.id, "earned", destination)
+
+    const serverTime = "2026-12-01T10:00:00.000Z"
+    const buildReadyAt = "2026-12-01T10:00:30.000Z"
+    const upgraded = { ...saved, upgradeCount: 5, buildReadyAt }
+    jest.mocked(besideApi.state).mockResolvedValue({
+      ...earnedState,
+      rewards: [{ ...earnedState.rewards[0]!, upgradeCount: 5, buildReadyAt }],
+    })
+    jest
+      .mocked(besideApi.homebaseGarden)
+      .mockResolvedValueOnce({ oak: null, serverTime, rewards: [upgraded] })
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveRead = resolve
+        }),
+      )
+    await changeAppState("background")
+    await changeAppState("active")
+    expect(besideApi.homebaseGarden).toHaveBeenCalledTimes(2)
+
+    await act(async () =>
+      resolveMove({
+        oak: null,
+        serverTime: "2026-12-01T09:59:59.000Z",
+        rewards: [{ ...saved, ...destination }],
+      }),
+    )
+    expect(besideApi.homebaseGarden).toHaveBeenCalledTimes(3)
+    expect(screen.getByText("Level 6 · 5 upgrades")).toBeTruthy()
+    expect(screen.getByText(/^Building · \d+s$/)).toBeTruthy()
+
+    await act(async () =>
+      resolveRead({ oak: null, serverTime, rewards: [{ ...upgraded, ...destination }] }),
+    )
+    const item = canvasProps().drawables!.find((drawable) => drawable.key === "reward-earned")!
+    const expected = isoToScreen(canvasProps().frame!, preview.col + 0.5, preview.row + 0.5)
+    expect([item.baseX, item.baseY]).toEqual([Math.round(expected.x), Math.round(expected.y)])
+    expect(item.buildDeadline).toBeGreaterThan(performance.now())
+    expect(screen.getByText("Level 6 · 5 upgrades")).toBeTruthy()
+  } finally {
+    screen.unmount()
+    restore()
+  }
 })

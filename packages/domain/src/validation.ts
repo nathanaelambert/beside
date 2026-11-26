@@ -6,6 +6,7 @@ import {
   migrateHomebases,
 } from "./migrations.ts";
 import { rewardItems } from "@beside/rewards";
+import { hasCooperativeUpgradeRoster } from "./reward-upgrades.ts";
 
 const key = z.string().min(1).max(200);
 const text = z.string().max(2000);
@@ -60,6 +61,29 @@ const pixelArt = z
       });
   });
 export const policySchema = z.enum(["open", "paced", "deadline"]);
+
+// OpenAPI can represent this constraint even though it cannot infer refinements.
+export const milestoneRewardConflict = {
+  type: "object",
+  required: ["itemId", "upgradeRewardId"],
+  properties: {
+    itemId: { type: "string" },
+    upgradeRewardId: { type: "string" },
+  },
+};
+
+export function checkMilestoneRewardChoice(
+  choice: { itemId?: string | null; upgradeRewardId?: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (choice.itemId && choice.upgradeRewardId)
+    ctx.addIssue({
+      code: "custom",
+      path: ["upgradeRewardId"],
+      message: "Choose either a new reward item or an upgrade.",
+    });
+}
+
 export const milestoneInputSchema = z
   .object({
     activityId: key,
@@ -70,8 +94,15 @@ export const milestoneInputSchema = z
     startAt: date.nullable(),
     endAt: date.nullable(),
     itemId: key.nullable(),
+    upgradeRewardId: key
+      .nullable()
+      .optional()
+      .describe(
+        "An earned reward in the activity's home base, in place of itemId.",
+      ),
   })
   .superRefine((m, ctx) => {
+    checkMilestoneRewardChoice(m, ctx);
     if (m.policy === "paced" && (!m.startAt || !m.endAt))
       ctx.addIssue({
         code: "custom",
@@ -193,6 +224,9 @@ export const databaseSchema = z.object({
       startAt: date.nullable(),
       endAt: date.nullable(),
       rewardId: key.nullable(),
+      upgradeRewardId: key.nullable().default(null),
+      upgradeRequiredUserIds: z.array(key).default([]),
+      upgradeCreditedAt: date.nullable().default(null),
       createdAt: date,
     }),
   ),
@@ -203,6 +237,8 @@ export const databaseSchema = z.object({
       itemId: key,
       obtainedAt: date.nullable(),
       requiredUserIds: z.array(key).min(1),
+      upgradeCount: z.number().int().nonnegative().default(0),
+      buildReadyAt: date.nullable().default(null),
     }),
   ),
   logs: rows(
@@ -340,6 +376,7 @@ export function parseDatabase(input: unknown): Database {
       if (
         milestone.parentId !== milestone.id ||
         milestone.rewardId ||
+        milestone.upgradeRewardId ||
         milestone.policy !== "open" ||
         milestone.startAt ||
         milestone.endAt ||
@@ -360,6 +397,81 @@ export function parseDatabase(input: unknown): Database {
         if (!ancestor) throw new Error("Milestone parent is missing.");
       }
     }
+    const { upgradeRewardId, upgradeRequiredUserIds, upgradeCreditedAt } =
+      milestone;
+    if (!upgradeRewardId) {
+      if (upgradeRequiredUserIds.length || upgradeCreditedAt)
+        throw new Error(
+          "An upgrade roster or credit requires an upgrade target.",
+        );
+      continue;
+    }
+    const target = db.rewards.find((reward) => reward.id === upgradeRewardId);
+    const activity = db.activities.find(
+      (row) => row.id === milestone.activityId,
+    )!;
+    if (
+      milestone.rewardId ||
+      !target?.obtainedAt ||
+      target.homebaseId !== activity.connectionId
+    )
+      throw new Error(
+        "An upgrade needs an earned reward in the same home base.",
+      );
+    if (!upgradeRequiredUserIds.length)
+      throw new Error("An upgrade needs at least one participant.");
+    unique(upgradeRequiredUserIds, "upgrade participant");
+    const completed = upgradeRequiredUserIds.map((userId) => {
+      if (
+        !db.participations.some(
+          (p) => p.activityId === activity.id && p.userId === userId,
+        )
+      )
+        throw new Error("An upgrade requires someone outside the activity.");
+      return db.logs.findIndex(
+        (l) =>
+          l.milestoneId === milestone.id &&
+          l.authorUserId === userId &&
+          l.isSuccess,
+      );
+    });
+    const allCompleted = completed.every((index) => index >= 0);
+    const finalCompletion = Math.max(...completed);
+    const root = db.milestones.find(
+      (row) => row.activityId === activity.id && row.kind === "join",
+    );
+    // Append order breaks ties between logs with the same server timestamp.
+    // A departure after credit must never invalidate an earned upgrade.
+    const activeAtCompletion = allCompleted
+      ? upgradeRequiredUserIds.filter(
+          (userId, memberIndex) =>
+            !db.logs.some(
+              (log, index) =>
+                index > completed[memberIndex]! &&
+                index <= finalCompletion &&
+                log.milestoneId === root?.id &&
+                log.authorUserId === userId &&
+                !log.isSuccess,
+            ),
+        )
+      : [];
+    const cooperative = hasCooperativeUpgradeRoster(
+      target.requiredUserIds,
+      db.memberships
+        .filter((m) => m.connectionId === target.homebaseId)
+        .map((m) => m.userId),
+      activeAtCompletion,
+    );
+    if (Boolean(upgradeCreditedAt) !== (cooperative && allCompleted))
+      throw new Error("Upgrade credit differs from its required completions.");
+    if (
+      upgradeCreditedAt &&
+      completed.some(
+        (index) =>
+          Date.parse(db.logs[index]!.createdAt) > Date.parse(upgradeCreditedAt),
+      )
+    )
+      throw new Error("Upgrade credit predates a required completion.");
   }
   for (const activity of db.activities)
     if (
@@ -373,6 +485,15 @@ export function parseDatabase(input: unknown): Database {
     "milestone reward",
   );
   for (const reward of db.rewards) {
+    const creditedUpgrades = db.milestones.filter(
+      (milestone) =>
+        milestone.upgradeRewardId === reward.id && milestone.upgradeCreditedAt,
+    ).length;
+    if (
+      (!reward.obtainedAt && (reward.upgradeCount || reward.buildReadyAt)) ||
+      reward.upgradeCount < creditedUpgrades
+    )
+      throw new Error("Reward upgrade or construction state is inconsistent.");
     fk(db.connections, reward.homebaseId);
     fk(db.rewardItems, reward.itemId);
     unique(reward.requiredUserIds, "reward participant");

@@ -59,7 +59,7 @@ beforeEach(() => {
   }))
 })
 
-it("loads every garden and scopes members, cottages and rewards to each base", async () => {
+it("loads every garden and scopes members and earned rewards to each base", async () => {
   const { result } = renderHook(() => useHomeArchipelago("you", undefined, 0))
   await waitFor(() => expect(result.current.busy).toBe(false))
   // Membership order, not focus order: islands keep their places on the map.
@@ -72,8 +72,8 @@ it("loads every garden and scopes members, cottages and rewards to each base", a
   const family = result.current.islands.find((i) => i.homebase.id === "family")!
   const project = result.current.islands.find((i) => i.homebase.id === "project")!
   expect(family.members.map((member) => member.id)).toEqual(["you", "sam"])
-  expect(family.scene.houses.map((house) => house.activity.id)).toEqual(["a-family"])
-  expect(project.scene.houses.map((house) => house.activity.id)).toEqual(["a-project"])
+  expect(family.scene.drawables.some((d) => d.key.startsWith("house-"))).toBe(false)
+  expect(project.scene.drawables.some((d) => d.key.startsWith("house-"))).toBe(false)
   expect(family.layer.drawables.some((d) => d.key === "reward-r-family")).toBe(true)
   expect(project.layer.drawables.some((d) => d.key === "reward-r-family")).toBe(false)
   expect(family.layer.drawables.some((d) => d.key === "jetty")).toBe(true)

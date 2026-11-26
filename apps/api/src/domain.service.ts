@@ -7,6 +7,7 @@ import { DatabaseService } from "./db/database.service.ts";
 import { loadDatabase, persistChanges } from "./db/storage.ts";
 import { createHomebase, joinHomebase } from "./homebases.ts";
 import { recordRewardProposals } from "./rewards.service.ts";
+import { rewardBuildReadyAt } from "./reward-construction.ts";
 
 @Injectable()
 export class DomainService {
@@ -28,15 +29,30 @@ export class DomainService {
   command(command: Command) {
     return this.database.transaction(true, async (client) => {
       const before = await loadDatabase(client);
+      const now = new Date().toISOString();
       let result: ReturnType<typeof execute>;
       try {
-        result = execute(before, command);
+        result = execute(before, command, now);
       } catch (error) {
         throw new BadRequestException(
           error instanceof Error ? error.message : "Invalid command.",
         );
       }
       if (!result.duplicate) {
+        if (command.type === "recordLog") {
+          const milestone = result.db.milestones.find(
+            (row) => row.id === command.input.milestoneId,
+          );
+          const previous = before.milestones.find(
+            (row) => row.id === command.input.milestoneId,
+          );
+          if (milestone?.upgradeCreditedAt && !previous?.upgradeCreditedAt) {
+            const reward = result.db.rewards.find(
+              (row) => row.id === milestone.upgradeRewardId,
+            )!;
+            reward.buildReadyAt = rewardBuildReadyAt(now);
+          }
+        }
         await persistChanges(client, before, result.db);
         await recordRewardProposals(
           client,

@@ -4,7 +4,7 @@ import { ActivityIndicator, TextInput, TextStyle, View, ViewStyle } from "react-
 
 import { Button } from "@/components/Button"
 import { IsoWorldCanvas } from "@/components/iso-world/IsoWorldCanvas"
-import { buildActivityScene } from "@/components/iso-world/scene"
+import { buildGatheringScene } from "@/components/iso-world/scene"
 import { memberAvatarStyles } from "@/components/pixel-world/avatars"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
@@ -22,10 +22,7 @@ interface AuthLayoutProps {
 export function AuthLayout({ title, description, children }: AuthLayoutProps) {
   const { themed } = useAppTheme()
   const [heroWidth, setHeroWidth] = useState(0)
-  const island = useMemo(
-    () => buildActivityScene({ roof: "clay", lit: true, attendees: memberAvatarStyles }),
-    [],
-  )
+  const island = useMemo(() => buildGatheringScene(memberAvatarStyles, true), [])
   return (
     <Screen
       preset="auto"
